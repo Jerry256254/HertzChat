@@ -2,8 +2,8 @@
 schema_version: 1
 app_name: Hertz Chat
 package_id: cz.kuclab.hertzchat
-version_name: "0.2.0"
-version_code: 2
+version_name: "0.2.1"
+version_code: 3
 last_updated: 2026-08-13
 license: MIT
 category: Komunikace
@@ -30,6 +30,12 @@ download_url: https://github.com/Jerry256254/HertzChat/releases/latest
 logo: store/logo.png
 screenshots: []
 changelog:
+  - version: "0.2.1"
+    date: 2026-08-13
+    notes:
+      - "Oprava: appka nabízela 3 samostatná APK podle architektury zařízení - kdo si stáhl nesprávné, aplikace mu hned po spuštění spadla (chyběly nativní knihovny). Teď je jen jedno univerzální APK, které funguje na všech zařízeních."
+      - Nová ikona aplikace
+      - Menší APK díky odstranění nepoužívané testovací nativní knihovny
   - version: "0.2.0"
     date: 2026-08-13
     notes:

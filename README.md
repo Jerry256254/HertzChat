@@ -5,8 +5,10 @@ Peer-to-peer, end-to-end šifrovaná chatovací aplikace pro Android bez serveru
 [![Stáhnout nejnovější verzi](https://img.shields.io/github/v/release/Jerry256254/HertzChat?label=St%C3%A1hnout&style=for-the-badge&color=D97757)](https://github.com/Jerry256254/HertzChat/releases/latest)
 
 **➡️ [Stáhnout z poslední verze](https://github.com/Jerry256254/HertzChat/releases/latest)**
-— žádná registrace, žádný obchod, jen soubor ke stažení.
-V telefonu je potřeba povolit instalaci z neznámých zdrojů, appka není z Play Store.
+— žádná registrace, žádný obchod, jen jeden soubor ke stažení (jedno
+univerzální APK, funguje na všech běžných telefonech, žádné vybírání
+architektury). V telefonu je potřeba povolit instalaci z neznámých zdrojů,
+appka není z Play Store.
 
 ## Funkce
 

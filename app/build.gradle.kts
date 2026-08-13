@@ -15,23 +15,24 @@ android {
         applicationId = "cz.kuclab.hertzchat"
         minSdk = 26
         targetSdk = 34
-        versionCode = 2
-        versionName = "0.2.0"
+        versionCode = 3
+        versionName = "0.2.1"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
-    }
 
-    // The debug build packages native libs (WebRTC, libsignal, SQLCipher) for
-    // every ABI, which balloons the APK - split per-ABI for real installs/releases.
-    splits {
-        abi {
-            isEnable = true
-            reset()
-            include("armeabi-v7a", "arm64-v8a", "x86_64")
-            isUniversalApk = false
+        ndk {
+            // Real phones are effectively all arm64-v8a today; keep armeabi-v7a
+            // for older devices and x86_64 for emulators. Skip 32-bit x86 - it's
+            // only relevant to very old emulator images, not real hardware.
+            abiFilters += listOf("armeabi-v7a", "arm64-v8a", "x86_64")
         }
     }
 
+    // Deliberately NOT split per-ABI: picking the wrong one of several
+    // per-architecture APKs from a release page is confusing, and installing
+    // a mismatched one means its native libs (WebRTC/libsignal/SQLCipher)
+    // are simply missing, which crashes the app immediately on launch. One
+    // universal APK that works on every device is worth the larger download.
     val releaseKeystorePath = file("../keystore/hertzchat-release.jks")
     signingConfigs {
         if (releaseKeystorePath.exists()) {
@@ -76,6 +77,12 @@ android {
     packaging {
         resources {
             excludes += "/META-INF/{AL2.0,LGPL2.1}"
+        }
+        jniLibs {
+            // libsignal ships a *_testing variant of its native lib that's
+            // only for the library's own test suite - it's dead weight
+            // (tens of MB per ABI) in a shipped app and pulls in nothing we use.
+            excludes += "**/libsignal_jni_testing.so"
         }
     }
 }
