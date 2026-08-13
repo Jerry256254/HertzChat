@@ -135,6 +135,14 @@ fun SettingsScreen(viewModel: SettingsViewModel = hiltViewModel()) {
                         checked = settings.autoAcceptFriendRequests,
                         onCheckedChange = viewModel::setAutoAcceptFriendRequests,
                     )
+                    HorizontalDivider()
+                    SettingsSwitchRow(
+                        icon = Icons.Filled.SmartToy,
+                        title = stringResource(R.string.settings_allow_mistral_title),
+                        subtitle = stringResource(R.string.settings_allow_mistral_subtitle),
+                        checked = settings.allowMistralOnMyMessages,
+                        onCheckedChange = viewModel::setAllowMistralOnMyMessages,
+                    )
                 }
             }
 

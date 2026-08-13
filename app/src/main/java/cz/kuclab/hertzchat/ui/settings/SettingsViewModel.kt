@@ -8,6 +8,7 @@ import androidx.lifecycle.viewModelScope
 import cz.kuclab.hertzchat.BuildConfig
 import cz.kuclab.hertzchat.data.db.ContactDao
 import cz.kuclab.hertzchat.data.repository.AppSettings
+import cz.kuclab.hertzchat.data.repository.P2pChatService
 import cz.kuclab.hertzchat.data.repository.SettingsRepository
 import cz.kuclab.hertzchat.locale.LocalePrefs
 import cz.kuclab.hertzchat.media.MediaStorage
@@ -38,6 +39,7 @@ class SettingsViewModel @Inject constructor(
     private val mediaStorage: MediaStorage,
     private val updateChecker: UpdateChecker,
     private val mistralKeyStore: MistralKeyStore,
+    private val p2pChatService: P2pChatService,
     @ApplicationContext private val context: Context,
 ) : ViewModel() {
 
@@ -77,6 +79,12 @@ class SettingsViewModel @Inject constructor(
     fun setThemeMode(value: String) = viewModelScope.launch { settingsRepository.setThemeMode(value) }
     fun setAutoAcceptFriendRequests(value: Boolean) = viewModelScope.launch { settingsRepository.setAutoAcceptFriendRequests(value) }
     fun unblock(contactId: String) = viewModelScope.launch { contactDao.setBlocked(contactId, false) }
+
+    /** Lets other people invoke @Mistral in threads that include the local user - broadcasts the change so their devices' context filtering picks it up immediately. */
+    fun setAllowMistralOnMyMessages(value: Boolean) {
+        viewModelScope.launch { settingsRepository.setAllowMistralOnMyMessages(value) }
+        p2pChatService.broadcastMistralPreference(value)
+    }
 
     /** Persists the choice to both stores - the reactive DataStore copy and the fast synchronous one [MainActivity][cz.kuclab.hertzchat.MainActivity] reads at cold start. The caller is responsible for recreating the Activity to apply it immediately. */
     fun setLanguageCode(value: String) {

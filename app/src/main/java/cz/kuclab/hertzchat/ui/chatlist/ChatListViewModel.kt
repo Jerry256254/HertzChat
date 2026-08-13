@@ -5,6 +5,7 @@ import androidx.lifecycle.viewModelScope
 import cz.kuclab.hertzchat.data.db.AssistantConversationDao
 import cz.kuclab.hertzchat.data.db.AssistantMessageDao
 import cz.kuclab.hertzchat.data.db.ContactDao
+import cz.kuclab.hertzchat.data.db.GroupDao
 import cz.kuclab.hertzchat.data.db.MessageDao
 import cz.kuclab.hertzchat.mistral.MISTRAL_ASSISTANT_CONTACT_ID
 import cz.kuclab.hertzchat.mistral.MistralKeyStore
@@ -15,7 +16,7 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
-enum class ChatListItemKind { CONTACT, ASSISTANT }
+enum class ChatListItemKind { CONTACT, GROUP, ASSISTANT }
 
 data class ChatListItem(
     val contactId: String,
@@ -31,6 +32,7 @@ data class ChatListItem(
 class ChatListViewModel @Inject constructor(
     private val contactDao: ContactDao,
     private val messageDao: MessageDao,
+    private val groupDao: GroupDao,
     private val assistantConversationDao: AssistantConversationDao,
     private val assistantMessageDao: AssistantMessageDao,
     private val mistralKeyStore: MistralKeyStore,
@@ -40,9 +42,10 @@ class ChatListViewModel @Inject constructor(
 
     val items = combine(
         contactDao.observeContacts(),
+        groupDao.observeGroups(),
         assistantConversationDao.observeConversations(),
         mistralKeyStore.showAssistantContact,
-    ) { contacts, conversations, showAssistant ->
+    ) { contacts, groups, conversations, showAssistant ->
         val contactItems = contacts.map { contact ->
             val last = messageDao.lastMessage(contact.contactId)
             ChatListItem(
@@ -52,6 +55,19 @@ class ChatListViewModel @Inject constructor(
                 pinned = contact.pinned,
                 lastMessagePreview = last?.text,
                 lastMessageAt = last?.timestamp,
+            )
+        }
+
+        val groupItems = groups.map { group ->
+            val last = messageDao.lastMessage(group.groupId)
+            ChatListItem(
+                contactId = group.groupId,
+                nickname = group.name,
+                avatarPath = null,
+                pinned = group.pinned,
+                lastMessagePreview = last?.text,
+                lastMessageAt = last?.timestamp,
+                kind = ChatListItemKind.GROUP,
             )
         }
 
@@ -71,12 +87,17 @@ class ChatListViewModel @Inject constructor(
             null
         }
 
-        (contactItems + listOfNotNull(assistantItem))
+        (contactItems + groupItems + listOfNotNull(assistantItem))
             .sortedWith(compareByDescending<ChatListItem> { it.pinned }.thenByDescending { it.lastMessageAt ?: 0L })
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     fun togglePin(item: ChatListItem) {
-        viewModelScope.launch { contactDao.setPinned(item.contactId, !item.pinned) }
+        viewModelScope.launch {
+            when (item.kind) {
+                ChatListItemKind.GROUP -> groupDao.setPinned(item.contactId, !item.pinned)
+                else -> contactDao.setPinned(item.contactId, !item.pinned)
+            }
+        }
     }
 
     fun block(contactId: String) {

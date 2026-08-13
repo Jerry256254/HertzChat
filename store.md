@@ -2,8 +2,8 @@
 schema_version: 1
 app_name: Hertz Chat
 package_id: cz.kuclab.hertzchat
-version_name: "0.7.0"
-version_code: 9
+version_name: "0.8.0"
+version_code: 10
 last_updated: 2026-08-13
 license: MIT
 category: Komunikace
@@ -33,6 +33,14 @@ download_url: https://github.com/Jerry256254/HertzChat/releases/latest
 logo: store/logo.png
 screenshots: []
 changelog:
+  - version: "0.8.0"
+    date: 2026-08-13
+    notes:
+      - "Nová funkce: skupinové chaty. Každý člen dostává zprávu zvlášť zašifrovanou jeho vlastním klíčem (žádný sdílený skupinový klíč) - appka mezi členy, kteří se ještě neznají, automaticky vyřídí vzájemné přátelství"
+      - "Nová funkce: @Mistral přímo v běžném i skupinovém chatu - napiš „@Mistral 10 shrň to" a appka pošle posledních 10 zpráv (jen od účastníků, kteří to nezakázali) spolu s dotazem na Mistral AI a odpověď vloží zpět do konverzace"
+      - "Nové nastavení „Povolit ostatním @Mistral u mých zpráv" (výchozí zapnuto) - řídí, jestli tvoje zprávy smí být použité jako kontext pro cizí dotazy na @Mistral; volba se broadcastuje kontaktům"
+      - "Nová funkce: @zmiňování lidí (i @Mistral) ve skupinách s automatickým našeptáváním jmen a zvýrazněným oznámením, když jsi zmíněn/a"
+      - "Pozor: aktualizace databáze při této verzi znovu smaže uloženou historii zpráv na zařízení"
   - version: "0.7.0"
     date: 2026-08-13
     notes:

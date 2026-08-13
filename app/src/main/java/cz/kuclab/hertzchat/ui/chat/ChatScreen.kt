@@ -187,11 +187,29 @@ fun ChatScreen(contactId: String, onBack: () -> Unit, viewModel: ChatViewModel =
 
 @Composable
 private fun MessageBubble(message: MessageEntity) {
-    val bubbleColor = if (message.fromMe) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant
-    val textColor = if (message.fromMe) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant
-    val alignment = if (message.fromMe) Alignment.CenterEnd else Alignment.CenterStart
+    val isAssistant = message.fromAssistant
+    val bubbleColor = when {
+        isAssistant -> MaterialTheme.colorScheme.tertiaryContainer
+        message.fromMe -> MaterialTheme.colorScheme.primary
+        else -> MaterialTheme.colorScheme.surfaceVariant
+    }
+    val textColor = when {
+        isAssistant -> MaterialTheme.colorScheme.onTertiaryContainer
+        message.fromMe -> MaterialTheme.colorScheme.onPrimary
+        else -> MaterialTheme.colorScheme.onSurfaceVariant
+    }
+    val alignedRight = message.fromMe && !isAssistant
+    val alignment = if (alignedRight) Alignment.CenterEnd else Alignment.CenterStart
 
-    androidx.compose.foundation.layout.Column(modifier = Modifier.fillMaxWidth(), horizontalAlignment = if (message.fromMe) Alignment.End else Alignment.Start) {
+    androidx.compose.foundation.layout.Column(modifier = Modifier.fillMaxWidth(), horizontalAlignment = if (alignedRight) Alignment.End else Alignment.Start) {
+        if (isAssistant) {
+            Text(
+                "Mistral AI",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(start = 4.dp, bottom = 2.dp),
+            )
+        }
         Box(modifier = Modifier.fillMaxWidth(), contentAlignment = alignment) {
             when (message.type) {
                 MessageType.TEXT -> Box(

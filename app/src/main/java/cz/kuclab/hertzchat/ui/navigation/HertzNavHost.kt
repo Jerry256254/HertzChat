@@ -12,6 +12,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import cz.kuclab.hertzchat.ui.chat.ChatScreen
 import cz.kuclab.hertzchat.ui.chatlist.ChatListScreen
 import cz.kuclab.hertzchat.ui.contacts.ContactsScreen
+import cz.kuclab.hertzchat.ui.groupchat.GroupChatScreen
 import cz.kuclab.hertzchat.ui.migration.QrExportScreen
 import cz.kuclab.hertzchat.ui.migration.QrImportScreen
 import cz.kuclab.hertzchat.ui.mistral.AssistantChatScreen
@@ -39,6 +40,7 @@ fun HertzNavHost(viewModel: RootViewModel = hiltViewModel()) {
         composable(Routes.CHAT_LIST) {
             ChatListScreen(
                 onOpenChat = { contactId -> navController.navigate(Routes.chat(contactId)) },
+                onOpenGroup = { groupId -> navController.navigate(Routes.groupChat(groupId)) },
                 onOpenContacts = { navController.navigate(Routes.CONTACTS) },
                 onOpenProfile = { navController.navigate(Routes.PROFILE) },
                 onOpenSettings = { navController.navigate(Routes.SETTINGS) },
@@ -51,6 +53,13 @@ fun HertzNavHost(viewModel: RootViewModel = hiltViewModel()) {
         ) { backStackEntry ->
             val contactId = backStackEntry.arguments?.getString("contactId").orEmpty()
             ChatScreen(contactId = contactId, onBack = { navController.popBackStack() })
+        }
+        composable(
+            route = Routes.GROUP_CHAT,
+            arguments = listOf(navArgument("groupId") { type = NavType.StringType }),
+        ) { backStackEntry ->
+            val groupId = backStackEntry.arguments?.getString("groupId").orEmpty()
+            GroupChatScreen(groupId = groupId, onBack = { navController.popBackStack() }, onLeft = { navController.popBackStack() })
         }
         composable(Routes.CONTACTS) {
             ContactsScreen(

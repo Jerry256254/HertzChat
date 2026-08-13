@@ -36,8 +36,10 @@ class Converters {
         MessageEntity::class,
         AssistantConversationEntity::class,
         AssistantMessageEntity::class,
+        GroupEntity::class,
+        GroupMemberEntity::class,
     ],
-    version = 3,
+    version = 4,
     exportSchema = false,
 )
 @TypeConverters(Converters::class)
@@ -51,4 +53,6 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun messageDao(): MessageDao
     abstract fun assistantConversationDao(): AssistantConversationDao
     abstract fun assistantMessageDao(): AssistantMessageDao
+    abstract fun groupDao(): GroupDao
+    abstract fun groupMemberDao(): GroupMemberDao
 }

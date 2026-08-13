@@ -1,5 +1,6 @@
 package cz.kuclab.hertzchat.data.model
 
+import cz.kuclab.hertzchat.network.tor.HertzId
 import kotlinx.serialization.Serializable
 
 /**
@@ -27,7 +28,17 @@ data class ChatPayload(
     val mediaKeyBase64: String? = null,
     val mediaNonceSaltBase64: String? = null,
     val mediaChunkCount: Int? = null,
+    /** Set when this message belongs to a group thread instead of a 1:1 one - the sender is whoever's session decrypted the envelope. */
+    val groupId: String? = null,
+    /** Only set for [PayloadKind.GROUP_INVITE]. */
+    val groupName: String? = null,
+    /** Only set for [PayloadKind.GROUP_INVITE] - every member of the new group (including the sender and the recipient), so the recipient can bootstrap sessions with members it doesn't already know. */
+    val groupMembers: List<HertzId>? = null,
+    /** True when this is Mistral's reply, relayed into the thread by whoever invoked @Mistral - rendered with the assistant's identity, not the relayer's. */
+    val fromAssistant: Boolean = false,
+    /** Only set for [PayloadKind.PREFERENCE_UPDATE] - broadcast to every contact whenever the local "let others use @Mistral on my messages" toggle changes. */
+    val allowsMistralAccess: Boolean? = null,
 )
 
 @Serializable
-enum class PayloadKind { TEXT, IMAGE, VIDEO, VOICE, FILE, AVATAR, DELIVERED_ACK, READ_ACK, TYPING }
+enum class PayloadKind { TEXT, IMAGE, VIDEO, VOICE, FILE, AVATAR, DELIVERED_ACK, READ_ACK, TYPING, GROUP_INVITE, PREFERENCE_UPDATE }

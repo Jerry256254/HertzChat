@@ -32,6 +32,8 @@
     <string name="settings_discoverable_subtitle">Vypnutím se úplně zastaví síť Tor i služba na pozadí - nikdo tě nenajde ani ti nemůže poslat zprávu, ale appka nespotřebovává baterii navíc.</string>
     <string name="settings_auto_accept_title">Automaticky přijímat žádosti o přátelství</string>
     <string name="settings_auto_accept_subtitle">Nové kontakty se přidají rovnou, bez tvého potvrzení.</string>
+    <string name="settings_allow_mistral_title">Povolit ostatním @Mistral u mých zpráv</string>
+    <string name="settings_allow_mistral_subtitle">Když to někdo v konverzaci s tebou napíše @Mistral, smí AI vidět a použít tvoje zprávy jako kontext. Vypnutím se tvoje zprávy z kontextu vynechají.</string>
     <string name="settings_section_mistral">Mistral AI</string>
     <string name="settings_mistral_enabled_title">Používat Mistral AI asistenta</string>
     <string name="settings_mistral_enabled_subtitle">Jediná funkce appky, kde text opouští tvoje zařízení - posílá se přímo na servery Mistral AI pomocí tvého vlastního API klíče.</string>

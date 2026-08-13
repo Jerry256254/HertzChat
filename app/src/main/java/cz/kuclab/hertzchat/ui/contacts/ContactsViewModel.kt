@@ -2,6 +2,7 @@ package cz.kuclab.hertzchat.ui.contacts
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import cz.kuclab.hertzchat.data.db.ContactDao
 import cz.kuclab.hertzchat.data.repository.IncomingFriendRequest
 import cz.kuclab.hertzchat.data.repository.P2pChatService
 import cz.kuclab.hertzchat.mistral.MistralKeyStore
@@ -20,6 +21,7 @@ import kotlinx.serialization.json.Json
 @HiltViewModel
 class ContactsViewModel @Inject constructor(
     private val p2pChatService: P2pChatService,
+    contactDao: ContactDao,
     mistralKeyStore: MistralKeyStore,
 ) : ViewModel() {
 
@@ -27,6 +29,12 @@ class ContactsViewModel @Inject constructor(
 
     val mistralEnabled = mistralKeyStore.enabled
     val showMistralContact = mistralKeyStore.showAssistantContact
+    val contacts = contactDao.observeContacts().stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    fun createGroup(name: String, memberContactIds: List<String>) {
+        if (name.isBlank() || memberContactIds.isEmpty()) return
+        p2pChatService.createGroup(name.trim(), memberContactIds)
+    }
 
     val incomingRequests = p2pChatService.incomingRequests
     val torState = p2pChatService.torState.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)

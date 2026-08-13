@@ -28,8 +28,11 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.ContentCopy
+import androidx.compose.material.icons.filled.Groups
 import androidx.compose.material.icons.filled.QrCodeScanner
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -87,10 +90,12 @@ fun ContactsScreen(
     val myQrText by viewModel.myHertzIdQrText.collectAsState()
     val mistralEnabled by viewModel.mistralEnabled.collectAsState()
     val showMistralContact by viewModel.showMistralContact.collectAsState()
+    val contacts by viewModel.contacts.collectAsState()
     val clipboard = LocalClipboardManager.current
 
     var pastedId by remember { mutableStateOf("") }
     var scannerOpen by remember { mutableStateOf(false) }
+    var createGroupOpen by remember { mutableStateOf(false) }
 
     LaunchedEffect(addSuccess) {
         if (addSuccess) {
@@ -206,6 +211,15 @@ fun ContactsScreen(
                 }
             }
 
+            if (contacts.size >= 2) {
+                item {
+                    OutlinedButton(onClick = { createGroupOpen = true }, modifier = Modifier.fillMaxWidth()) {
+                        Icon(Icons.Filled.Groups, contentDescription = null, modifier = Modifier.size(18.dp))
+                        Text("  Vytvořit skupinu")
+                    }
+                }
+            }
+
             if (requests.isNotEmpty()) {
                 item { Text("Žádosti o přátelství", fontWeight = FontWeight.SemiBold) }
                 items(requests, key = { it.contactId }) { request ->
@@ -231,6 +245,14 @@ fun ContactsScreen(
         QrScannerDialog(
             onDismiss = { scannerOpen = false },
             onScanned = { text -> scannerOpen = false; viewModel.addByHertzId(text) },
+        )
+    }
+
+    if (createGroupOpen) {
+        CreateGroupDialog(
+            contacts = contacts,
+            onDismiss = { createGroupOpen = false },
+            onCreate = { name, ids -> viewModel.createGroup(name, ids); createGroupOpen = false },
         )
     }
 }
@@ -374,4 +396,60 @@ private fun QrScannerDialog(onDismiss: () -> Unit, onScanned: (String) -> Unit) 
             }
         }
     }
+}
+
+@Composable
+private fun CreateGroupDialog(
+    contacts: List<cz.kuclab.hertzchat.data.db.ContactEntity>,
+    onDismiss: () -> Unit,
+    onCreate: (String, List<String>) -> Unit,
+) {
+    var name by remember { mutableStateOf("") }
+    val selected = remember { mutableStateOf(setOf<String>()) }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Vytvořit skupinu") },
+        text = {
+            Column {
+                OutlinedTextField(
+                    value = name,
+                    onValueChange = { name = it },
+                    label = { Text("Název skupiny") },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true,
+                )
+                Text(
+                    "Vyber kontakty (skupina funguje jen mezi vzájemnými kontakty)",
+                    style = MaterialTheme.typography.labelSmall,
+                    modifier = Modifier.padding(top = 12.dp, bottom = 4.dp),
+                )
+                contacts.forEach { contact ->
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable {
+                                selected.value = if (contact.contactId in selected.value) {
+                                    selected.value - contact.contactId
+                                } else {
+                                    selected.value + contact.contactId
+                                }
+                            }
+                            .padding(vertical = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Checkbox(checked = contact.contactId in selected.value, onCheckedChange = null)
+                        Text(contact.nickname, modifier = Modifier.padding(start = 4.dp))
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(
+                onClick = { onCreate(name, selected.value.toList()) },
+                enabled = name.isNotBlank() && selected.value.isNotEmpty(),
+            ) { Text("Vytvořit") }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Zrušit") } },
+    )
 }

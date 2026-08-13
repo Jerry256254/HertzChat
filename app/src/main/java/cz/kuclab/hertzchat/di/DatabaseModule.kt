@@ -65,6 +65,12 @@ object DatabaseModule {
     fun provideAssistantMessageDao(database: AppDatabase) = database.assistantMessageDao()
 
     @Provides
+    fun provideGroupDao(database: AppDatabase) = database.groupDao()
+
+    @Provides
+    fun provideGroupMemberDao(database: AppDatabase) = database.groupMemberDao()
+
+    @Provides
     @Singleton
     fun provideSignalProtocolStore(
         database: AppDatabase,

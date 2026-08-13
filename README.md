@@ -59,6 +59,16 @@ appka není z Play Store.
   (`/new`, `/chats`), výběr modelu. Jediné místo v appce, kde obsah zprávy
   záměrně opouští zařízení - podrobně vysvětleno v Podmínkách užití,
   Zásadách ochrany soukromí a zvláštním souhlasu přímo v appce.
+- **Skupinové chaty** — každý člen dostává zprávu zvlášť zašifrovanou jeho
+  vlastním klíčem (žádný sdílený skupinový klíč); appka mezi členy, kteří
+  se ještě neznají, automaticky vyřídí vzájemné přátelství.
+- **`@Mistral` přímo v chatu nebo skupině** — `@Mistral 10 shrň to` pošle
+  posledních 10 zpráv (jen od účastníků, kteří si to v Nastavení
+  nezakázali) spolu s dotazem na Mistral AI a odpověď vloží zpět do
+  konverzace, viditelnou všem. Kdokoliv si v Nastavení může zakázat, aby
+  jeho zprávy sloužily jako kontext pro cizí dotazy.
+- **`@zmiňování`** lidí (i `@Mistral`) ve skupinách, s našeptáváním jmen a
+  zvýrazněným oznámením, když jsi zmíněn/a.
 
 ## Design
 

@@ -29,6 +29,9 @@ data class FriendRequestPayload(
     val identityKeyBase64: String,
     val onionAddress: String,
     val preKeyBundle: PreKeyBundleWire,
+    /** Non-null when this request was auto-sent as a consequence of a mutual group invite - see P2pChatService group handling. */
+    val viaGroupId: String? = null,
+    val allowsMistralAccess: Boolean = true,
 )
 
 @Serializable
@@ -37,6 +40,7 @@ data class FriendResponsePayload(
     val nickname: String,
     val identityKeyBase64: String,
     val onionAddress: String,
+    val allowsMistralAccess: Boolean = true,
 )
 
 /**

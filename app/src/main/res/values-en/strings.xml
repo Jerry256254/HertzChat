@@ -30,6 +30,8 @@
     <string name="settings_discoverable_subtitle">Turning this off fully stops the Tor network and the background service - nobody can find or message you, but the app uses no extra battery.</string>
     <string name="settings_auto_accept_title">Auto-accept friend requests</string>
     <string name="settings_auto_accept_subtitle">New contacts get added right away, without your confirmation.</string>
+    <string name="settings_allow_mistral_title">Allow others to @Mistral my messages</string>
+    <string name="settings_allow_mistral_subtitle">When someone in a conversation with you types @Mistral, the AI may see and use your messages as context. Turning this off excludes your messages from that context.</string>
     <string name="settings_section_mistral">Mistral AI</string>
     <string name="settings_mistral_enabled_title">Use the Mistral AI assistant</string>
     <string name="settings_mistral_enabled_subtitle">The only feature where text leaves your device - it\'s sent straight to Mistral AI\'s servers using your own API key.</string>

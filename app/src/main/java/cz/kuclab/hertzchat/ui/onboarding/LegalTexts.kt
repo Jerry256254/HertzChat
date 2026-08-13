@@ -40,7 +40,24 @@ Mistral AI, který si uživatel sám zřizuje a spravuje. Autor aplikace k datů
 odeslaným přes tuto funkci nemá přístup a neprovozuje k ní žádnou vlastní
 infrastrukturu.
 
-7. Změny podmínek
+7. Skupinové chaty
+Skupina je technicky množina jednotlivých 1:1 šifrovaných spojení - zpráva se
+šifruje a posílá zvlášť každému členovi zvlášť jeho vlastním klíčem, appka
+nepoužívá žádný sdílený "skupinový klíč". Členem skupiny se může stát jen
+někdo, koho zakladatel (nebo jiný člen) už má jako důvěryhodný kontakt;
+appka si mezi členy, kteří se ještě neznají, automaticky vyžádá vzájemné
+přátelství, aby si mohli v rámci skupiny navzájem posílat zprávy.
+
+8. @Mistral v běžném chatu nebo skupině
+Kdokoliv v konverzaci může napsat "@Mistral [počet] [dotaz]" - appka pak
+pošle posledních N zpráv z té konverzace (jen od účastníků, kteří to ve
+svém Nastavení nezakázali) spolu s dotazem na Mistral AI a jeho odpověď
+vloží zpět do konverzace jako zprávu od AI, viditelnou všem účastníkům.
+Tohle funguje jen tehdy, když to má ve svém Nastavení povolené aspoň jeden
+další účastník kromě toho, kdo @Mistral použil - tvoje vlastní volba to
+neovlivňuje, jen volba ostatních.
+
+9. Změny podmínek
 Tyto podmínky se mohou v budoucích verzích aplikace změnit; aktuální znění je
 vždy součástí zdrojového kódu v repozitáři projektu."""
 
@@ -69,7 +86,17 @@ KucLab. Je to jediné místo v celé appce, kde obsah zprávy opouští zaříze
 v čitelné podobě. Jakmile data dorazí k Mistral AI, řídí se jejich vlastními
 zásadami ochrany soukromí, ne těmito. Funkce je ve výchozím stavu vypnutá a
 kdykoliv ji můžeš v Nastavení znovu vypnout - v tu chvíli appka žádná další
-data Mistral AI neposílá. Za bezpečnost a nastavení vlastního Mistral AI
+data Mistral AI neposílá.
+
+8. @Mistral v běžném chatu nebo skupině a tvoje volba "Povolit ostatním @Mistral u mých zpráv"
+Tohle nastavení (v Nastavení → Soukromí a síť, výchozí stav zapnuto) řídí,
+jestli smí AI vidět a použít tvoje zprávy jako kontext, když v konverzaci
+s tebou někdo napíše @Mistral. Tvoje volba se automaticky pošle (stejným
+šifrovaným kanálem jako běžné zprávy) všem tvým kontaktům, aby ji jejich
+appka mohla rovnou respektovat. Vypneš-li to, tvoje zprávy se z kontextu
+posílaného Mistral AI vynechají.
+
+Za bezpečnost a nastavení vlastního Mistral AI
 účtu (včetně API klíčů) odpovídá výhradně uživatel."""
 
 const val MISTRAL_CONSENT_TEXT = """Tohle je jediné místo v appce, kde obsah zprávy opouští tvoje zařízení v čitelné podobě.

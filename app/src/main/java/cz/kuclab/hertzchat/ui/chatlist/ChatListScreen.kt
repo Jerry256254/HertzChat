@@ -18,6 +18,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Groups
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.PushPin
 import androidx.compose.material.icons.filled.Settings
@@ -52,6 +53,7 @@ import cz.kuclab.hertzchat.R
 @Composable
 fun ChatListScreen(
     onOpenChat: (String) -> Unit,
+    onOpenGroup: (String) -> Unit,
     onOpenContacts: () -> Unit,
     onOpenProfile: () -> Unit,
     onOpenSettings: () -> Unit,
@@ -99,10 +101,10 @@ fun ChatListScreen(
                     ChatListRow(
                         item = item,
                         onClick = {
-                            when {
-                                item.kind != ChatListItemKind.ASSISTANT -> onOpenChat(item.contactId)
-                                mistralEnabled -> onOpenAssistant()
-                                else -> onOpenSettings()
+                            when (item.kind) {
+                                ChatListItemKind.CONTACT -> onOpenChat(item.contactId)
+                                ChatListItemKind.GROUP -> onOpenGroup(item.contactId)
+                                ChatListItemKind.ASSISTANT -> if (mistralEnabled) onOpenAssistant() else onOpenSettings()
                             }
                         },
                         onTogglePin = { viewModel.togglePin(item) },
@@ -125,6 +127,7 @@ private fun ChatListRow(
 ) {
     var menuOpen by remember { mutableStateOf(false) }
     val isAssistant = item.kind == ChatListItemKind.ASSISTANT
+    val isGroup = item.kind == ChatListItemKind.GROUP
 
     Row(
         modifier = Modifier
@@ -159,6 +162,8 @@ private fun ChatListRow(
                     contentScale = ContentScale.Crop,
                     modifier = Modifier.fillMaxSize().clip(CircleShape),
                 )
+            } else if (isGroup) {
+                Icon(Icons.Filled.Groups, contentDescription = null, tint = MaterialTheme.colorScheme.onPrimaryContainer)
             } else if (item.avatarPath != null) {
                 AsyncImage(
                     model = java.io.File(item.avatarPath),

@@ -10,7 +10,9 @@ import android.os.Build
 import androidx.core.app.ActivityCompat
 import androidx.core.app.NotificationCompat
 import cz.kuclab.hertzchat.MainActivity
+import cz.kuclab.hertzchat.crypto.IdentityKeyManager
 import cz.kuclab.hertzchat.data.db.ContactDao
+import cz.kuclab.hertzchat.data.db.GroupDao
 import cz.kuclab.hertzchat.data.db.MessageEntity
 import cz.kuclab.hertzchat.data.db.MessageType
 import cz.kuclab.hertzchat.data.repository.ChatServiceEvent
@@ -30,6 +32,8 @@ private const val MESSAGE_CHANNEL_ID = "hertzchat_messages"
 class MessageNotifier @Inject constructor(
     @ApplicationContext private val context: Context,
     private val contactDao: ContactDao,
+    private val groupDao: GroupDao,
+    private val identityKeyManager: IdentityKeyManager,
     private val settingsRepository: SettingsRepository,
 ) {
     fun start(scope: CoroutineScope, p2pChatService: P2pChatService) {
@@ -38,15 +42,21 @@ class MessageNotifier @Inject constructor(
             p2pChatService.events.collect { event ->
                 if (!settingsRepository.settings.first().notificationsEnabled) return@collect
                 when (event) {
-                    is ChatServiceEvent.MessageReceived -> notifyMessage(event.contactId, event.message)
+                    is ChatServiceEvent.MessageReceived -> notifyMessage(event.threadId, event.message)
                     is ChatServiceEvent.FriendRequestReceived -> notifyFriendRequest(event.request.nickname)
                 }
             }
         }
     }
 
-    private suspend fun notifyMessage(contactId: String, message: MessageEntity) {
-        val contact = contactDao.find(contactId) ?: return
+    private suspend fun notifyMessage(threadId: String, message: MessageEntity) {
+        if (message.fromMe) return
+        val group = groupDao.find(threadId)
+        val senderLabel = when {
+            message.fromAssistant -> "Mistral AI"
+            group != null -> message.senderContactId?.let { contactDao.find(it)?.nickname } ?: "Neznámý"
+            else -> contactDao.find(threadId)?.nickname ?: return
+        }
         val preview = when (message.type) {
             MessageType.TEXT -> message.text.orEmpty()
             MessageType.IMAGE -> "📷 Obrázek"
@@ -54,7 +64,14 @@ class MessageNotifier @Inject constructor(
             MessageType.VOICE -> "🎤 Hlasová zpráva"
             MessageType.FILE -> "📎 Soubor"
         }
-        show(contactId.hashCode(), contact.nickname, preview)
+
+        val mentionedMe = message.mentionedContactIds?.split(",")?.contains(identityKeyManager.contactId()) == true
+        val title = when {
+            mentionedMe && group != null -> "$senderLabel tě zmínil(a) v ${group.name}"
+            group != null -> "$senderLabel · ${group.name}"
+            else -> senderLabel
+        }
+        show(threadId.hashCode() xor message.messageId.hashCode(), title, preview)
     }
 
     private fun notifyFriendRequest(nickname: String) {

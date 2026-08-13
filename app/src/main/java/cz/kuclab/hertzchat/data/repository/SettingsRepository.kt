@@ -19,6 +19,7 @@ private val KEY_NOTIFICATIONS_ENABLED = booleanPreferencesKey("notifications_ena
 private val KEY_THEME_MODE = stringPreferencesKey("theme_mode") // SYSTEM | LIGHT | DARK
 private val KEY_AUTO_ACCEPT_REQUESTS = booleanPreferencesKey("auto_accept_requests")
 private val KEY_LANGUAGE_CODE = stringPreferencesKey("language_code")
+private val KEY_ALLOW_MISTRAL_ON_MY_MESSAGES = booleanPreferencesKey("allow_mistral_on_my_messages")
 
 data class AppSettings(
     val discoverable: Boolean = true,
@@ -27,6 +28,8 @@ data class AppSettings(
     val themeMode: String = "SYSTEM",
     val autoAcceptFriendRequests: Boolean = false,
     val languageCode: String = cz.kuclab.hertzchat.locale.LANGUAGE_SYSTEM,
+    /** Whether other people are allowed to invoke @Mistral in chats/groups that include the local user - broadcast to contacts on change. Default on, opt-out. */
+    val allowMistralOnMyMessages: Boolean = true,
 )
 
 @Singleton
@@ -40,6 +43,7 @@ class SettingsRepository @Inject constructor(@ApplicationContext private val con
             themeMode = prefs[KEY_THEME_MODE] ?: "SYSTEM",
             autoAcceptFriendRequests = prefs[KEY_AUTO_ACCEPT_REQUESTS] ?: false,
             languageCode = prefs[KEY_LANGUAGE_CODE] ?: cz.kuclab.hertzchat.locale.LANGUAGE_SYSTEM,
+            allowMistralOnMyMessages = prefs[KEY_ALLOW_MISTRAL_ON_MY_MESSAGES] ?: true,
         )
     }
 
@@ -49,4 +53,5 @@ class SettingsRepository @Inject constructor(@ApplicationContext private val con
     suspend fun setThemeMode(value: String) = context.settingsDataStore.edit { it[KEY_THEME_MODE] = value }
     suspend fun setAutoAcceptFriendRequests(value: Boolean) = context.settingsDataStore.edit { it[KEY_AUTO_ACCEPT_REQUESTS] = value }
     suspend fun setLanguageCode(value: String) = context.settingsDataStore.edit { it[KEY_LANGUAGE_CODE] = value }
+    suspend fun setAllowMistralOnMyMessages(value: Boolean) = context.settingsDataStore.edit { it[KEY_ALLOW_MISTRAL_ON_MY_MESSAGES] = value }
 }
