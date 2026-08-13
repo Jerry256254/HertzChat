@@ -56,7 +56,7 @@ class AssistantRepository @Inject constructor(
     private suspend fun createConversation(): String {
         val id = UUID.randomUUID().toString()
         val now = System.currentTimeMillis()
-        conversationDao.upsert(AssistantConversationEntity(id, title = "Nová konverzace", createdAt = now, lastMessageAt = now))
+        conversationDao.upsert(AssistantConversationEntity(id, title = DEFAULT_TITLE, createdAt = now, lastMessageAt = now))
         return id
     }
 
@@ -66,7 +66,6 @@ class AssistantRepository @Inject constructor(
             val now = System.currentTimeMillis()
             messageDao.upsert(AssistantMessageEntity(UUID.randomUUID().toString(), conversationId, AssistantRole.USER, text, now))
             conversationDao.touch(conversationId, now)
-            maybeRetitle(conversationId, text)
 
             _sending.value = true
             val history = messageDao.recentForConversation(conversationId, HISTORY_WINDOW).reversed()
@@ -84,14 +83,31 @@ class AssistantRepository @Inject constructor(
             )
             messageDao.upsert(reply)
             conversationDao.touch(conversationId, replyTimestamp)
+
+            result.getOrNull()?.let { assistantReply -> maybeGenerateTitle(conversationId, text, assistantReply) }
         }
     }
 
-    /** First user message in a conversation becomes its title in the /chats picker, instead of every entry saying "Nová konverzace". */
-    private suspend fun maybeRetitle(conversationId: String, firstUserText: String) {
+    /**
+     * Rather than just truncating the raw first message, the assistant itself
+     * comes up with the conversation's title once it actually knows what the
+     * exchange was about - only tried once, right after the first reply.
+     */
+    private suspend fun maybeGenerateTitle(conversationId: String, firstUserText: String, firstReply: String) {
         val conversation = conversationDao.find(conversationId) ?: return
-        if (conversation.title != "Nová konverzace") return
-        val title = firstUserText.take(40).let { if (firstUserText.length > 40) "$it…" else it }
+        if (conversation.title != DEFAULT_TITLE) return
+        val generated = apiClient.chat(
+            listOf(
+                MistralMessage("system", TITLE_SYSTEM_PROMPT),
+                MistralMessage("user", "Uživatel: $firstUserText\nAsistent: $firstReply"),
+            ),
+        ).getOrNull()?.trim()?.trim('"', '“', '”')?.take(60)
+        val title = generated?.takeIf { it.isNotBlank() } ?: firstUserText.take(40).let { if (firstUserText.length > 40) "$it…" else it }
         conversationDao.upsert(conversation.copy(title = title))
+    }
+
+    private companion object {
+        const val DEFAULT_TITLE = "Nová konverzace"
+        const val TITLE_SYSTEM_PROMPT = "Vymysli krátký název (nejvýše 5 slov, bez uvozovek, bez tečky na konci) shrnující tuto konverzaci, ve stejném jazyce jako konverzace. Odpověz pouze samotným názvem, nic jiného."
     }
 }

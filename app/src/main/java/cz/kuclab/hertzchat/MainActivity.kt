@@ -1,6 +1,7 @@
 package cz.kuclab.hertzchat
 
 import android.Manifest
+import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Build
@@ -19,6 +20,7 @@ import androidx.core.content.ContextCompat
 import cz.kuclab.hertzchat.crypto.IdentityKeyManager
 import cz.kuclab.hertzchat.data.repository.AppSettings
 import cz.kuclab.hertzchat.data.repository.SettingsRepository
+import cz.kuclab.hertzchat.locale.LocalePrefs
 import cz.kuclab.hertzchat.p2p.P2pForegroundService
 import cz.kuclab.hertzchat.ui.navigation.HertzNavHost
 import cz.kuclab.hertzchat.ui.theme.HertzChatTheme
@@ -33,6 +35,10 @@ class MainActivity : ComponentActivity() {
 
     private val notificationPermissionLauncher =
         registerForActivityResult(ActivityResultContracts.RequestPermission()) { /* no-op either way - notifications just won't show if denied */ }
+
+    override fun attachBaseContext(newBase: Context) {
+        super.attachBaseContext(LocalePrefs.wrap(newBase))
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)

@@ -9,6 +9,7 @@ import cz.kuclab.hertzchat.BuildConfig
 import cz.kuclab.hertzchat.data.db.ContactDao
 import cz.kuclab.hertzchat.data.repository.AppSettings
 import cz.kuclab.hertzchat.data.repository.SettingsRepository
+import cz.kuclab.hertzchat.locale.LocalePrefs
 import cz.kuclab.hertzchat.media.MediaStorage
 import cz.kuclab.hertzchat.mistral.MistralKeyStore
 import cz.kuclab.hertzchat.p2p.P2pForegroundService
@@ -76,6 +77,12 @@ class SettingsViewModel @Inject constructor(
     fun setThemeMode(value: String) = viewModelScope.launch { settingsRepository.setThemeMode(value) }
     fun setAutoAcceptFriendRequests(value: Boolean) = viewModelScope.launch { settingsRepository.setAutoAcceptFriendRequests(value) }
     fun unblock(contactId: String) = viewModelScope.launch { contactDao.setBlocked(contactId, false) }
+
+    /** Persists the choice to both stores - the reactive DataStore copy and the fast synchronous one [MainActivity][cz.kuclab.hertzchat.MainActivity] reads at cold start. The caller is responsible for recreating the Activity to apply it immediately. */
+    fun setLanguageCode(value: String) {
+        LocalePrefs.setLanguageCode(context, value)
+        viewModelScope.launch { settingsRepository.setLanguageCode(value) }
+    }
 
     fun clearMediaCache() {
         mediaStorage.clearMedia()

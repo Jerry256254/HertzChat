@@ -2,8 +2,8 @@
 schema_version: 1
 app_name: Hertz Chat
 package_id: cz.kuclab.hertzchat
-version_name: "0.6.0"
-version_code: 8
+version_name: "0.7.0"
+version_code: 9
 last_updated: 2026-08-13
 license: MIT
 category: Komunikace
@@ -33,6 +33,15 @@ download_url: https://github.com/Jerry256254/HertzChat/releases/latest
 logo: store/logo.png
 screenshots: []
 changelog:
+  - version: "0.7.0"
+    date: 2026-08-13
+    notes:
+      - "Oprava: síť Tor se uměla zaseknout na neustálém „Navazuje se spojení...“ bez chyby a bez možnosti to zkusit znovu - knihovna pro Tor nemá vestavěný časový limit, takže zaseknuté volání blokovalo appku donekonečna. Teď má start i zveřejnění onion adresy tvrdý časový limit a při selhání se rovnou zobrazí chyba s tlačítkem Zkusit znovu."
+      - Kompletní redesign obrazovky Nastavení (sjednocené karty, ikony, přehlednější členění)
+      - "Appka teď jde přepnout do několika jazyků (čeština, angličtina, němčina, španělština, francouzština, ukrajinština, ruština) - volitelně už při zakládání identity nebo kdykoliv v Nastavení"
+      - Mistral AI asistent si teď sám vymyslí název konverzace podle obsahu, místo prostého oříznutí první zprávy
+      - Oprava rozložení a přidání tlačítka zpět na obrazovkách přenosu identity (QR export/import)
+      - "Ověřeno: text, obrázky, videa i hlasové zprávy jsou vždy šifrované (Signal Protokol pro text, AES-256-GCM pro média) předtím, než cokoliv opustí zařízení"
   - version: "0.6.0"
     date: 2026-08-13
     notes:

@@ -32,6 +32,8 @@ class UpdateChecker @Inject constructor() {
             connection.connectTimeout = 10_000
             connection.readTimeout = 10_000
             connection.setRequestProperty("Accept", "application/vnd.github+json")
+            connection.setRequestProperty("Cache-Control", "no-cache")
+            connection.useCaches = false
             try {
                 if (connection.responseCode != HttpURLConnection.HTTP_OK) {
                     error("Server odpověděl kódem ${connection.responseCode}")

@@ -12,16 +12,21 @@ import javax.inject.Singleton
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
+import kotlinx.coroutines.runInterruptible
+import kotlinx.coroutines.withTimeout
 import org.briarproject.android.dontkillmelib.wakelock.AndroidWakeLockManagerFactory
 import org.briarproject.onionwrapper.AndroidTorWrapper
 import org.briarproject.onionwrapper.TorWrapper
 import org.briarproject.socks.SocksSocketFactory
+
+private const val START_TIMEOUT_MS = 120_000L
+private const val PUBLISH_TIMEOUT_MS = 60_000L
 
 private const val LOCAL_LISTEN_PORT = 47821
 private const val HIDDEN_SERVICE_PORT = 47822
@@ -91,7 +96,17 @@ class TorTransport @Inject constructor(
             override fun onState(state: TorWrapper.TorState) {
                 _state.value = state
                 if (state == TorWrapper.TorState.STARTED) {
-                    scope.launch { publish(persistedPrivateKey, onKeySaved) }
+                    scope.launch {
+                        runCatching { publish(persistedPrivateKey, onKeySaved) }.onFailure { e ->
+                            _error.value = if (e is TimeoutCancellationException) {
+                                "Zveřejnění tvé adresy v síti Tor trvá příliš dlouho - zkus to znovu."
+                            } else {
+                                e.message ?: e.javaClass.simpleName
+                            }
+                            runCatching { wrapper.stop() }
+                            torWrapper = null
+                        }
+                    }
                 }
             }
             override fun onBootstrapPercentage(percentage: Int) {
@@ -102,8 +117,20 @@ class TorTransport @Inject constructor(
         })
 
         scope.launch {
-            runCatching { wrapper.start() }.onFailure { e ->
-                _error.value = e.message ?: e.javaClass.simpleName
+            // wrapper.start() is a plain blocking call (not suspend-aware), so a bare
+            // withTimeout around it can't actually interrupt it - runInterruptible does,
+            // by calling Thread.interrupt() on timeout, which unblocks the library's
+            // internal wait loop. Without this, a stuck Tor process used to hang the UI
+            // forever with no error and no way to retry - the actual bug behind the
+            // "connecting..." spinner that never resolves.
+            val result = runCatching { withTimeout(START_TIMEOUT_MS) { runInterruptible(Dispatchers.IO) { wrapper.start() } } }
+            result.onFailure { e ->
+                _error.value = if (e is TimeoutCancellationException) {
+                    "Připojení k síti Tor trvá příliš dlouho - zkontroluj internetové připojení a zkus to znovu."
+                } else {
+                    e.message ?: e.javaClass.simpleName
+                }
+                runCatching { wrapper.stop() }
                 torWrapper = null
             }
         }
@@ -118,8 +145,8 @@ class TorTransport @Inject constructor(
     private suspend fun publish(persistedPrivateKey: String, onKeySaved: (String) -> Unit) {
         val wrapper = torWrapper ?: return
         startLocalServer()
-        val properties = withContext(Dispatchers.IO) {
-            wrapper.publishHiddenService(HIDDEN_SERVICE_PORT, LOCAL_LISTEN_PORT, persistedPrivateKey)
+        val properties = withTimeout(PUBLISH_TIMEOUT_MS) {
+            runInterruptible(Dispatchers.IO) { wrapper.publishHiddenService(HIDDEN_SERVICE_PORT, LOCAL_LISTEN_PORT, persistedPrivateKey) }
         }
         if (persistedPrivateKey.isEmpty()) onKeySaved(properties.privKey)
         _onionAddress.value = properties.onion

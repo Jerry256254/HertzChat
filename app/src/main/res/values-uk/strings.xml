@@ -1,0 +1,67 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Hertz Chat</string>
+
+    <string name="onboarding_welcome_title">Ласкаво просимо до Hertz Chat</string>
+    <string name="onboarding_intro">Hertz Chat — це виключно однорангова (P2P), наскрізно зашифрована програма для спілкування. Жоден сервер не зберігає твої повідомлення, контакти чи медіафайли - усе залишається лише на твоєму пристрої й наскрізно зашифроване.</string>
+    <string name="onboarding_nickname_label">Псевдонім (необов\'язково)</string>
+    <string name="onboarding_nickname_hint">Якщо залишиш поле порожнім, буде згенеровано анонімний псевдонім. Реєстрація за номером телефону чи електронною поштою не потрібна - твоя особистість прив\'язана лише до цього пристрою.</string>
+    <string name="onboarding_language_label">Мова застосунку</string>
+    <string name="onboarding_accept_terms">Я погоджуюсь з Умовами використання та Політикою конфіденційності</string>
+    <string name="onboarding_show_terms">Переглянути умови</string>
+    <string name="onboarding_show_privacy">Переглянути конфіденційність</string>
+    <string name="onboarding_create_identity">Створити особистість і почати</string>
+    <string name="onboarding_restore_qr">У мене вже є особистість на іншому пристрої - сканувати QR</string>
+    <string name="common_close">Закрити</string>
+
+    <string name="settings_title">Налаштування</string>
+    <string name="settings_section_appearance">Вигляд</string>
+    <string name="settings_theme_label">Тема</string>
+    <string name="settings_theme_system">Як у системі</string>
+    <string name="settings_theme_light">Світла</string>
+    <string name="settings_theme_dark">Темна</string>
+    <string name="settings_section_language">Мова</string>
+    <string name="settings_language_label">Мова застосунку</string>
+    <string name="settings_section_notifications">Сповіщення</string>
+    <string name="settings_notifications_title">Сповіщення про нові повідомлення</string>
+    <string name="settings_notifications_subtitle">Спливаючі сповіщення, навіть коли застосунок закрито (якщо телефон має інтернет)</string>
+    <string name="settings_section_privacy">Конфіденційність і мережа</string>
+    <string name="settings_discoverable_title">Бути доступним</string>
+    <string name="settings_discoverable_subtitle">Вимкнення повністю зупиняє мережу Tor і фонову службу - ніхто не зможе тебе знайти, але застосунок не витрачає зайвий заряд батареї.</string>
+    <string name="settings_auto_accept_title">Автоматично приймати запити в друзі</string>
+    <string name="settings_auto_accept_subtitle">Нові контакти додаються одразу, без твого підтвердження.</string>
+    <string name="settings_section_mistral">Mistral AI</string>
+    <string name="settings_mistral_enabled_title">Використовувати AI-асистента Mistral</string>
+    <string name="settings_mistral_enabled_subtitle">Єдина функція, де текст залишає твій пристрій - надсилається безпосередньо на сервери Mistral AI за допомогою твого власного API-ключа.</string>
+    <string name="settings_mistral_show_contact_title">Показувати AI-асистента як контакт</string>
+    <string name="settings_mistral_show_contact_subtitle">Постійний запис у Контактах і списку чатів.</string>
+    <string name="settings_mistral_model_label">Модель</string>
+    <string name="settings_mistral_keys_label">API-ключі (пробуються по черзі)</string>
+    <string name="settings_mistral_keys_empty">Ще немає жодного ключа - без нього асистент не працюватиме.</string>
+    <string name="settings_mistral_key_placeholder">Новий API-ключ Mistral</string>
+    <string name="settings_mistral_key_add">Додати</string>
+    <string name="settings_mistral_key_remove">Видалити ключ</string>
+    <string name="settings_mistral_helper_text">Mistral має обмежену безкоштовну квоту на акаунт - більше ключів означає, що застосунку є на що перемкнутися, коли один вичерпається.</string>
+    <string name="settings_mistral_helper_email">Створити тимчасову пошту для іншого акаунту Mistral</string>
+    <string name="settings_mistral_helper_key">Отримати API-ключ від Mistral</string>
+    <string name="settings_mistral_consent_title">AI-асистент Mistral</string>
+    <string name="settings_mistral_consent_confirm">Розумію і погоджуюсь</string>
+    <string name="settings_mistral_consent_cancel">Скасувати</string>
+    <string name="settings_section_media">Медіа</string>
+    <string name="settings_media_quality_label">Якість надісланих зображень</string>
+    <string name="settings_media_quality_original">Оригінальна якість</string>
+    <string name="settings_media_quality_high">Висока</string>
+    <string name="settings_media_quality_balanced">Збалансована</string>
+    <string name="settings_media_storage_label">Медіа збережено на пристрої: %1$.1f МБ</string>
+    <string name="settings_media_clear">Очистити завантажені медіа</string>
+    <string name="settings_section_blocked">Заблоковані користувачі</string>
+    <string name="settings_unblock">Розблокувати</string>
+    <string name="settings_section_updates">Оновлення</string>
+    <string name="settings_installed_version">Встановлена версія</string>
+    <string name="settings_check_update">Перевірити</string>
+    <string name="settings_up_to_date">У тебе найновіша версія</string>
+    <string name="settings_update_available">Доступна версія %1$s</string>
+    <string name="settings_open_release">Відкрити сторінку завантаження</string>
+    <string name="settings_section_about">Про застосунок</string>
+    <string name="settings_about_description">Відкритий код, без сервера, наскрізне шифрування через протокол Signal, передача через мережу Tor.</string>
+</resources>

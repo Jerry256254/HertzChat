@@ -3,8 +3,6 @@ package cz.kuclab.hertzchat.ui.settings
 import android.content.Intent
 import android.net.Uri
 import androidx.compose.foundation.Image
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -14,20 +12,26 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Block
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.DarkMode
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.NewReleases
 import androidx.compose.material.icons.filled.Notifications
+import androidx.compose.material.icons.filled.PersonAdd
+import androidx.compose.material.icons.filled.SmartToy
 import androidx.compose.material.icons.filled.Storage
 import androidx.compose.material.icons.filled.SystemUpdate
+import androidx.compose.material.icons.filled.Visibility
+import androidx.compose.material.icons.filled.Wifi
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Button
-import androidx.compose.material3.Card
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -54,6 +58,8 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import cz.kuclab.hertzchat.BuildConfig
@@ -61,6 +67,8 @@ import cz.kuclab.hertzchat.R
 import cz.kuclab.hertzchat.mistral.MISTRAL_MODEL_LARGE
 import cz.kuclab.hertzchat.mistral.MISTRAL_MODEL_MEDIUM
 import cz.kuclab.hertzchat.mistral.MISTRAL_MODEL_SMALL
+import cz.kuclab.hertzchat.ui.common.AppCard
+import cz.kuclab.hertzchat.ui.common.LanguagePickerRow
 import cz.kuclab.hertzchat.ui.onboarding.MISTRAL_CONSENT_TEXT
 
 @Composable
@@ -77,159 +85,152 @@ fun SettingsScreen(viewModel: SettingsViewModel = hiltViewModel()) {
     var showMistralConsentDialog by remember { mutableStateOf(false) }
     val context = LocalContext.current
 
-    Scaffold(topBar = { TopAppBar(title = { Text("Nastavení") }) }) { padding ->
+    Scaffold(topBar = { TopAppBar(title = { Text(stringResource(R.string.settings_title)) }) }) { padding ->
         LazyColumn(
             modifier = Modifier.fillMaxSize().padding(padding).padding(horizontal = 16.dp),
             verticalArrangement = Arrangement.spacedBy(4.dp),
+            contentPadding = androidx.compose.foundation.layout.PaddingValues(bottom = 24.dp),
         ) {
-            item { SectionTitle("Vzhled") }
+            item { SectionTitle(Icons.Filled.DarkMode, stringResource(R.string.settings_section_appearance)) }
             item {
-                Card {
-                    Column(modifier = Modifier.padding(16.dp)) {
-                        ThemeModeRow(current = settings.themeMode, onChange = viewModel::setThemeMode)
-                    }
+                SettingsCard {
+                    ThemeModeRow(current = settings.themeMode, onChange = viewModel::setThemeMode)
+                    HorizontalDivider()
+                    LanguagePickerRow(
+                        label = stringResource(R.string.settings_language_label),
+                        currentCode = settings.languageCode,
+                        onChange = viewModel::setLanguageCode,
+                    )
                 }
             }
 
-            item { SectionTitle("Oznámení") }
+            item { SectionTitle(Icons.Filled.Notifications, stringResource(R.string.settings_section_notifications)) }
             item {
-                Card {
-                    Column(modifier = Modifier.padding(horizontal = 16.dp)) {
-                        SettingsSwitchRow(
-                            icon = Icons.Filled.Notifications,
-                            title = "Oznámení o nových zprávách",
-                            subtitle = "Vyskakovací upozornění, i když je appka zavřená (pokud má telefon internet)",
-                            checked = settings.notificationsEnabled,
-                            onCheckedChange = viewModel::setNotificationsEnabled,
-                        )
-                    }
+                SettingsCard {
+                    SettingsSwitchRow(
+                        icon = Icons.Filled.Notifications,
+                        title = stringResource(R.string.settings_notifications_title),
+                        subtitle = stringResource(R.string.settings_notifications_subtitle),
+                        checked = settings.notificationsEnabled,
+                        onCheckedChange = viewModel::setNotificationsEnabled,
+                    )
                 }
             }
 
-            item { SectionTitle("Soukromí a síť") }
+            item { SectionTitle(Icons.Filled.Wifi, stringResource(R.string.settings_section_privacy)) }
             item {
-                Card {
-                    Column(modifier = Modifier.padding(horizontal = 16.dp)) {
-                        SettingsSwitchRow(
-                            icon = null,
-                            title = "Být dosažitelný",
-                            subtitle = "Vypnutím se úplně zastaví síť Tor i služba na pozadí - nikdo tě nenajde ani ti nemůže poslat zprávu, ale appka nespotřebovává baterii navíc. Žádný server (ani náš, ani cizí) do toho není nikdy zapojený.",
-                            checked = settings.discoverable,
-                            onCheckedChange = viewModel::setDiscoverable,
-                        )
-                        HorizontalDivider()
-                        SettingsSwitchRow(
-                            icon = null,
-                            title = "Automaticky přijímat žádosti o přátelství",
-                            subtitle = "Nové kontakty se přidají rovnou, bez tvého potvrzení. Pohodlnější, ale méně kontroly nad tím, kdo tě může kontaktovat.",
-                            checked = settings.autoAcceptFriendRequests,
-                            onCheckedChange = viewModel::setAutoAcceptFriendRequests,
-                        )
-                    }
+                SettingsCard {
+                    SettingsSwitchRow(
+                        icon = Icons.Filled.Wifi,
+                        title = stringResource(R.string.settings_discoverable_title),
+                        subtitle = stringResource(R.string.settings_discoverable_subtitle),
+                        checked = settings.discoverable,
+                        onCheckedChange = viewModel::setDiscoverable,
+                    )
+                    HorizontalDivider()
+                    SettingsSwitchRow(
+                        icon = Icons.Filled.PersonAdd,
+                        title = stringResource(R.string.settings_auto_accept_title),
+                        subtitle = stringResource(R.string.settings_auto_accept_subtitle),
+                        checked = settings.autoAcceptFriendRequests,
+                        onCheckedChange = viewModel::setAutoAcceptFriendRequests,
+                    )
                 }
             }
 
-            item { SectionTitle("Mistral AI") }
+            item { SectionTitle(Icons.Filled.SmartToy, stringResource(R.string.settings_section_mistral)) }
             item {
-                Card {
-                    Column(modifier = Modifier.padding(horizontal = 16.dp)) {
-                        SettingsSwitchRow(
-                            icon = null,
-                            title = "Používat Mistral AI asistenta",
-                            subtitle = "Jediná funkce appky, kde text opouští tvoje zařízení - posílá se přímo na servery Mistral AI pomocí tvého vlastního API klíče. Vypnuto ve výchozím stavu.",
-                            checked = mistralEnabled,
-                            onCheckedChange = { turningOn ->
-                                if (turningOn && !mistralConsentGiven) {
-                                    showMistralConsentDialog = true
-                                } else {
-                                    viewModel.setMistralEnabled(turningOn)
-                                }
-                            },
-                        )
-                        HorizontalDivider()
-                        SettingsSwitchRow(
-                            icon = null,
-                            title = "Zobrazovat AI asistenta jako kontakt",
-                            subtitle = "Trvalá položka v Kontaktech a v seznamu chatů, i pro ty, kdo funkci ještě nemají nastavenou.",
-                            checked = mistralShowAssistantContact,
-                            onCheckedChange = viewModel::setMistralShowAssistantContact,
-                        )
-                        HorizontalDivider()
-                        MistralModelRow(current = mistralModel, onChange = viewModel::setMistralModel)
-                        HorizontalDivider()
-                        MistralApiKeysRow(keys = mistralKeys, onAdd = viewModel::addMistralKey, onRemove = viewModel::removeMistralKey)
-                        HorizontalDivider()
-                        MistralHelperLinksRow(context = context)
-                    }
+                SettingsCard {
+                    SettingsSwitchRow(
+                        icon = Icons.Filled.SmartToy,
+                        title = stringResource(R.string.settings_mistral_enabled_title),
+                        subtitle = stringResource(R.string.settings_mistral_enabled_subtitle),
+                        checked = mistralEnabled,
+                        onCheckedChange = { turningOn ->
+                            if (turningOn && !mistralConsentGiven) {
+                                showMistralConsentDialog = true
+                            } else {
+                                viewModel.setMistralEnabled(turningOn)
+                            }
+                        },
+                    )
+                    HorizontalDivider()
+                    SettingsSwitchRow(
+                        icon = Icons.Filled.Visibility,
+                        title = stringResource(R.string.settings_mistral_show_contact_title),
+                        subtitle = stringResource(R.string.settings_mistral_show_contact_subtitle),
+                        checked = mistralShowAssistantContact,
+                        onCheckedChange = viewModel::setMistralShowAssistantContact,
+                    )
+                    HorizontalDivider()
+                    MistralModelRow(current = mistralModel, onChange = viewModel::setMistralModel)
+                    HorizontalDivider()
+                    MistralApiKeysRow(keys = mistralKeys, onAdd = viewModel::addMistralKey, onRemove = viewModel::removeMistralKey)
+                    HorizontalDivider()
+                    MistralHelperLinksRow(context = context)
                 }
             }
 
-            item { SectionTitle("Média") }
+            item { SectionTitle(Icons.Filled.Storage, stringResource(R.string.settings_section_media)) }
             item {
-                Card {
-                    Column(modifier = Modifier.padding(horizontal = 16.dp)) {
-                        MediaQualityRow(current = settings.mediaQuality, onChange = viewModel::setMediaQuality)
-                        HorizontalDivider()
-                        StorageRow(bytes = mediaBytes, onClear = viewModel::clearMediaCache)
-                    }
+                SettingsCard {
+                    MediaQualityRow(current = settings.mediaQuality, onChange = viewModel::setMediaQuality)
+                    HorizontalDivider()
+                    StorageRow(bytes = mediaBytes, onClear = viewModel::clearMediaCache)
                 }
             }
 
             if (blocked.isNotEmpty()) {
-                item { SectionTitle("Blokovaní uživatelé") }
+                item { SectionTitle(Icons.Filled.Block, stringResource(R.string.settings_section_blocked)) }
                 item {
-                    Card {
-                        Column(modifier = Modifier.padding(horizontal = 16.dp)) {
-                            blocked.forEachIndexed { index, contact ->
-                                Row(
-                                    modifier = Modifier.fillMaxWidth().padding(vertical = 12.dp),
-                                    horizontalArrangement = Arrangement.SpaceBetween,
-                                    verticalAlignment = Alignment.CenterVertically,
-                                ) {
-                                    Text(contact.nickname)
-                                    TextButton(onClick = { viewModel.unblock(contact.contactId) }) { Text("Odblokovat") }
-                                }
-                                if (index != blocked.lastIndex) HorizontalDivider()
+                    SettingsCard {
+                        blocked.forEachIndexed { index, contact ->
+                            Row(
+                                modifier = Modifier.fillMaxWidth().padding(vertical = 12.dp),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                Text(contact.nickname)
+                                TextButton(onClick = { viewModel.unblock(contact.contactId) }) { Text(stringResource(R.string.settings_unblock)) }
                             }
+                            if (index != blocked.lastIndex) HorizontalDivider()
                         }
                     }
                 }
             }
 
-            item { SectionTitle("Aktualizace") }
+            item { SectionTitle(Icons.Filled.SystemUpdate, stringResource(R.string.settings_section_updates)) }
             item {
-                Card {
-                    Column(modifier = Modifier.padding(16.dp)) {
-                        UpdateCheckRow(
-                            currentVersion = viewModel.currentVersion,
-                            state = updateCheckState,
-                            onCheck = viewModel::checkForUpdates,
-                            onOpenRelease = { url ->
-                                context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
-                            },
-                        )
-                    }
+                SettingsCard {
+                    UpdateCheckRow(
+                        currentVersion = viewModel.currentVersion,
+                        state = updateCheckState,
+                        onCheck = viewModel::checkForUpdates,
+                        onOpenRelease = { url ->
+                            context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
+                        },
+                    )
                 }
             }
 
-            item { SectionTitle("O aplikaci") }
+            item { SectionTitle(Icons.Filled.Info, stringResource(R.string.settings_section_about)) }
             item {
-                Card {
-                    Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Icon(Icons.Filled.Info, contentDescription = null, modifier = Modifier.padding(end = 8.dp))
-                            Text("Hertz Chat ${BuildConfig.VERSION_NAME}")
-                        }
-                        Text(
-                            "Open source, žádný server, end-to-end šifrované přes Signal Protokol, přenos přes síť Tor.",
-                            style = MaterialTheme.typography.labelSmall,
-                        )
-                        Text(
-                            "github.com/Jerry256254/HertzChat",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.primary,
-                        )
+                SettingsCard {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Filled.Info, contentDescription = null, modifier = Modifier.padding(end = 8.dp))
+                        Text("Hertz Chat ${BuildConfig.VERSION_NAME}", fontWeight = FontWeight.SemiBold)
                     }
+                    Text(
+                        stringResource(R.string.settings_about_description),
+                        style = MaterialTheme.typography.labelSmall,
+                        modifier = Modifier.padding(top = 4.dp),
+                    )
+                    Text(
+                        "github.com/Jerry256254/HertzChat",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.padding(top = 4.dp),
+                    )
                 }
             }
         }
@@ -238,7 +239,7 @@ fun SettingsScreen(viewModel: SettingsViewModel = hiltViewModel()) {
     if (showMistralConsentDialog) {
         AlertDialog(
             onDismissRequest = { showMistralConsentDialog = false },
-            title = { Text("Mistral AI asistent") },
+            title = { Text(stringResource(R.string.settings_mistral_consent_title)) },
             text = {
                 Text(
                     MISTRAL_CONSENT_TEXT,
@@ -251,23 +252,37 @@ fun SettingsScreen(viewModel: SettingsViewModel = hiltViewModel()) {
                 TextButton(onClick = {
                     showMistralConsentDialog = false
                     viewModel.confirmMistralConsent()
-                }) { Text("Rozumím a souhlasím") }
+                }) { Text(stringResource(R.string.settings_mistral_consent_confirm)) }
             },
             dismissButton = {
-                TextButton(onClick = { showMistralConsentDialog = false }) { Text("Zrušit") }
+                TextButton(onClick = { showMistralConsentDialog = false }) { Text(stringResource(R.string.settings_mistral_consent_cancel)) }
             },
         )
     }
 }
 
 @Composable
-private fun SectionTitle(text: String) {
-    Text(
-        text,
-        style = MaterialTheme.typography.labelSmall,
-        color = MaterialTheme.colorScheme.primary,
-        modifier = Modifier.padding(top = 20.dp, bottom = 6.dp),
-    )
+private fun SettingsCard(content: @Composable androidx.compose.foundation.layout.ColumnScope.() -> Unit) {
+    AppCard {
+        Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp), content = content)
+    }
+}
+
+@Composable
+private fun SectionTitle(icon: androidx.compose.ui.graphics.vector.ImageVector, text: String) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = Modifier.padding(top = 24.dp, bottom = 8.dp, start = 4.dp),
+    ) {
+        Icon(icon, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(18.dp))
+        Text(
+            text,
+            style = MaterialTheme.typography.titleSmall,
+            color = MaterialTheme.colorScheme.primary,
+            fontWeight = FontWeight.SemiBold,
+            modifier = Modifier.padding(start = 8.dp),
+        )
+    }
 }
 
 @Composable
@@ -284,10 +299,12 @@ private fun SettingsSwitchRow(
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Row(modifier = Modifier.weight(1f), verticalAlignment = Alignment.CenterVertically) {
-            icon?.let { Icon(it, contentDescription = null, modifier = Modifier.padding(end = 12.dp)) }
+            icon?.let {
+                Icon(it, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(end = 12.dp))
+            }
             Column {
                 Text(title)
-                subtitle?.let { Text(it, style = MaterialTheme.typography.labelSmall) }
+                subtitle?.let { Text(it, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
             }
         }
         Switch(checked = checked, onCheckedChange = onCheckedChange)
@@ -308,7 +325,7 @@ private fun MistralModelRow(current: String, onChange: (String) -> Unit) {
             contentScale = ContentScale.Crop,
             modifier = Modifier.size(24.dp).clip(CircleShape),
         )
-        Text("Model", modifier = Modifier.weight(1f).padding(start = 12.dp))
+        Text(stringResource(R.string.settings_mistral_model_label), modifier = Modifier.weight(1f).padding(start = 12.dp))
     }
     Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(bottom = 8.dp)) {
         options.forEach { (value, label) ->
@@ -332,10 +349,10 @@ private fun MistralModelRow(current: String, onChange: (String) -> Unit) {
 private fun MistralApiKeysRow(keys: List<String>, onAdd: (String) -> Unit, onRemove: (Int) -> Unit) {
     var newKey by remember { mutableStateOf("") }
     Column(modifier = Modifier.padding(vertical = 12.dp)) {
-        Text("API klíče (zkouší se popořadě, další jen když předchozí selže)")
+        Text(stringResource(R.string.settings_mistral_keys_label))
         if (keys.isEmpty()) {
             Text(
-                "Zatím žádný klíč - bez něj asistent nebude fungovat.",
+                stringResource(R.string.settings_mistral_keys_empty),
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.padding(top = 4.dp),
@@ -349,7 +366,7 @@ private fun MistralApiKeysRow(keys: List<String>, onAdd: (String) -> Unit, onRem
                 ) {
                     Text(maskApiKey(key), style = MaterialTheme.typography.bodyMedium)
                     IconButton(onClick = { onRemove(index) }) {
-                        Icon(Icons.Filled.Delete, contentDescription = "Odebrat klíč")
+                        Icon(Icons.Filled.Delete, contentDescription = stringResource(R.string.settings_mistral_key_remove))
                     }
                 }
             }
@@ -359,11 +376,11 @@ private fun MistralApiKeysRow(keys: List<String>, onAdd: (String) -> Unit, onRem
                 value = newKey,
                 onValueChange = { newKey = it },
                 modifier = Modifier.weight(1f),
-                placeholder = { Text("Nový Mistral API klíč") },
+                placeholder = { Text(stringResource(R.string.settings_mistral_key_placeholder)) },
                 singleLine = true,
             )
             TextButton(onClick = { onAdd(newKey); newKey = "" }, enabled = newKey.isNotBlank()) {
-                Text("Přidat")
+                Text(stringResource(R.string.settings_mistral_key_add))
             }
         }
     }
@@ -378,29 +395,33 @@ private fun maskApiKey(key: String): String {
 private fun MistralHelperLinksRow(context: android.content.Context) {
     Column(modifier = Modifier.padding(vertical = 12.dp)) {
         Text(
-            "Mistral má omezenou bezplatnou kvótu na účet - více klíčů (z více účtů) znamená, že appka má na co přepnout, když jeden dojde.",
+            stringResource(R.string.settings_mistral_helper_text),
             style = MaterialTheme.typography.labelSmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
         TextButton(
             onClick = { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://kuclab.org/15mail"))) },
             modifier = Modifier.fillMaxWidth(),
-        ) { Text("Vytvořit dočasný e-mail pro další Mistral účet") }
+        ) { Text(stringResource(R.string.settings_mistral_helper_email)) }
         TextButton(
             onClick = { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://console.mistral.ai/api-keys"))) },
             modifier = Modifier.fillMaxWidth(),
-        ) { Text("Získat API klíč od Mistral") }
+        ) { Text(stringResource(R.string.settings_mistral_helper_key)) }
     }
 }
 
 @Composable
 private fun ThemeModeRow(current: String, onChange: (String) -> Unit) {
-    val options = listOf("SYSTEM" to "Podle systému", "LIGHT" to "Světlý", "DARK" to "Tmavý")
-    Row(verticalAlignment = Alignment.CenterVertically) {
+    val options = listOf(
+        "SYSTEM" to stringResource(R.string.settings_theme_system),
+        "LIGHT" to stringResource(R.string.settings_theme_light),
+        "DARK" to stringResource(R.string.settings_theme_dark),
+    )
+    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 12.dp)) {
         Icon(Icons.Filled.DarkMode, contentDescription = null, modifier = Modifier.padding(end = 12.dp))
-        Text("Motiv", modifier = Modifier.weight(1f))
+        Text(stringResource(R.string.settings_theme_label), modifier = Modifier.weight(1f))
     }
-    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(top = 8.dp)) {
+    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(top = 8.dp, bottom = 12.dp)) {
         options.forEach { (value, label) ->
             AssistChip(
                 onClick = { onChange(value) },
@@ -421,14 +442,18 @@ private fun ThemeModeRow(current: String, onChange: (String) -> Unit) {
 @Composable
 private fun MediaQualityRow(current: String, onChange: (String) -> Unit) {
     var expanded by remember { mutableStateOf(false) }
-    val options = listOf("ORIGINAL" to "Původní kvalita", "HIGH" to "Vysoká", "BALANCED" to "Vyvážená")
+    val options = listOf(
+        "ORIGINAL" to stringResource(R.string.settings_media_quality_original),
+        "HIGH" to stringResource(R.string.settings_media_quality_high),
+        "BALANCED" to stringResource(R.string.settings_media_quality_balanced),
+    )
 
     Row(
         modifier = Modifier.fillMaxWidth().padding(vertical = 12.dp),
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Text("Kvalita odesílaných obrázků")
+        Text(stringResource(R.string.settings_media_quality_label))
         TextButton(onClick = { expanded = true }) {
             Text(options.firstOrNull { it.first == current }?.second ?: current)
         }
@@ -447,37 +472,37 @@ private fun UpdateCheckRow(
     onCheck: () -> Unit,
     onOpenRelease: (String) -> Unit,
 ) {
-    Row(verticalAlignment = Alignment.CenterVertically) {
+    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(vertical = 12.dp)) {
         Icon(Icons.Filled.SystemUpdate, contentDescription = null, modifier = Modifier.padding(end = 12.dp))
         Column(modifier = Modifier.weight(1f)) {
-            Text("Nainstalovaná verze")
+            Text(stringResource(R.string.settings_installed_version))
             Text(currentVersion, style = MaterialTheme.typography.labelSmall)
         }
         if (state is UpdateCheckState.Checking) {
             CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
         } else {
-            OutlinedButton(onClick = onCheck) { Text("Zkontrolovat") }
+            OutlinedButton(onClick = onCheck) { Text(stringResource(R.string.settings_check_update)) }
         }
     }
     when (state) {
-        is UpdateCheckState.UpToDate -> Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 12.dp)) {
+        is UpdateCheckState.UpToDate -> Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(bottom = 12.dp)) {
             Icon(Icons.Filled.CheckCircle, contentDescription = null, tint = MaterialTheme.colorScheme.secondary, modifier = Modifier.size(18.dp))
-            Text("  Máš nejnovější verzi", color = MaterialTheme.colorScheme.secondary)
+            Text("  " + stringResource(R.string.settings_up_to_date), color = MaterialTheme.colorScheme.secondary)
         }
-        is UpdateCheckState.Available -> Column(modifier = Modifier.padding(top = 12.dp)) {
+        is UpdateCheckState.Available -> Column(modifier = Modifier.padding(bottom = 12.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Icon(Icons.Filled.NewReleases, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(18.dp))
-                Text("  K dispozici je verze ${state.version}", color = MaterialTheme.colorScheme.primary)
+                Text("  " + stringResource(R.string.settings_update_available, state.version), color = MaterialTheme.colorScheme.primary)
             }
             Button(onClick = { onOpenRelease(state.url) }, modifier = Modifier.padding(top = 8.dp)) {
-                Text("Otevřít stránku ke stažení")
+                Text(stringResource(R.string.settings_open_release))
             }
         }
         is UpdateCheckState.Error -> Text(
             state.message,
             color = MaterialTheme.colorScheme.error,
             style = MaterialTheme.typography.labelSmall,
-            modifier = Modifier.padding(top = 12.dp),
+            modifier = Modifier.padding(bottom = 12.dp),
         )
         UpdateCheckState.Idle, UpdateCheckState.Checking -> Unit
     }
@@ -489,11 +514,11 @@ private fun StorageRow(bytes: Long, onClear: () -> Unit) {
     Column(modifier = Modifier.padding(vertical = 12.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Icon(Icons.Filled.Storage, contentDescription = null, modifier = Modifier.padding(end = 12.dp))
-            Text("Média uložená na zařízení: %.1f MB".format(mb))
+            Text(stringResource(R.string.settings_media_storage_label, mb))
         }
         OutlinedButton(onClick = onClear, modifier = Modifier.padding(top = 8.dp)) {
             Icon(Icons.Filled.Delete, contentDescription = null, modifier = Modifier.padding(end = 6.dp))
-            Text("Vymazat stažená média")
+            Text(stringResource(R.string.settings_media_clear))
         }
     }
 }

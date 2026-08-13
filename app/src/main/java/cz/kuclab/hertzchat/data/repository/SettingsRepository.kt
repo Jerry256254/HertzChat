@@ -18,6 +18,7 @@ private val KEY_MEDIA_QUALITY = stringPreferencesKey("media_quality") // ORIGINA
 private val KEY_NOTIFICATIONS_ENABLED = booleanPreferencesKey("notifications_enabled")
 private val KEY_THEME_MODE = stringPreferencesKey("theme_mode") // SYSTEM | LIGHT | DARK
 private val KEY_AUTO_ACCEPT_REQUESTS = booleanPreferencesKey("auto_accept_requests")
+private val KEY_LANGUAGE_CODE = stringPreferencesKey("language_code")
 
 data class AppSettings(
     val discoverable: Boolean = true,
@@ -25,6 +26,7 @@ data class AppSettings(
     val notificationsEnabled: Boolean = true,
     val themeMode: String = "SYSTEM",
     val autoAcceptFriendRequests: Boolean = false,
+    val languageCode: String = cz.kuclab.hertzchat.locale.LANGUAGE_SYSTEM,
 )
 
 @Singleton
@@ -37,6 +39,7 @@ class SettingsRepository @Inject constructor(@ApplicationContext private val con
             notificationsEnabled = prefs[KEY_NOTIFICATIONS_ENABLED] ?: true,
             themeMode = prefs[KEY_THEME_MODE] ?: "SYSTEM",
             autoAcceptFriendRequests = prefs[KEY_AUTO_ACCEPT_REQUESTS] ?: false,
+            languageCode = prefs[KEY_LANGUAGE_CODE] ?: cz.kuclab.hertzchat.locale.LANGUAGE_SYSTEM,
         )
     }
 
@@ -45,4 +48,5 @@ class SettingsRepository @Inject constructor(@ApplicationContext private val con
     suspend fun setNotificationsEnabled(value: Boolean) = context.settingsDataStore.edit { it[KEY_NOTIFICATIONS_ENABLED] = value }
     suspend fun setThemeMode(value: String) = context.settingsDataStore.edit { it[KEY_THEME_MODE] = value }
     suspend fun setAutoAcceptFriendRequests(value: Boolean) = context.settingsDataStore.edit { it[KEY_AUTO_ACCEPT_REQUESTS] = value }
+    suspend fun setLanguageCode(value: String) = context.settingsDataStore.edit { it[KEY_LANGUAGE_CODE] = value }
 }

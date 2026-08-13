@@ -1,0 +1,67 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Hertz Chat</string>
+
+    <string name="onboarding_welcome_title">Bienvenido a Hertz Chat</string>
+    <string name="onboarding_intro">Hertz Chat es una aplicación de chat puramente de igual a igual (P2P) y cifrada de extremo a extremo. Ningún servidor guarda tus mensajes, contactos ni archivos multimedia: todo permanece solo en tu dispositivo y está cifrado de extremo a extremo.</string>
+    <string name="onboarding_nickname_label">Apodo (opcional)</string>
+    <string name="onboarding_nickname_hint">Si dejas este campo vacío, se generará un apodo anónimo. No hace falta registrarse con número de teléfono ni correo electrónico: tu identidad está vinculada solo a este dispositivo.</string>
+    <string name="onboarding_language_label">Idioma de la app</string>
+    <string name="onboarding_accept_terms">Acepto las Condiciones de uso y la Política de privacidad</string>
+    <string name="onboarding_show_terms">Ver condiciones</string>
+    <string name="onboarding_show_privacy">Ver privacidad</string>
+    <string name="onboarding_create_identity">Crear identidad y empezar</string>
+    <string name="onboarding_restore_qr">Ya tengo una identidad en otro dispositivo - escanear QR</string>
+    <string name="common_close">Cerrar</string>
+
+    <string name="settings_title">Ajustes</string>
+    <string name="settings_section_appearance">Apariencia</string>
+    <string name="settings_theme_label">Tema</string>
+    <string name="settings_theme_system">Según el sistema</string>
+    <string name="settings_theme_light">Claro</string>
+    <string name="settings_theme_dark">Oscuro</string>
+    <string name="settings_section_language">Idioma</string>
+    <string name="settings_language_label">Idioma de la app</string>
+    <string name="settings_section_notifications">Notificaciones</string>
+    <string name="settings_notifications_title">Notificaciones de mensajes nuevos</string>
+    <string name="settings_notifications_subtitle">Avisos emergentes aunque la app esté cerrada (si el teléfono tiene internet)</string>
+    <string name="settings_section_privacy">Privacidad y red</string>
+    <string name="settings_discoverable_title">Estar disponible</string>
+    <string name="settings_discoverable_subtitle">Al desactivarlo se detiene por completo la red Tor y el servicio en segundo plano - nadie puede encontrarte, pero la app no consume batería extra.</string>
+    <string name="settings_auto_accept_title">Aceptar automáticamente solicitudes de amistad</string>
+    <string name="settings_auto_accept_subtitle">Los nuevos contactos se añaden directamente, sin tu confirmación.</string>
+    <string name="settings_section_mistral">Mistral AI</string>
+    <string name="settings_mistral_enabled_title">Usar el asistente de Mistral AI</string>
+    <string name="settings_mistral_enabled_subtitle">La única función en la que el texto sale de tu dispositivo - se envía directamente a los servidores de Mistral AI usando tu propia clave API.</string>
+    <string name="settings_mistral_show_contact_title">Mostrar al asistente de IA como contacto</string>
+    <string name="settings_mistral_show_contact_subtitle">Una entrada permanente en Contactos y en la lista de chats.</string>
+    <string name="settings_mistral_model_label">Modelo</string>
+    <string name="settings_mistral_keys_label">Claves API (se prueban en orden)</string>
+    <string name="settings_mistral_keys_empty">Todavía no hay ninguna clave - sin ella el asistente no funcionará.</string>
+    <string name="settings_mistral_key_placeholder">Nueva clave API de Mistral</string>
+    <string name="settings_mistral_key_add">Añadir</string>
+    <string name="settings_mistral_key_remove">Quitar clave</string>
+    <string name="settings_mistral_helper_text">Mistral tiene una cuota gratuita limitada por cuenta - más claves significa que la app tiene a qué cambiar cuando una se agote.</string>
+    <string name="settings_mistral_helper_email">Crear un correo temporal para otra cuenta de Mistral</string>
+    <string name="settings_mistral_helper_key">Obtener una clave API de Mistral</string>
+    <string name="settings_mistral_consent_title">Asistente de Mistral AI</string>
+    <string name="settings_mistral_consent_confirm">Entiendo y acepto</string>
+    <string name="settings_mistral_consent_cancel">Cancelar</string>
+    <string name="settings_section_media">Multimedia</string>
+    <string name="settings_media_quality_label">Calidad de las imágenes enviadas</string>
+    <string name="settings_media_quality_original">Calidad original</string>
+    <string name="settings_media_quality_high">Alta</string>
+    <string name="settings_media_quality_balanced">Equilibrada</string>
+    <string name="settings_media_storage_label">Multimedia almacenada en el dispositivo: %1$.1f MB</string>
+    <string name="settings_media_clear">Borrar multimedia descargada</string>
+    <string name="settings_section_blocked">Usuarios bloqueados</string>
+    <string name="settings_unblock">Desbloquear</string>
+    <string name="settings_section_updates">Actualizaciones</string>
+    <string name="settings_installed_version">Versión instalada</string>
+    <string name="settings_check_update">Comprobar</string>
+    <string name="settings_up_to_date">Tienes la última versión</string>
+    <string name="settings_update_available">Hay disponible la versión %1$s</string>
+    <string name="settings_open_release">Abrir página de descarga</string>
+    <string name="settings_section_about">Acerca de</string>
+    <string name="settings_about_description">Código abierto, sin servidor, cifrado de extremo a extremo mediante el protocolo Signal, transporte a través de la red Tor.</string>
+</resources>

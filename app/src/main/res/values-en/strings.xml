@@ -1,0 +1,67 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Hertz Chat</string>
+
+    <string name="onboarding_welcome_title">Welcome to Hertz Chat</string>
+    <string name="onboarding_intro">Hertz Chat is a purely peer-to-peer, end-to-end encrypted chat app. No server stores your messages, contacts or media – everything stays only on your device and is end-to-end encrypted.</string>
+    <string name="onboarding_nickname_label">Nickname (optional)</string>
+    <string name="onboarding_nickname_hint">Leave this blank and you\'ll get an anonymous nickname. No phone number or e-mail registration is needed – your identity is bound only to this device.</string>
+    <string name="onboarding_language_label">App language</string>
+    <string name="onboarding_accept_terms">I agree to the Terms of Use and Privacy Policy</string>
+    <string name="onboarding_show_terms">View terms</string>
+    <string name="onboarding_show_privacy">View privacy policy</string>
+    <string name="onboarding_create_identity">Create identity and start</string>
+    <string name="onboarding_restore_qr">I already have an identity on another device - scan QR</string>
+    <string name="common_close">Close</string>
+
+    <string name="settings_title">Settings</string>
+    <string name="settings_section_appearance">Appearance</string>
+    <string name="settings_theme_label">Theme</string>
+    <string name="settings_theme_system">System default</string>
+    <string name="settings_theme_light">Light</string>
+    <string name="settings_theme_dark">Dark</string>
+    <string name="settings_section_language">Language</string>
+    <string name="settings_language_label">App language</string>
+    <string name="settings_section_notifications">Notifications</string>
+    <string name="settings_notifications_title">New message notifications</string>
+    <string name="settings_notifications_subtitle">Pop-up alerts even when the app is closed (as long as the phone has internet)</string>
+    <string name="settings_section_privacy">Privacy &amp; network</string>
+    <string name="settings_discoverable_title">Be reachable</string>
+    <string name="settings_discoverable_subtitle">Turning this off fully stops the Tor network and the background service - nobody can find or message you, but the app uses no extra battery.</string>
+    <string name="settings_auto_accept_title">Auto-accept friend requests</string>
+    <string name="settings_auto_accept_subtitle">New contacts get added right away, without your confirmation.</string>
+    <string name="settings_section_mistral">Mistral AI</string>
+    <string name="settings_mistral_enabled_title">Use the Mistral AI assistant</string>
+    <string name="settings_mistral_enabled_subtitle">The only feature where text leaves your device - it\'s sent straight to Mistral AI\'s servers using your own API key.</string>
+    <string name="settings_mistral_show_contact_title">Show the AI assistant as a contact</string>
+    <string name="settings_mistral_show_contact_subtitle">A permanent entry in Contacts and the chat list.</string>
+    <string name="settings_mistral_model_label">Model</string>
+    <string name="settings_mistral_keys_label">API keys (tried in order)</string>
+    <string name="settings_mistral_keys_empty">No key yet - the assistant won\'t work without one.</string>
+    <string name="settings_mistral_key_placeholder">New Mistral API key</string>
+    <string name="settings_mistral_key_add">Add</string>
+    <string name="settings_mistral_key_remove">Remove key</string>
+    <string name="settings_mistral_helper_text">Mistral has a limited free quota per account - more keys means the app has something to switch to when one runs out.</string>
+    <string name="settings_mistral_helper_email">Create a temporary e-mail for another Mistral account</string>
+    <string name="settings_mistral_helper_key">Get an API key from Mistral</string>
+    <string name="settings_mistral_consent_title">Mistral AI assistant</string>
+    <string name="settings_mistral_consent_confirm">I understand and agree</string>
+    <string name="settings_mistral_consent_cancel">Cancel</string>
+    <string name="settings_section_media">Media</string>
+    <string name="settings_media_quality_label">Quality of sent images</string>
+    <string name="settings_media_quality_original">Original quality</string>
+    <string name="settings_media_quality_high">High</string>
+    <string name="settings_media_quality_balanced">Balanced</string>
+    <string name="settings_media_storage_label">Media stored on device: %1$.1f MB</string>
+    <string name="settings_media_clear">Clear downloaded media</string>
+    <string name="settings_section_blocked">Blocked users</string>
+    <string name="settings_unblock">Unblock</string>
+    <string name="settings_section_updates">Updates</string>
+    <string name="settings_installed_version">Installed version</string>
+    <string name="settings_check_update">Check</string>
+    <string name="settings_up_to_date">You have the latest version</string>
+    <string name="settings_update_available">Version %1$s is available</string>
+    <string name="settings_open_release">Open download page</string>
+    <string name="settings_section_about">About</string>
+    <string name="settings_about_description">Open source, no server, end-to-end encrypted via the Signal Protocol, transported over the Tor network.</string>
+</resources>

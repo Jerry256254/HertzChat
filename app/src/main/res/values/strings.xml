@@ -1,4 +1,69 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">Hertz Chat</string>
+
+    <!-- Onboarding -->
+    <string name="onboarding_welcome_title">Vítej v Hertz Chat</string>
+    <string name="onboarding_intro">Hertz Chat je čistě peer-to-peer šifrovaná chatovací aplikace. Žádný server neukládá tvoje zprávy, kontakty ani média – všechno zůstává pouze na tvém zařízení a je end-to-end šifrované.</string>
+    <string name="onboarding_nickname_label">Přezdívka (nepovinné)</string>
+    <string name="onboarding_nickname_hint">Necháš-li pole prázdné, vygeneruje se ti anonymní přezdívka. Registrace přes telefonní číslo ani e-mail není potřeba – tvoje identita je vázaná jen na toto zařízení.</string>
+    <string name="onboarding_language_label">Jazyk appky</string>
+    <string name="onboarding_accept_terms">Souhlasím s Podmínkami užití a Zásadami ochrany soukromí</string>
+    <string name="onboarding_show_terms">Zobrazit podmínky</string>
+    <string name="onboarding_show_privacy">Zobrazit soukromí</string>
+    <string name="onboarding_create_identity">Vytvořit identitu a začít</string>
+    <string name="onboarding_restore_qr">Už mám identitu na jiném zařízení - naskenovat QR</string>
+    <string name="common_close">Zavřít</string>
+
+    <!-- Settings -->
+    <string name="settings_title">Nastavení</string>
+    <string name="settings_section_appearance">Vzhled</string>
+    <string name="settings_theme_label">Motiv</string>
+    <string name="settings_theme_system">Podle systému</string>
+    <string name="settings_theme_light">Světlý</string>
+    <string name="settings_theme_dark">Tmavý</string>
+    <string name="settings_section_language">Jazyk</string>
+    <string name="settings_language_label">Jazyk appky</string>
+    <string name="settings_section_notifications">Oznámení</string>
+    <string name="settings_notifications_title">Oznámení o nových zprávách</string>
+    <string name="settings_notifications_subtitle">Vyskakovací upozornění, i když je appka zavřená (pokud má telefon internet)</string>
+    <string name="settings_section_privacy">Soukromí a síť</string>
+    <string name="settings_discoverable_title">Být dosažitelný</string>
+    <string name="settings_discoverable_subtitle">Vypnutím se úplně zastaví síť Tor i služba na pozadí - nikdo tě nenajde ani ti nemůže poslat zprávu, ale appka nespotřebovává baterii navíc.</string>
+    <string name="settings_auto_accept_title">Automaticky přijímat žádosti o přátelství</string>
+    <string name="settings_auto_accept_subtitle">Nové kontakty se přidají rovnou, bez tvého potvrzení.</string>
+    <string name="settings_section_mistral">Mistral AI</string>
+    <string name="settings_mistral_enabled_title">Používat Mistral AI asistenta</string>
+    <string name="settings_mistral_enabled_subtitle">Jediná funkce appky, kde text opouští tvoje zařízení - posílá se přímo na servery Mistral AI pomocí tvého vlastního API klíče.</string>
+    <string name="settings_mistral_show_contact_title">Zobrazovat AI asistenta jako kontakt</string>
+    <string name="settings_mistral_show_contact_subtitle">Trvalá položka v Kontaktech a v seznamu chatů.</string>
+    <string name="settings_mistral_model_label">Model</string>
+    <string name="settings_mistral_keys_label">API klíče (zkouší se popořadě)</string>
+    <string name="settings_mistral_keys_empty">Zatím žádný klíč - bez něj asistent nebude fungovat.</string>
+    <string name="settings_mistral_key_placeholder">Nový Mistral API klíč</string>
+    <string name="settings_mistral_key_add">Přidat</string>
+    <string name="settings_mistral_key_remove">Odebrat klíč</string>
+    <string name="settings_mistral_helper_text">Mistral má omezenou bezplatnou kvótu na účet - více klíčů znamená, že appka má na co přepnout, když jeden dojde.</string>
+    <string name="settings_mistral_helper_email">Vytvořit dočasný e-mail pro další Mistral účet</string>
+    <string name="settings_mistral_helper_key">Získat API klíč od Mistral</string>
+    <string name="settings_mistral_consent_title">Mistral AI asistent</string>
+    <string name="settings_mistral_consent_confirm">Rozumím a souhlasím</string>
+    <string name="settings_mistral_consent_cancel">Zrušit</string>
+    <string name="settings_section_media">Média</string>
+    <string name="settings_media_quality_label">Kvalita odesílaných obrázků</string>
+    <string name="settings_media_quality_original">Původní kvalita</string>
+    <string name="settings_media_quality_high">Vysoká</string>
+    <string name="settings_media_quality_balanced">Vyvážená</string>
+    <string name="settings_media_storage_label">Média uložená na zařízení: %1$.1f MB</string>
+    <string name="settings_media_clear">Vymazat stažená média</string>
+    <string name="settings_section_blocked">Blokovaní uživatelé</string>
+    <string name="settings_unblock">Odblokovat</string>
+    <string name="settings_section_updates">Aktualizace</string>
+    <string name="settings_installed_version">Nainstalovaná verze</string>
+    <string name="settings_check_update">Zkontrolovat</string>
+    <string name="settings_up_to_date">Máš nejnovější verzi</string>
+    <string name="settings_update_available">K dispozici je verze %1$s</string>
+    <string name="settings_open_release">Otevřít stránku ke stažení</string>
+    <string name="settings_section_about">O aplikaci</string>
+    <string name="settings_about_description">Open source, žádný server, end-to-end šifrované přes Signal Protokol, přenos přes síť Tor.</string>
 </resources>

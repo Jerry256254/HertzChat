@@ -30,7 +30,6 @@ import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.QrCodeScanner
 import androidx.compose.material3.Button
-import androidx.compose.material3.Card
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -65,6 +64,7 @@ import androidx.core.content.ContextCompat
 import androidx.compose.ui.res.painterResource
 import androidx.hilt.navigation.compose.hiltViewModel
 import cz.kuclab.hertzchat.R
+import cz.kuclab.hertzchat.ui.common.AppCard
 import cz.kuclab.hertzchat.ui.migration.QrCodeScannerAnalyzer
 import cz.kuclab.hertzchat.ui.migration.generateQrBitmap
 import java.util.concurrent.Executors
@@ -116,7 +116,7 @@ fun ContactsScreen(
             item { TorStatusRow(torState, bootstrapPercent, torError, onRetry = viewModel::retryTor) }
 
             item {
-                Card {
+                AppCard {
                     Column(
                         modifier = Modifier.padding(20.dp).fillMaxWidth(),
                         horizontalAlignment = Alignment.CenterHorizontally,
@@ -175,7 +175,7 @@ fun ContactsScreen(
             }
 
             item {
-                Card {
+                AppCard {
                     Column(modifier = Modifier.padding(20.dp)) {
                         Text("Přidat kontakt", fontWeight = FontWeight.SemiBold)
                         androidx.compose.foundation.layout.Spacer(modifier = Modifier.padding(top = 8.dp))
@@ -209,7 +209,7 @@ fun ContactsScreen(
             if (requests.isNotEmpty()) {
                 item { Text("Žádosti o přátelství", fontWeight = FontWeight.SemiBold) }
                 items(requests, key = { it.contactId }) { request ->
-                    Card {
+                    AppCard {
                         Row(
                             modifier = Modifier.fillMaxWidth().padding(16.dp),
                             horizontalArrangement = Arrangement.SpaceBetween,
@@ -237,9 +237,9 @@ fun ContactsScreen(
 
 @Composable
 private fun MistralAssistantCard(configured: Boolean, onClick: () -> Unit) {
-    Card(
+    AppCard(
         modifier = Modifier.fillMaxWidth(),
-        colors = androidx.compose.material3.CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer),
+        containerColor = MaterialTheme.colorScheme.secondaryContainer,
     ) {
         Row(
             modifier = Modifier
