@@ -17,12 +17,14 @@ private val KEY_DISCOVERABLE = booleanPreferencesKey("discoverable")
 private val KEY_MEDIA_QUALITY = stringPreferencesKey("media_quality") // ORIGINAL | HIGH | BALANCED
 private val KEY_NOTIFICATIONS_ENABLED = booleanPreferencesKey("notifications_enabled")
 private val KEY_THEME_MODE = stringPreferencesKey("theme_mode") // SYSTEM | LIGHT | DARK
+private val KEY_AUTO_ACCEPT_REQUESTS = booleanPreferencesKey("auto_accept_requests")
 
 data class AppSettings(
     val discoverable: Boolean = true,
     val mediaQuality: String = "ORIGINAL",
     val notificationsEnabled: Boolean = true,
     val themeMode: String = "SYSTEM",
+    val autoAcceptFriendRequests: Boolean = false,
 )
 
 @Singleton
@@ -34,6 +36,7 @@ class SettingsRepository @Inject constructor(@ApplicationContext private val con
             mediaQuality = prefs[KEY_MEDIA_QUALITY] ?: "ORIGINAL",
             notificationsEnabled = prefs[KEY_NOTIFICATIONS_ENABLED] ?: true,
             themeMode = prefs[KEY_THEME_MODE] ?: "SYSTEM",
+            autoAcceptFriendRequests = prefs[KEY_AUTO_ACCEPT_REQUESTS] ?: false,
         )
     }
 
@@ -41,4 +44,5 @@ class SettingsRepository @Inject constructor(@ApplicationContext private val con
     suspend fun setMediaQuality(value: String) = context.settingsDataStore.edit { it[KEY_MEDIA_QUALITY] = value }
     suspend fun setNotificationsEnabled(value: Boolean) = context.settingsDataStore.edit { it[KEY_NOTIFICATIONS_ENABLED] = value }
     suspend fun setThemeMode(value: String) = context.settingsDataStore.edit { it[KEY_THEME_MODE] = value }
+    suspend fun setAutoAcceptFriendRequests(value: Boolean) = context.settingsDataStore.edit { it[KEY_AUTO_ACCEPT_REQUESTS] = value }
 }

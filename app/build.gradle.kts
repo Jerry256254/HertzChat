@@ -15,8 +15,8 @@ android {
         applicationId = "cz.kuclab.hertzchat"
         minSdk = 26
         targetSdk = 34
-        versionCode = 6
-        versionName = "0.4.0"
+        versionCode = 7
+        versionName = "0.5.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
@@ -96,10 +96,19 @@ android {
 // has to be installed as a real JNI library instead, so unpack it straight
 // into src/main/jniLibs before the build (same approach used by the Briar
 // messaging app, which this dependency comes from).
+//
+// lyrebird-android ships liblyrebird.so the same way. We never actually use
+// pluggable transports/bridges, but AndroidTorWrapper.installAssets() calls
+// installLyrebirdExecutable() unconditionally on every Tor start, and on
+// Android 10+ that throws FileNotFoundException if the lib isn't present as
+// a real JNI library - silently breaking Tor startup forever (it never
+// leaves NOT_STARTED, so the onion address never appears and every peer
+// looks permanently offline). Bundling the lib is the fix, not a feature we use.
 val tor: Configuration by configurations.creating
 
 dependencies {
     tor("org.briarproject:tor-android:0.4.9.11")
+    tor("org.briarproject:lyrebird-android:0.5.0-3")
 }
 
 val torLibsDir = "src/main/jniLibs"

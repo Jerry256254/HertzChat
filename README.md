@@ -41,7 +41,12 @@ appka není z Play Store.
   centrálního adresáře nejde "procházet, kdo je zrovna online". Místo toho
   ukážeš příteli svoje Hertz ID (QR kód nebo textový řetězec) mimo appku -
   on ho naskenuje/vloží a pošle ti žádost o přátelství přímo na tvou
-  onion adresu.
+  onion adresu. Přijímání žádostí lze v nastavení i zautomatizovat.
+- **Vypínatelné pozadí** — "Být dosažitelný" v nastavení opravdu vypne
+  síť Tor i službu na pozadí, když zrovna nechceš být k zastižení - žádná
+  appka tiše neběží dál a nebere baterii navíc.
+- **Kontrola aktualizací přímo v appce** — nastavení umí zkontrolovat
+  nejnovější verzi na GitHubu a rovnou nabídnout stažení.
 - **Správa chatů** — připínání chatů, blokování uživatelů, historie zpráv
   šifrovaná na disku (SQLCipher, klíč vázaný na Android Keystore).
 - **Přenos identity mezi zařízeními** — naskenováním QR kódu ze starého

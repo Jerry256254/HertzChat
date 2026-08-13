@@ -26,6 +26,9 @@ class ContactsViewModel @Inject constructor(
     val incomingRequests = p2pChatService.incomingRequests
     val torState = p2pChatService.torState.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
     val bootstrapPercent = p2pChatService.bootstrapPercent.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 0)
+    val torError = p2pChatService.torError.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
+
+    fun retryTor() = p2pChatService.retryTor()
 
     /** Null until Tor has published our onion service - the QR/ID isn't shareable before that. */
     val myHertzIdQrText: StateFlow<String?> = p2pChatService.onionAddress

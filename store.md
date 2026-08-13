@@ -2,8 +2,8 @@
 schema_version: 1
 app_name: Hertz Chat
 package_id: cz.kuclab.hertzchat
-version_name: "0.4.0"
-version_code: 6
+version_name: "0.5.0"
+version_code: 7
 last_updated: 2026-08-13
 license: MIT
 category: Komunikace
@@ -33,6 +33,15 @@ download_url: https://github.com/Jerry256254/HertzChat/releases/latest
 logo: store/logo.png
 screenshots: []
 changelog:
+  - version: "0.5.0"
+    date: 2026-08-13
+    notes:
+      - "Zásadní oprava: appka nikdy nepřestala ukazovat „Nepřipojeno“ a vlastní QR kód se nikdy nenačetl. Příčina: knihovna pro Tor se při každém startu pokoušela nainstalovat binárku pro tzv. pluggable transporty (Lyrebird), kterou appka nikdy nebalila - na Androidu 10+ to spolehlivě shodilo start Tor sítě hned na začátku, a appka tu chybu potichu polykala. Teď je binárka součástí appky a chyba se navíc zobrazí (s tlačítkem Zkusit znovu), místo aby appka jen donekonečna točila kolečko."
+      - Kontrola nové verze appky přímo v nastavení (porovná se s poslední verzí na GitHubu, s odkazem ke stažení)
+      - Automatické přijímání žádostí o přátelství (volitelné, v nastavení)
+      - "Vypnutí „Být dosažitelný“ teď appku na pozadí opravdu vypne (zastaví síť Tor i službu na pozadí), místo aby jen tiše běžela dál a zbytečně brala baterii"
+      - Oprava rozbitého rozložení: tlačítko pro povolení fotoaparátu při skenování QR bylo v rohu obrazovky místo uprostřed
+      - Oprava useknutého horního textu na úvodní obrazovce (obsah se kreslil pod stavovým řádkem)
   - version: "0.4.0"
     date: 2026-08-13
     notes:

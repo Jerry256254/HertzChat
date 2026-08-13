@@ -76,6 +76,7 @@ class P2pChatService @Inject constructor(
     private val messageDao: MessageDao,
     private val mediaStorage: MediaStorage,
     private val torTransport: TorTransport,
+    private val settingsRepository: SettingsRepository,
 ) {
     private val json = Json { ignoreUnknownKeys = true }
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
@@ -86,6 +87,12 @@ class P2pChatService @Inject constructor(
     val torState: StateFlow<TorWrapper.TorState> get() = torTransport.state
     val bootstrapPercent: StateFlow<Int> get() = torTransport.bootstrapPercent
     val onionAddress: StateFlow<String?> get() = torTransport.onionAddress
+    val torError: StateFlow<String?> get() = torTransport.error
+
+    /** Retries starting the Tor client after a previous failure (e.g. no internet at the time). */
+    fun retryTor() {
+        torTransport.retry(identityKeyManager.torPrivateKey) { newKey -> identityKeyManager.torPrivateKey = newKey }
+    }
 
     private val _incomingRequests = MutableStateFlow<List<IncomingFriendRequest>>(emptyList())
     val incomingRequests: StateFlow<List<IncomingFriendRequest>> = _incomingRequests
@@ -590,8 +597,14 @@ class P2pChatService @Inject constructor(
         val senderContactId = identityKeyManager.contactIdFor(Base64.decode(request.identityKeyBase64, Base64.NO_WRAP))
         if (senderContactId in blockedContactIds) return
         val incoming = IncomingFriendRequest(senderContactId, request.nickname, request)
-        _incomingRequests.value = _incomingRequests.value.filterNot { it.contactId == senderContactId } + incoming
-        _events.tryEmit(ChatServiceEvent.FriendRequestReceived(incoming))
+        scope.launch {
+            if (settingsRepository.settings.first().autoAcceptFriendRequests) {
+                respondFriendRequest(incoming, true)
+            } else {
+                _incomingRequests.value = _incomingRequests.value.filterNot { it.contactId == senderContactId } + incoming
+                _events.tryEmit(ChatServiceEvent.FriendRequestReceived(incoming))
+            }
+        }
     }
 
     private fun handleFriendResponseFrame(bytes: ByteArray) {

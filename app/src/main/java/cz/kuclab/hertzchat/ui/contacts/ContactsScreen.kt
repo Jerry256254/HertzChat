@@ -10,6 +10,7 @@ import androidx.camera.core.Preview
 import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.camera.view.PreviewView
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -24,12 +25,14 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.QrCodeScanner
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
@@ -73,6 +76,7 @@ fun ContactsScreen(
     val requests by viewModel.incomingRequests.collectAsState()
     val torState by viewModel.torState.collectAsState()
     val bootstrapPercent by viewModel.bootstrapPercent.collectAsState()
+    val torError by viewModel.torError.collectAsState()
     val addError by viewModel.addError.collectAsState()
     val addSuccess by viewModel.addSuccess.collectAsState()
     val myQrText by viewModel.myHertzIdQrText.collectAsState()
@@ -94,7 +98,7 @@ fun ContactsScreen(
             contentPadding = PaddingValues(16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            item { TorStatusRow(torState, bootstrapPercent) }
+            item { TorStatusRow(torState, bootstrapPercent, torError, onRetry = viewModel::retryTor) }
 
             item {
                 Card {
@@ -105,17 +109,37 @@ fun ContactsScreen(
                         Text("Moje Hertz ID", fontWeight = FontWeight.SemiBold)
                         Box(modifier = Modifier.padding(vertical = 12.dp), contentAlignment = Alignment.Center) {
                             val qrText = myQrText
-                            if (qrText != null) {
-                                val bitmap = remember(qrText) { generateQrBitmap(qrText) }
-                                Image(bitmap = bitmap.asImageBitmap(), contentDescription = "Moje Hertz ID QR kód")
-                            } else {
-                                Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.size(220.dp)) {
-                                    CircularProgressIndicator(modifier = Modifier.padding(bottom = 12.dp))
-                                    Text(
-                                        "Připravuje se tvoje adresa v síti Tor...",
-                                        style = MaterialTheme.typography.labelSmall,
-                                        textAlign = androidx.compose.ui.text.style.TextAlign.Center,
-                                    )
+                            when {
+                                qrText != null -> {
+                                    val bitmap = remember(qrText) { generateQrBitmap(qrText) }
+                                    Image(bitmap = bitmap.asImageBitmap(), contentDescription = "Moje Hertz ID QR kód")
+                                }
+                                torError != null -> {
+                                    Column(
+                                        horizontalAlignment = Alignment.CenterHorizontally,
+                                        modifier = Modifier.size(220.dp),
+                                        verticalArrangement = Arrangement.Center,
+                                    ) {
+                                        Text(
+                                            "Připojení k síti Tor selhalo",
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = MaterialTheme.colorScheme.error,
+                                            textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                                        )
+                                        OutlinedButton(onClick = viewModel::retryTor, modifier = Modifier.padding(top = 12.dp)) {
+                                            Text("Zkusit znovu")
+                                        }
+                                    }
+                                }
+                                else -> {
+                                    Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.size(220.dp)) {
+                                        CircularProgressIndicator(modifier = Modifier.padding(bottom = 12.dp))
+                                        Text(
+                                            "Připravuje se tvoje adresa v síti Tor...",
+                                            style = MaterialTheme.typography.labelSmall,
+                                            textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                                        )
+                                    }
                                 }
                             }
                         }
@@ -197,16 +221,26 @@ fun ContactsScreen(
 }
 
 @Composable
-private fun TorStatusRow(state: TorWrapper.TorState?, bootstrapPercent: Int) {
-    val label = when (state) {
-        TorWrapper.TorState.CONNECTED -> "Připojeno k síti Tor"
-        TorWrapper.TorState.CONNECTING, TorWrapper.TorState.STARTING, TorWrapper.TorState.STARTED -> "Připojování k síti Tor... $bootstrapPercent %"
-        TorWrapper.TorState.STOPPED, TorWrapper.TorState.STOPPING, TorWrapper.TorState.NOT_STARTED, null -> "Nepřipojeno"
-        TorWrapper.TorState.DISABLED -> "Síť vypnutá"
+private fun TorStatusRow(state: TorWrapper.TorState?, bootstrapPercent: Int, error: String?, onRetry: () -> Unit) {
+    val label = when {
+        error != null -> "Nepodařilo se připojit k síti Tor"
+        state == TorWrapper.TorState.CONNECTED -> "Připojeno k síti Tor"
+        state == TorWrapper.TorState.CONNECTING || state == TorWrapper.TorState.STARTING || state == TorWrapper.TorState.STARTED ->
+            "Připojování k síti Tor... $bootstrapPercent %"
+        state == TorWrapper.TorState.DISABLED -> "Síť vypnutá"
+        else -> "Navazuje se spojení..."
     }
+    val color = if (error != null) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant
     Column {
-        Text(label, style = MaterialTheme.typography.labelSmall)
-        if (state != TorWrapper.TorState.CONNECTED) {
+        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+            Text(label, style = MaterialTheme.typography.labelSmall, color = color, modifier = Modifier.weight(1f))
+            if (error != null) {
+                TextButton(onClick = onRetry) { Text("Zkusit znovu") }
+            }
+        }
+        if (error != null) {
+            Text(error, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.error)
+        } else if (state != TorWrapper.TorState.CONNECTED) {
             LinearProgressIndicator(modifier = Modifier.fillMaxWidth().padding(top = 4.dp).clip(RoundedCornerShape(4.dp)))
         }
     }
@@ -222,9 +256,34 @@ private fun QrScannerDialog(onDismiss: () -> Unit, onScanned: (String) -> Unit) 
     val permissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted -> hasPermission = granted }
 
     Dialog(onDismissRequest = onDismiss) {
-        Column(modifier = Modifier.fillMaxSize()) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .clip(RoundedCornerShape(20.dp))
+                .background(MaterialTheme.colorScheme.surface),
+        ) {
             if (!hasPermission) {
-                Button(onClick = { permissionLauncher.launch(Manifest.permission.CAMERA) }) { Text("Povolit fotoaparát") }
+                Column(
+                    modifier = Modifier.fillMaxSize().padding(32.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.Center,
+                ) {
+                    Icon(
+                        Icons.Filled.QrCodeScanner,
+                        contentDescription = null,
+                        modifier = Modifier.size(56.dp),
+                        tint = MaterialTheme.colorScheme.primary,
+                    )
+                    Text(
+                        "Pro naskenování QR kódu potřebujeme přístup k fotoaparátu",
+                        style = MaterialTheme.typography.bodyMedium,
+                        textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                        modifier = Modifier.padding(top = 16.dp, bottom = 20.dp),
+                    )
+                    Button(onClick = { permissionLauncher.launch(Manifest.permission.CAMERA) }) {
+                        Text("Povolit fotoaparát")
+                    }
+                }
             } else {
                 AndroidView(
                     modifier = Modifier.fillMaxSize(),
@@ -244,6 +303,27 @@ private fun QrScannerDialog(onDismiss: () -> Unit, onScanned: (String) -> Unit) 
                         }, ContextCompat.getMainExecutor(ctx))
                         previewView
                     },
+                )
+                Text(
+                    "Namiř na Hertz ID QR kód přítele",
+                    color = androidx.compose.ui.graphics.Color.White,
+                    style = MaterialTheme.typography.labelLarge,
+                    modifier = Modifier
+                        .align(Alignment.TopCenter)
+                        .padding(top = 24.dp)
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(androidx.compose.ui.graphics.Color.Black.copy(alpha = 0.5f))
+                        .padding(horizontal = 16.dp, vertical = 8.dp),
+                )
+            }
+            IconButton(
+                onClick = onDismiss,
+                modifier = Modifier.align(Alignment.TopEnd).padding(8.dp),
+            ) {
+                Icon(
+                    Icons.Filled.Close,
+                    contentDescription = "Zavřít",
+                    tint = if (hasPermission) androidx.compose.ui.graphics.Color.White else MaterialTheme.colorScheme.onSurface,
                 )
             }
         }

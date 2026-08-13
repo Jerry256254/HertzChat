@@ -20,7 +20,8 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
-import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 
 private const val CHANNEL_ID = "hertzchat_p2p"
@@ -47,10 +48,18 @@ class P2pForegroundService : Service() {
         startForeground(NOTIFICATION_ID, buildNotification())
         scheduleRetryWakeWorker()
         messageNotifier.start(scope, p2pChatService)
+        // React to the "Být dosažitelný" toggle live, not just at service start: turning it off
+        // should actually stop Tor and shut this service down instead of leaving an idle
+        // foreground service (and its wake lock machinery) running for nothing.
         scope.launch {
-            val settings = settingsRepository.settings.first()
-            if (!settings.discoverable) return@launch
-            p2pChatService.start()
+            settingsRepository.settings.map { it.discoverable }.distinctUntilChanged().collect { discoverable ->
+                if (discoverable) {
+                    p2pChatService.start()
+                } else {
+                    p2pChatService.stop()
+                    stopSelf()
+                }
+            }
         }
     }
 

@@ -57,6 +57,10 @@ class TorTransport @Inject constructor(
     private val _onionAddress = MutableStateFlow<String?>(null)
     val onionAddress: StateFlow<String?> = _onionAddress
 
+    private val _error = MutableStateFlow<String?>(null)
+    /** Non-null when Tor failed to start - surfaced to the UI instead of leaving the user staring at an infinite spinner. */
+    val error: StateFlow<String?> = _error
+
     private val _incomingConnections = MutableSharedFlow<Socket>(extraBufferCapacity = 16)
     val incomingConnections: SharedFlow<Socket> = _incomingConnections
 
@@ -67,6 +71,7 @@ class TorTransport @Inject constructor(
      */
     fun start(persistedPrivateKey: String, onKeySaved: (String) -> Unit) {
         if (torWrapper != null) return
+        _error.value = null
 
         val wakeLockManager = AndroidWakeLockManagerFactory.createAndroidWakeLockManager(app)
         val torDirectory = File(app.filesDir, "tor")
@@ -97,8 +102,17 @@ class TorTransport @Inject constructor(
         })
 
         scope.launch {
-            runCatching { wrapper.start() }
+            runCatching { wrapper.start() }.onFailure { e ->
+                _error.value = e.message ?: e.javaClass.simpleName
+                torWrapper = null
+            }
         }
+    }
+
+    /** Clears a previous failure and tries again - torWrapper was reset to null on failure so [start] will actually retry. */
+    fun retry(persistedPrivateKey: String, onKeySaved: (String) -> Unit) {
+        if (torWrapper != null) return
+        start(persistedPrivateKey, onKeySaved)
     }
 
     private suspend fun publish(persistedPrivateKey: String, onKeySaved: (String) -> Unit) {
