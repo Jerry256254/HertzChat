@@ -2,8 +2,8 @@
 schema_version: 1
 app_name: Hertz Chat
 package_id: cz.kuclab.hertzchat
-version_name: "0.2.1"
-version_code: 3
+version_name: "0.2.2"
+version_code: 4
 last_updated: 2026-08-13
 license: MIT
 category: Komunikace
@@ -30,6 +30,11 @@ download_url: https://github.com/Jerry256254/HertzChat/releases/latest
 logo: store/logo.png
 screenshots: []
 changelog:
+  - version: "0.2.2"
+    date: 2026-08-13
+    notes:
+      - "Oprava: appka spadla během první vteřiny po spuštění. Příčina: R8 (minifikace v release buildu) přejmenovávala/odstraňovala třídy SQLCipher, do kterých se natívní knihovna odkazuje přesným jménem - přidána chybějící keep pravidla."
+      - Nová jednodušší ikona, která se nekříží ošklivě v kulaté masce Androidu
   - version: "0.2.1"
     date: 2026-08-13
     notes:
