@@ -75,4 +75,12 @@ class AssistantChatViewModel @Inject constructor(
         repository.newConversation()
         _chatsSheetOpen.value = false
     }
+
+    fun deleteConversation(conversationId: String) {
+        repository.deleteConversation(conversationId)
+    }
+
+    fun renameConversation(conversationId: String, title: String) {
+        repository.renameConversation(conversationId, title)
+    }
 }

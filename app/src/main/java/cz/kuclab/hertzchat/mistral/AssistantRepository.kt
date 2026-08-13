@@ -53,6 +53,24 @@ class AssistantRepository @Inject constructor(
         _activeConversationId.value = conversationId
     }
 
+    fun deleteConversation(conversationId: String) {
+        scope.launch {
+            messageDao.deleteForConversation(conversationId)
+            conversationDao.delete(conversationId)
+            if (_activeConversationId.value == conversationId) {
+                _activeConversationId.value = null
+                ensureActiveConversation()
+            }
+        }
+    }
+
+    fun renameConversation(conversationId: String, title: String) {
+        scope.launch {
+            val conversation = conversationDao.find(conversationId) ?: return@launch
+            conversationDao.upsert(conversation.copy(title = title.take(60).ifBlank { DEFAULT_TITLE }))
+        }
+    }
+
     private suspend fun createConversation(): String {
         val id = UUID.randomUUID().toString()
         val now = System.currentTimeMillis()
@@ -67,22 +85,38 @@ class AssistantRepository @Inject constructor(
             messageDao.upsert(AssistantMessageEntity(UUID.randomUUID().toString(), conversationId, AssistantRole.USER, text, now))
             conversationDao.touch(conversationId, now)
 
-            _sending.value = true
             val history = messageDao.recentForConversation(conversationId, HISTORY_WINDOW).reversed()
             val messages = buildList {
                 add(MistralMessage("system", MISTRAL_SYSTEM_PROMPT))
                 history.forEach { add(MistralMessage(if (it.role == AssistantRole.USER) "user" else "assistant", it.text)) }
             }
-            val result = apiClient.chat(messages)
+
+            // The reply bubble is inserted empty and up front, then filled in as tokens
+            // stream in - _sending only covers the gap before the first token, so the UI's
+            // "Mistral přemýšlí..." indicator disappears the moment real text starts appearing.
+            val replyId = UUID.randomUUID().toString()
+            val replyTimestamp = System.currentTimeMillis()
+            _sending.value = true
+            messageDao.upsert(AssistantMessageEntity(replyId, conversationId, AssistantRole.ASSISTANT, "", replyTimestamp))
+            conversationDao.touch(conversationId, replyTimestamp)
+
+            // callOnceStream() runs its read loop on a single IO thread and calls onToken
+            // synchronously from it, so accumulating into this builder and writing it back
+            // with runBlocking here is safe and strictly ordered - no concurrent DAO calls
+            // racing each other over the same row.
+            val accumulated = StringBuilder()
+            val result = apiClient.chatStream(messages) { token ->
+                if (accumulated.isEmpty()) _sending.value = false
+                accumulated.append(token)
+                kotlinx.coroutines.runBlocking { messageDao.updateText(replyId, accumulated.toString()) }
+            }
             _sending.value = false
 
-            val replyTimestamp = System.currentTimeMillis()
-            val reply = result.fold(
-                onSuccess = { AssistantMessageEntity(UUID.randomUUID().toString(), conversationId, AssistantRole.ASSISTANT, it, replyTimestamp) },
-                onFailure = { AssistantMessageEntity(UUID.randomUUID().toString(), conversationId, AssistantRole.ERROR, it.message ?: "Nepodařilo se získat odpověď.", replyTimestamp) },
+            result.fold(
+                onSuccess = { full -> messageDao.updateText(replyId, full) },
+                onFailure = { e -> messageDao.updateRoleAndText(replyId, AssistantRole.ERROR, e.message ?: "Nepodařilo se získat odpověď.") },
             )
-            messageDao.upsert(reply)
-            conversationDao.touch(conversationId, replyTimestamp)
+            conversationDao.touch(conversationId, System.currentTimeMillis())
 
             result.getOrNull()?.let { assistantReply -> maybeGenerateTitle(conversationId, text, assistantReply) }
         }
@@ -96,18 +130,35 @@ class AssistantRepository @Inject constructor(
     private suspend fun maybeGenerateTitle(conversationId: String, firstUserText: String, firstReply: String) {
         val conversation = conversationDao.find(conversationId) ?: return
         if (conversation.title != DEFAULT_TITLE) return
+        val fallback = firstUserText.take(40).let { if (firstUserText.length > 40) "$it…" else it }
         val generated = apiClient.chat(
             listOf(
                 MistralMessage("system", TITLE_SYSTEM_PROMPT),
                 MistralMessage("user", "Uživatel: $firstUserText\nAsistent: $firstReply"),
             ),
         ).getOrNull()?.trim()?.trim('"', '“', '”')?.take(60)
-        val title = generated?.takeIf { it.isNotBlank() } ?: firstUserText.take(40).let { if (firstUserText.length > 40) "$it…" else it }
+        val title = generated?.takeIf { isUsableTitle(it) } ?: fallback
         conversationDao.upsert(conversation.copy(title = title))
+    }
+
+    /**
+     * Small/fast models asked to "invent a title" sometimes answer with a description of
+     * the task instead of doing it ("Název konverzace", "Chat title", "Souhrn konverzace")
+     * - reject anything that looks like that meta-echo rather than an actual title, and
+     * fall back to the first message instead of showing that placeholder-like text verbatim.
+     */
+    private fun isUsableTitle(candidate: String): Boolean {
+        if (candidate.isBlank() || candidate.length > 60) return false
+        val normalized = candidate.lowercase()
+        val metaPhrases = listOf(
+            "název konverzace", "název chatu", "conversation title", "chat title",
+            "souhrn konverzace", "shrnutí konverzace", "krátký název", "here is a title", "titulek",
+        )
+        return metaPhrases.none { normalized == it || normalized.contains(it) }
     }
 
     private companion object {
         const val DEFAULT_TITLE = "Nová konverzace"
-        const val TITLE_SYSTEM_PROMPT = "Vymysli krátký název (nejvýše 5 slov, bez uvozovek, bez tečky na konci) shrnující tuto konverzaci, ve stejném jazyce jako konverzace. Odpověz pouze samotným názvem, nic jiného."
+        const val TITLE_SYSTEM_PROMPT = "Vymysli krátký, konkrétní název (2 až 5 slov, bez uvozovek, bez tečky na konci) shrnující TÉMA této konverzace, ve stejném jazyce jako konverzace. Odpověz pouze samotným názvem tématu - nikdy neodpovídej obecným popisem jako \"Název konverzace\" nebo \"Souhrn konverzace\"."
     }
 }

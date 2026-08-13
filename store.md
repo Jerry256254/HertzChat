@@ -2,8 +2,8 @@
 schema_version: 1
 app_name: Hertz Chat
 package_id: cz.kuclab.hertzchat
-version_name: "0.9.2"
-version_code: 13
+version_name: "0.9.3"
+version_code: 14
 last_updated: 2026-08-14
 license: MIT
 category: Komunikace
@@ -33,6 +33,14 @@ download_url: https://github.com/Jerry256254/HertzChat/releases/latest
 logo: store/logo.png
 screenshots: []
 changelog:
+  - version: "0.9.3"
+    date: 2026-08-14
+    notes:
+      - "Odpovědi Mistral AI se teď zobrazují průběžně (streamování) místo čekání na celou odpověď najednou"
+      - "Oprava: AI si uměla vygenerovat nesmyslný název konverzace jako doslovné „Název konverzace“ místo skutečného shrnutí tématu - lepší instrukce pro model a appka takové odpovědi teď rozezná a použije místo nich první zprávu"
+      - Modernizovaná historie konverzací (/chats) - karty místo prostého seznamu, přejmenování a mazání konverzací
+      - "I2P: prodloužen čas na první spuštění routeru (generování klíčů na mobilním CPU umí trvat přes minutu) a appka teď explicitně vyžádá počáteční „reseed“ (stažení seznamu routerů v síti), místo aby spoléhala na automatické spuštění, které v appce bez konzole nemusí proběhnout"
+      - Přidána viditelná diagnostika sítě I2P (počet známých routerů, aktivních sousedů a stav reseedu) pod stavovým řádkem na obrazovce Kontakty
   - version: "0.9.2"
     date: 2026-08-14
     notes:

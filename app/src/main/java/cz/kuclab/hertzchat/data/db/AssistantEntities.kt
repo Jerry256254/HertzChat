@@ -43,6 +43,9 @@ interface AssistantConversationDao {
 
     @Query("UPDATE assistant_conversations SET lastMessageAt = :timestamp WHERE conversationId = :id")
     suspend fun touch(id: String, timestamp: Long)
+
+    @Query("DELETE FROM assistant_conversations WHERE conversationId = :id")
+    suspend fun delete(id: String)
 }
 
 @Dao
@@ -58,4 +61,13 @@ interface AssistantMessageDao {
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun upsert(message: AssistantMessageEntity)
+
+    @Query("UPDATE assistant_messages SET text = :text WHERE messageId = :id")
+    suspend fun updateText(id: String, text: String)
+
+    @Query("UPDATE assistant_messages SET role = :role, text = :text WHERE messageId = :id")
+    suspend fun updateRoleAndText(id: String, role: AssistantRole, text: String)
+
+    @Query("DELETE FROM assistant_messages WHERE conversationId = :conversationId")
+    suspend fun deleteForConversation(conversationId: String)
 }

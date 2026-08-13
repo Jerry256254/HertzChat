@@ -31,8 +31,12 @@ enum class I2pState { NOT_STARTED, STARTING, CONNECTED, STOPPED }
 
 private const val I2CP_HOST = "127.0.0.1"
 private const val I2CP_PORT = 7654
-private const val ROUTER_START_TIMEOUT_MS = 90_000L
-private const val SOCKET_MANAGER_TIMEOUT_MS = 120_000L
+// First-ever router boot on a phone CPU (key generation, no warm netDb) can
+// legitimately take past a minute - these were too tight and could surface a
+// "failed" error for a router that just needed more time, which reads the same
+// as "still doesn't work" to a user who then just retries into the same wall.
+private const val ROUTER_START_TIMEOUT_MS = 150_000L
+private const val SOCKET_MANAGER_TIMEOUT_MS = 150_000L
 private const val I2CP_RETRY_DELAY_MS = 1_000L
 private const val READY_PEER_COUNT = 1
 private const val READINESS_MONITOR_TIMEOUT_MS = 60_000L
@@ -73,6 +77,10 @@ class I2pTransport @Inject constructor(
     private val _error = MutableStateFlow<String?>(null)
     /** Non-null when I2P failed to start - surfaced to the UI instead of leaving the user staring at an infinite spinner. */
     val error: StateFlow<String?> = _error
+
+    private val _diagnostics = MutableStateFlow<String?>(null)
+    /** Known-router count + reseed status, so a report of "still doesn't connect" comes with an actual reason instead of a guess. */
+    val diagnostics: StateFlow<String?> = _diagnostics
 
     private val _incomingConnections = MutableSharedFlow<Socket>(extraBufferCapacity = 16)
     val incomingConnections: SharedFlow<Socket> = _incomingConnections
@@ -202,9 +210,20 @@ class I2pTransport @Inject constructor(
     // fixed for Tor's "Navazuje se spojení..." hang.
     private suspend fun monitorReadiness() {
         val r = router ?: return
+        val netDb = r.context.netDb()
+        val reseedChecker = runCatching { netDb.reseedChecker() }.getOrNull()
+        // A normal full I2P install has a console webapp that offers a "reseed now"
+        // button and triggers this automatically on first boot - our headless embedded
+        // router has no such webapp, so this is fired explicitly rather than assuming
+        // whatever internal auto-trigger the router core has covers our setup too.
+        runCatching { reseedChecker?.checkReseed(net.i2p.router.networkdb.reseed.ReseedChecker.MINIMUM) }
+
         val deadline = System.currentTimeMillis() + READINESS_MONITOR_TIMEOUT_MS
         while (router === r) {
             val peers = r.context.commSystem().countActivePeers()
+            val knownRouters = runCatching { netDb.knownRouters }.getOrDefault(0)
+            val reseedText = reseedChecker?.let { it.error ?: it.status } ?: "n/a"
+            _diagnostics.value = "Známé routery: $knownRouters, aktivní sousedé: $peers, reseed: $reseedText"
             _bootstrapPercent.value = (peers * 100 / READY_PEER_COUNT).coerceAtMost(100)
             if (peers >= READY_PEER_COUNT || System.currentTimeMillis() >= deadline) {
                 _bootstrapPercent.value = 100

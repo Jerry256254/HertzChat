@@ -106,6 +106,7 @@ class P2pChatService @Inject constructor(
     val bootstrapPercent: StateFlow<Int> get() = i2pTransport.bootstrapPercent
     val i2pDestination: StateFlow<String?> get() = i2pTransport.i2pDestination
     val i2pError: StateFlow<String?> get() = i2pTransport.error
+    val i2pDiagnostics: StateFlow<String?> get() = i2pTransport.diagnostics
 
     /** Retries starting the I2P router after a previous failure (e.g. no internet at the time). */
     fun retryI2p() {
