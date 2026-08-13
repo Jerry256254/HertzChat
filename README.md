@@ -53,6 +53,12 @@ appka není z Play Store.
   telefonu pokračuješ se stejnou identitou (i stejnou onion adresou) na
   novém zařízení.
 - **Otevřený zdrojový kód** — kompletně, žádná skrytá součást.
+- **Volitelný Mistral AI asistent** — vestavěný chatovací asistent, vypnutý
+  ve výchozím stavu. Používá výhradně vlastní API klíč(e) uživatele (jde
+  přidat víc, appka je zkouší popořadě), vlastní historii konverzací
+  (`/new`, `/chats`), výběr modelu. Jediné místo v appce, kde obsah zprávy
+  záměrně opouští zařízení - podrobně vysvětleno v Podmínkách užití,
+  Zásadách ochrany soukromí a zvláštním souhlasu přímo v appce.
 
 ## Design
 

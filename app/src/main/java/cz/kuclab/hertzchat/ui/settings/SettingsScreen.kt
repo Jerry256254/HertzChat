@@ -2,6 +2,9 @@ package cz.kuclab.hertzchat.ui.settings
 
 import android.content.Intent
 import android.net.Uri
+import androidx.compose.foundation.Image
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -11,6 +14,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.DarkMode
@@ -20,6 +24,7 @@ import androidx.compose.material.icons.filled.NewReleases
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Storage
 import androidx.compose.material.icons.filled.SystemUpdate
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
@@ -28,8 +33,10 @@ import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
@@ -43,10 +50,18 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import cz.kuclab.hertzchat.BuildConfig
+import cz.kuclab.hertzchat.R
+import cz.kuclab.hertzchat.mistral.MISTRAL_MODEL_LARGE
+import cz.kuclab.hertzchat.mistral.MISTRAL_MODEL_MEDIUM
+import cz.kuclab.hertzchat.mistral.MISTRAL_MODEL_SMALL
+import cz.kuclab.hertzchat.ui.onboarding.MISTRAL_CONSENT_TEXT
 
 @Composable
 fun SettingsScreen(viewModel: SettingsViewModel = hiltViewModel()) {
@@ -54,6 +69,12 @@ fun SettingsScreen(viewModel: SettingsViewModel = hiltViewModel()) {
     val blocked by viewModel.blockedContacts.collectAsState()
     val mediaBytes by viewModel.mediaBytes.collectAsState()
     val updateCheckState by viewModel.updateCheckState.collectAsState()
+    val mistralEnabled by viewModel.mistralEnabled.collectAsState()
+    val mistralConsentGiven by viewModel.mistralConsentGiven.collectAsState()
+    val mistralShowAssistantContact by viewModel.mistralShowAssistantContact.collectAsState()
+    val mistralModel by viewModel.mistralModel.collectAsState()
+    val mistralKeys by viewModel.mistralKeys.collectAsState()
+    var showMistralConsentDialog by remember { mutableStateOf(false) }
     val context = LocalContext.current
 
     Scaffold(topBar = { TopAppBar(title = { Text("Nastavení") }) }) { padding ->
@@ -104,6 +125,41 @@ fun SettingsScreen(viewModel: SettingsViewModel = hiltViewModel()) {
                             checked = settings.autoAcceptFriendRequests,
                             onCheckedChange = viewModel::setAutoAcceptFriendRequests,
                         )
+                    }
+                }
+            }
+
+            item { SectionTitle("Mistral AI") }
+            item {
+                Card {
+                    Column(modifier = Modifier.padding(horizontal = 16.dp)) {
+                        SettingsSwitchRow(
+                            icon = null,
+                            title = "Používat Mistral AI asistenta",
+                            subtitle = "Jediná funkce appky, kde text opouští tvoje zařízení - posílá se přímo na servery Mistral AI pomocí tvého vlastního API klíče. Vypnuto ve výchozím stavu.",
+                            checked = mistralEnabled,
+                            onCheckedChange = { turningOn ->
+                                if (turningOn && !mistralConsentGiven) {
+                                    showMistralConsentDialog = true
+                                } else {
+                                    viewModel.setMistralEnabled(turningOn)
+                                }
+                            },
+                        )
+                        HorizontalDivider()
+                        SettingsSwitchRow(
+                            icon = null,
+                            title = "Zobrazovat AI asistenta jako kontakt",
+                            subtitle = "Trvalá položka v Kontaktech a v seznamu chatů, i pro ty, kdo funkci ještě nemají nastavenou.",
+                            checked = mistralShowAssistantContact,
+                            onCheckedChange = viewModel::setMistralShowAssistantContact,
+                        )
+                        HorizontalDivider()
+                        MistralModelRow(current = mistralModel, onChange = viewModel::setMistralModel)
+                        HorizontalDivider()
+                        MistralApiKeysRow(keys = mistralKeys, onAdd = viewModel::addMistralKey, onRemove = viewModel::removeMistralKey)
+                        HorizontalDivider()
+                        MistralHelperLinksRow(context = context)
                     }
                 }
             }
@@ -178,6 +234,30 @@ fun SettingsScreen(viewModel: SettingsViewModel = hiltViewModel()) {
             }
         }
     }
+
+    if (showMistralConsentDialog) {
+        AlertDialog(
+            onDismissRequest = { showMistralConsentDialog = false },
+            title = { Text("Mistral AI asistent") },
+            text = {
+                Text(
+                    MISTRAL_CONSENT_TEXT,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .verticalScroll(rememberScrollState()),
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    showMistralConsentDialog = false
+                    viewModel.confirmMistralConsent()
+                }) { Text("Rozumím a souhlasím") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showMistralConsentDialog = false }) { Text("Zrušit") }
+            },
+        )
+    }
 }
 
 @Composable
@@ -211,6 +291,105 @@ private fun SettingsSwitchRow(
             }
         }
         Switch(checked = checked, onCheckedChange = onCheckedChange)
+    }
+}
+
+@Composable
+private fun MistralModelRow(current: String, onChange: (String) -> Unit) {
+    val options = listOf(
+        MISTRAL_MODEL_SMALL to "Small",
+        MISTRAL_MODEL_MEDIUM to "Medium",
+        MISTRAL_MODEL_LARGE to "Large",
+    )
+    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(vertical = 12.dp)) {
+        Image(
+            painter = painterResource(R.drawable.mistral_avatar),
+            contentDescription = null,
+            contentScale = ContentScale.Crop,
+            modifier = Modifier.size(24.dp).clip(CircleShape),
+        )
+        Text("Model", modifier = Modifier.weight(1f).padding(start = 12.dp))
+    }
+    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(bottom = 8.dp)) {
+        options.forEach { (value, label) ->
+            AssistChip(
+                onClick = { onChange(value) },
+                label = { Text(label) },
+                colors = if (current == value) {
+                    androidx.compose.material3.AssistChipDefaults.assistChipColors(
+                        containerColor = MaterialTheme.colorScheme.primary,
+                        labelColor = MaterialTheme.colorScheme.onPrimary,
+                    )
+                } else {
+                    androidx.compose.material3.AssistChipDefaults.assistChipColors()
+                },
+            )
+        }
+    }
+}
+
+@Composable
+private fun MistralApiKeysRow(keys: List<String>, onAdd: (String) -> Unit, onRemove: (Int) -> Unit) {
+    var newKey by remember { mutableStateOf("") }
+    Column(modifier = Modifier.padding(vertical = 12.dp)) {
+        Text("API klíče (zkouší se popořadě, další jen když předchozí selže)")
+        if (keys.isEmpty()) {
+            Text(
+                "Zatím žádný klíč - bez něj asistent nebude fungovat.",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(top = 4.dp),
+            )
+        } else {
+            keys.forEachIndexed { index, key ->
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(maskApiKey(key), style = MaterialTheme.typography.bodyMedium)
+                    IconButton(onClick = { onRemove(index) }) {
+                        Icon(Icons.Filled.Delete, contentDescription = "Odebrat klíč")
+                    }
+                }
+            }
+        }
+        Row(modifier = Modifier.fillMaxWidth().padding(top = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+            OutlinedTextField(
+                value = newKey,
+                onValueChange = { newKey = it },
+                modifier = Modifier.weight(1f),
+                placeholder = { Text("Nový Mistral API klíč") },
+                singleLine = true,
+            )
+            TextButton(onClick = { onAdd(newKey); newKey = "" }, enabled = newKey.isNotBlank()) {
+                Text("Přidat")
+            }
+        }
+    }
+}
+
+private fun maskApiKey(key: String): String {
+    if (key.length <= 8) return "•".repeat(key.length)
+    return key.take(4) + "…" + key.takeLast(4)
+}
+
+@Composable
+private fun MistralHelperLinksRow(context: android.content.Context) {
+    Column(modifier = Modifier.padding(vertical = 12.dp)) {
+        Text(
+            "Mistral má omezenou bezplatnou kvótu na účet - více klíčů (z více účtů) znamená, že appka má na co přepnout, když jeden dojde.",
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        TextButton(
+            onClick = { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://kuclab.org/15mail"))) },
+            modifier = Modifier.fillMaxWidth(),
+        ) { Text("Vytvořit dočasný e-mail pro další Mistral účet") }
+        TextButton(
+            onClick = { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://console.mistral.ai/api-keys"))) },
+            modifier = Modifier.fillMaxWidth(),
+        ) { Text("Získat API klíč od Mistral") }
     }
 }
 

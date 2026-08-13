@@ -9,6 +9,7 @@ object Routes {
     const val PROFILE = "profile"
     const val QR_EXPORT = "migration/export"
     const val QR_IMPORT = "migration/import"
+    const val ASSISTANT_CHAT = "assistant_chat"
 
     fun chat(contactId: String) = "chat/$contactId"
 }

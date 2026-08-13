@@ -14,6 +14,7 @@ import cz.kuclab.hertzchat.ui.chatlist.ChatListScreen
 import cz.kuclab.hertzchat.ui.contacts.ContactsScreen
 import cz.kuclab.hertzchat.ui.migration.QrExportScreen
 import cz.kuclab.hertzchat.ui.migration.QrImportScreen
+import cz.kuclab.hertzchat.ui.mistral.AssistantChatScreen
 import cz.kuclab.hertzchat.ui.onboarding.OnboardingScreen
 import cz.kuclab.hertzchat.ui.profile.ProfileScreen
 import cz.kuclab.hertzchat.ui.settings.SettingsScreen
@@ -41,6 +42,7 @@ fun HertzNavHost(viewModel: RootViewModel = hiltViewModel()) {
                 onOpenContacts = { navController.navigate(Routes.CONTACTS) },
                 onOpenProfile = { navController.navigate(Routes.PROFILE) },
                 onOpenSettings = { navController.navigate(Routes.SETTINGS) },
+                onOpenAssistant = { navController.navigate(Routes.ASSISTANT_CHAT) },
             )
         }
         composable(
@@ -51,10 +53,17 @@ fun HertzNavHost(viewModel: RootViewModel = hiltViewModel()) {
             ChatScreen(contactId = contactId, onBack = { navController.popBackStack() })
         }
         composable(Routes.CONTACTS) {
-            ContactsScreen(onOpenChat = { contactId -> navController.navigate(Routes.chat(contactId)) })
+            ContactsScreen(
+                onOpenChat = { contactId -> navController.navigate(Routes.chat(contactId)) },
+                onOpenAssistant = { navController.navigate(Routes.ASSISTANT_CHAT) },
+                onOpenSettings = { navController.navigate(Routes.SETTINGS) },
+            )
         }
         composable(Routes.SETTINGS) {
             SettingsScreen()
+        }
+        composable(Routes.ASSISTANT_CHAT) {
+            AssistantChatScreen(onBack = { navController.popBackStack() })
         }
         composable(Routes.PROFILE) {
             ProfileScreen(onOpenQrExport = { navController.navigate(Routes.QR_EXPORT) })

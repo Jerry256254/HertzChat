@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import cz.kuclab.hertzchat.data.repository.IncomingFriendRequest
 import cz.kuclab.hertzchat.data.repository.P2pChatService
+import cz.kuclab.hertzchat.mistral.MistralKeyStore
 import cz.kuclab.hertzchat.network.tor.HertzId
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
@@ -19,9 +20,13 @@ import kotlinx.serialization.json.Json
 @HiltViewModel
 class ContactsViewModel @Inject constructor(
     private val p2pChatService: P2pChatService,
+    mistralKeyStore: MistralKeyStore,
 ) : ViewModel() {
 
     private val json = Json { ignoreUnknownKeys = true }
+
+    val mistralEnabled = mistralKeyStore.enabled
+    val showMistralContact = mistralKeyStore.showAssistantContact
 
     val incomingRequests = p2pChatService.incomingRequests
     val torState = p2pChatService.torState.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)

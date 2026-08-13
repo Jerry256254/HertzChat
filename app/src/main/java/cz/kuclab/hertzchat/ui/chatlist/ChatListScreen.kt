@@ -1,6 +1,7 @@
 package cz.kuclab.hertzchat.ui.chatlist
 
 import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Box
@@ -40,11 +41,13 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import coil.compose.AsyncImage
+import cz.kuclab.hertzchat.R
 
 @Composable
 fun ChatListScreen(
@@ -52,9 +55,11 @@ fun ChatListScreen(
     onOpenContacts: () -> Unit,
     onOpenProfile: () -> Unit,
     onOpenSettings: () -> Unit,
+    onOpenAssistant: () -> Unit,
     viewModel: ChatListViewModel = hiltViewModel(),
 ) {
     val items by viewModel.items.collectAsState()
+    val mistralEnabled by viewModel.mistralEnabled.collectAsState()
 
     Scaffold(
         topBar = {
@@ -93,7 +98,13 @@ fun ChatListScreen(
                 items(items, key = { it.contactId }) { item ->
                     ChatListRow(
                         item = item,
-                        onClick = { onOpenChat(item.contactId) },
+                        onClick = {
+                            when {
+                                item.kind != ChatListItemKind.ASSISTANT -> onOpenChat(item.contactId)
+                                mistralEnabled -> onOpenAssistant()
+                                else -> onOpenSettings()
+                            }
+                        },
                         onTogglePin = { viewModel.togglePin(item) },
                         onBlock = { viewModel.block(item.contactId) },
                     )
@@ -113,23 +124,26 @@ private fun ChatListRow(
     onBlock: () -> Unit,
 ) {
     var menuOpen by remember { mutableStateOf(false) }
+    val isAssistant = item.kind == ChatListItemKind.ASSISTANT
 
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .combinedClickable(onClick = onClick, onLongClick = { menuOpen = true })
+            .combinedClickable(onClick = onClick, onLongClick = { if (!isAssistant) menuOpen = true })
             .padding(horizontal = 16.dp, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
-            DropdownMenuItem(
-                text = { Text(if (item.pinned) "Odepnout" else "Připnout") },
-                onClick = { menuOpen = false; onTogglePin() },
-            )
-            DropdownMenuItem(
-                text = { Text("Blokovat") },
-                onClick = { menuOpen = false; onBlock() },
-            )
+        if (!isAssistant) {
+            DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
+                DropdownMenuItem(
+                    text = { Text(if (item.pinned) "Odepnout" else "Připnout") },
+                    onClick = { menuOpen = false; onTogglePin() },
+                )
+                DropdownMenuItem(
+                    text = { Text("Blokovat") },
+                    onClick = { menuOpen = false; onBlock() },
+                )
+            }
         }
         Box(
             modifier = Modifier
@@ -138,7 +152,14 @@ private fun ChatListRow(
                 .background(MaterialTheme.colorScheme.primaryContainer),
             contentAlignment = Alignment.Center,
         ) {
-            if (item.avatarPath != null) {
+            if (isAssistant) {
+                Image(
+                    painter = painterResource(R.drawable.mistral_avatar),
+                    contentDescription = null,
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier.fillMaxSize().clip(CircleShape),
+                )
+            } else if (item.avatarPath != null) {
                 AsyncImage(
                     model = java.io.File(item.avatarPath),
                     contentDescription = null,

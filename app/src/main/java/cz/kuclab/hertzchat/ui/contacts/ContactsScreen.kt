@@ -11,6 +11,7 @@ import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.camera.view.PreviewView
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -61,7 +62,9 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.compose.ui.window.Dialog
 import androidx.core.content.ContextCompat
+import androidx.compose.ui.res.painterResource
 import androidx.hilt.navigation.compose.hiltViewModel
+import cz.kuclab.hertzchat.R
 import cz.kuclab.hertzchat.ui.migration.QrCodeScannerAnalyzer
 import cz.kuclab.hertzchat.ui.migration.generateQrBitmap
 import java.util.concurrent.Executors
@@ -71,6 +74,8 @@ import org.briarproject.onionwrapper.TorWrapper
 @Composable
 fun ContactsScreen(
     onOpenChat: (String) -> Unit,
+    onOpenAssistant: () -> Unit,
+    onOpenSettings: () -> Unit,
     viewModel: ContactsViewModel = hiltViewModel(),
 ) {
     val requests by viewModel.incomingRequests.collectAsState()
@@ -80,6 +85,8 @@ fun ContactsScreen(
     val addError by viewModel.addError.collectAsState()
     val addSuccess by viewModel.addSuccess.collectAsState()
     val myQrText by viewModel.myHertzIdQrText.collectAsState()
+    val mistralEnabled by viewModel.mistralEnabled.collectAsState()
+    val showMistralContact by viewModel.showMistralContact.collectAsState()
     val clipboard = LocalClipboardManager.current
 
     var pastedId by remember { mutableStateOf("") }
@@ -98,6 +105,14 @@ fun ContactsScreen(
             contentPadding = PaddingValues(16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
+            if (showMistralContact) {
+                item {
+                    MistralAssistantCard(
+                        configured = mistralEnabled,
+                        onClick = { if (mistralEnabled) onOpenAssistant() else onOpenSettings() },
+                    )
+                }
+            }
             item { TorStatusRow(torState, bootstrapPercent, torError, onRetry = viewModel::retryTor) }
 
             item {
@@ -217,6 +232,37 @@ fun ContactsScreen(
             onDismiss = { scannerOpen = false },
             onScanned = { text -> scannerOpen = false; viewModel.addByHertzId(text) },
         )
+    }
+}
+
+@Composable
+private fun MistralAssistantCard(configured: Boolean, onClick: () -> Unit) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = androidx.compose.material3.CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer),
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clickable(onClick = onClick)
+                .padding(16.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Image(
+                painter = painterResource(R.drawable.mistral_avatar),
+                contentDescription = "Mistral AI",
+                contentScale = androidx.compose.ui.layout.ContentScale.Crop,
+                modifier = Modifier.size(48.dp).clip(androidx.compose.foundation.shape.CircleShape),
+            )
+            Column(modifier = Modifier.weight(1f).padding(start = 12.dp)) {
+                Text("Mistral AI", fontWeight = FontWeight.SemiBold)
+                Text(
+                    if (configured) "Asistent appky - klepnutím zahájíš konverzaci" else "Asistent appky - klepnutím nastavíš přístup",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSecondaryContainer,
+                )
+            }
+        }
     }
 }
 

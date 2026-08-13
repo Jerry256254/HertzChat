@@ -10,6 +10,7 @@ import cz.kuclab.hertzchat.data.db.ContactDao
 import cz.kuclab.hertzchat.data.repository.AppSettings
 import cz.kuclab.hertzchat.data.repository.SettingsRepository
 import cz.kuclab.hertzchat.media.MediaStorage
+import cz.kuclab.hertzchat.mistral.MistralKeyStore
 import cz.kuclab.hertzchat.p2p.P2pForegroundService
 import cz.kuclab.hertzchat.update.UpdateChecker
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -35,11 +36,18 @@ class SettingsViewModel @Inject constructor(
     private val contactDao: ContactDao,
     private val mediaStorage: MediaStorage,
     private val updateChecker: UpdateChecker,
+    private val mistralKeyStore: MistralKeyStore,
     @ApplicationContext private val context: Context,
 ) : ViewModel() {
 
     val settings = settingsRepository.settings.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), AppSettings())
     val blockedContacts = contactDao.observeBlocked().stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    val mistralEnabled = mistralKeyStore.enabled
+    val mistralConsentGiven = mistralKeyStore.consentGiven
+    val mistralShowAssistantContact = mistralKeyStore.showAssistantContact
+    val mistralModel = mistralKeyStore.model
+    val mistralKeys = mistralKeyStore.keys
 
     private val _mediaBytes = MutableStateFlow(mediaStorage.mediaStorageBytes())
     val mediaBytes: StateFlow<Long> = _mediaBytes
@@ -73,6 +81,17 @@ class SettingsViewModel @Inject constructor(
         mediaStorage.clearMedia()
         _mediaBytes.value = mediaStorage.mediaStorageBytes()
     }
+
+    /** Turning Mistral on for the first time requires the explicit consent dialog to have been confirmed first - see [SettingsScreen]. */
+    fun setMistralEnabled(value: Boolean) = mistralKeyStore.setEnabled(value)
+    fun confirmMistralConsent() {
+        mistralKeyStore.setConsentGiven(true)
+        mistralKeyStore.setEnabled(true)
+    }
+    fun setMistralShowAssistantContact(value: Boolean) = mistralKeyStore.setShowAssistantContact(value)
+    fun setMistralModel(value: String) = mistralKeyStore.setModel(value)
+    fun addMistralKey(key: String) = mistralKeyStore.addKey(key)
+    fun removeMistralKey(index: Int) = mistralKeyStore.removeKey(index)
 
     fun checkForUpdates() {
         _updateCheckState.value = UpdateCheckState.Checking

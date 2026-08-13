@@ -30,7 +30,17 @@ Ačkoliv aplikace používá standardní, veřejně auditovatelné kryptografick
 postupy (X3DH, Double Ratchet), žádný software není absolutně neprolomitelný.
 Uživatel je odpovědný za zabezpečení vlastního zařízení.
 
-6. Změny podmínek
+6. Mistral AI asistent (volitelná funkce)
+Aplikace nabízí volitelného AI asistenta postaveného na službě Mistral AI.
+Jde o jedinou funkci v celé appce, kde obsah zprávy záměrně opouští dvojici
+zařízení účastníků konverzace - viz bod 7 zásad ochrany soukromí níže.
+Funkce je vypnutá, dokud ji uživatel sám aktivně nezapne a nepotvrdí zvláštní
+souhlas v Nastavení; používá výhradně vlastní API klíč(e) uživatele k účtu u
+Mistral AI, který si uživatel sám zřizuje a spravuje. Autor aplikace k datům
+odeslaným přes tuto funkci nemá přístup a neprovozuje k ní žádnou vlastní
+infrastrukturu.
+
+7. Změny podmínek
 Tyto podmínky se mohou v budoucích verzích aplikace změnit; aktuální znění je
 vždy součástí zdrojového kódu v repozitáři projektu."""
 
@@ -49,4 +59,21 @@ Jak tě může někdo najít:
 
 Kde jsou tvoje data doopravdy uložená:
 - výhradně na tvém zařízení, v databázi zašifrované klíčem vázaným na
-  Android Keystore tohoto konkrétního telefonu."""
+  Android Keystore tohoto konkrétního telefonu.
+
+7. Mistral AI asistent - jediná výjimka z "nikdo to nemůže přečíst"
+Pokud si v Nastavení zapneš volitelného AI asistenta, text, který mu napíšeš
+(a jeho odpověď), se z tvého zařízení odesílá přímo na servery Mistral AI -
+pomocí tvého vlastního API klíče, bez jakéhokoliv zprostředkování ze strany
+KucLab. Je to jediné místo v celé appce, kde obsah zprávy opouští zařízení
+v čitelné podobě. Jakmile data dorazí k Mistral AI, řídí se jejich vlastními
+zásadami ochrany soukromí, ne těmito. Funkce je ve výchozím stavu vypnutá a
+kdykoliv ji můžeš v Nastavení znovu vypnout - v tu chvíli appka žádná další
+data Mistral AI neposílá. Za bezpečnost a nastavení vlastního Mistral AI
+účtu (včetně API klíčů) odpovídá výhradně uživatel."""
+
+const val MISTRAL_CONSENT_TEXT = """Tohle je jediné místo v appce, kde obsah zprávy opouští tvoje zařízení v čitelné podobě.
+
+Když tuhle funkci zapneš, text, který napíšeš AI asistentovi (a jeho odpověď), se odešle přímo na servery Mistral AI - pomocí tvého vlastního API klíče, bez jakéhokoliv zprostředkování ze strany KucLab. Jakmile data dorazí k Mistral AI, řídí se jejich vlastními zásadami ochrany soukromí.
+
+Za API klíč(e) a účet u Mistral AI odpovídáš ty sám. Funkci můžeš kdykoliv zase vypnout v Nastavení - appka pak žádná další data Mistral AI neposílá."""

@@ -2,8 +2,8 @@
 schema_version: 1
 app_name: Hertz Chat
 package_id: cz.kuclab.hertzchat
-version_name: "0.5.0"
-version_code: 7
+version_name: "0.6.0"
+version_code: 8
 last_updated: 2026-08-13
 license: MIT
 category: Komunikace
@@ -33,6 +33,13 @@ download_url: https://github.com/Jerry256254/HertzChat/releases/latest
 logo: store/logo.png
 screenshots: []
 changelog:
+  - version: "0.6.0"
+    date: 2026-08-13
+    notes:
+      - "Nová funkce (volitelná, vypnutá ve výchozím stavu): vestavěný AI asistent postavený na Mistral AI. Vlastní trvalý kontakt s vlastní historií konverzací (/new založí novou, /chats mezi nimi přepíná), používá výhradně vlastní API klíč(e) uživatele (jde přidat libovolný počet, appka je zkouší popořadě, pokud jeden selže/dojde mu kvóta)"
+      - "Jde o jedinou funkci appky, kde obsah zprávy záměrně opouští zařízení - důkladně zdokumentováno v Podmínkách užití, Zásadách ochrany soukromí a v samostatném souhlasu přímo v appce, který je nutné potvrdit před prvním zapnutím"
+      - Výběr modelu (small/medium/large) a odkazy na vytvoření Mistral účtu a dočasného e-mailu pro další API klíč
+      - "Pozor: aktualizace databáze při této verzi znovu smaže uloženou historii zpráv na zařízení (stejně jako u minulé aktualizace schématu)"
   - version: "0.5.0"
     date: 2026-08-13
     notes:
