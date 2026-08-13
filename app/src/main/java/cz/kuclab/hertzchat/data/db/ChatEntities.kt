@@ -10,13 +10,14 @@ import androidx.room.Update
 import kotlinx.coroutines.flow.Flow
 
 enum class MessageType { TEXT, IMAGE, VIDEO, VOICE, FILE }
-enum class DeliveryState { SENDING, SENT, DELIVERED, READ, FAILED }
+enum class DeliveryState { PENDING, SENDING, SENT, DELIVERED, READ, FAILED }
 
 @Entity(tableName = "contacts")
 data class ContactEntity(
     @PrimaryKey val contactId: String, // stable fingerprint of the contact's identity key
     val nickname: String,
     val identityKeyBytes: ByteArray,
+    val onionAddress: String,
     val avatarPath: String? = null,
     val pinned: Boolean = false,
     val blocked: Boolean = false,
@@ -80,6 +81,9 @@ interface MessageDao {
 
     @Query("UPDATE messages SET deliveryState = :state WHERE messageId = :id")
     suspend fun updateState(id: String, state: DeliveryState)
+
+    @Query("SELECT * FROM messages WHERE fromMe = 1 AND deliveryState = 'PENDING' ORDER BY timestamp ASC")
+    suspend fun findAllPending(): List<MessageEntity>
 
     @Query("DELETE FROM messages WHERE contactId = :contactId")
     suspend fun deleteAllForContact(contactId: String)

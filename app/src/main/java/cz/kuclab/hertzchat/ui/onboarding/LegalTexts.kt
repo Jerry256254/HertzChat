@@ -4,9 +4,10 @@ const val TERMS_TEXT = """Podmínky užití Hertz Chat
 
 1. Povaha aplikace
 Hertz Chat je peer-to-peer (P2P) komunikační aplikace s koncovým šifrováním.
-Neexistuje žádný centrální server, který by ukládal, četl nebo zprostředkovával
-tvoje zprávy, kontakty či média. Zprávy a soubory se přenáší přímo mezi
-zařízeními a zůstávají uložené pouze lokálně na zařízeních účastníků konverzace.
+Neexistuje žádný centrální server - ani provozovaný autorem aplikace, ani
+třetí stranou. Zařízení se navzájem nachází a spojují přímo přes veřejnou
+síť Tor; zprávy a soubory se přenáší přímo mezi zařízeními a zůstávají
+uložené pouze lokálně na zařízeních účastníků konverzace.
 
 2. Identita a účet
 Aplikace nevyžaduje registraci přes telefonní číslo, e-mail ani jinou osobní
@@ -21,8 +22,8 @@ odpovídá výhradně uživatel, který je odeslal.
 
 4. Otevřený zdrojový kód
 Hertz Chat je open source software šířený pod licencí MIT. Zdrojový kód je
-veřejně dostupný a kdokoliv si může ověřit, jak aplikace pracuje se šifrováním
-a daty, nebo si spustit vlastní instanci volitelného signalizačního serveru.
+veřejně dostupný a kdokoliv si může ověřit, jak aplikace pracuje se šifrováním,
+daty a síťovým provozem.
 
 5. Bezpečnostní upozornění
 Ačkoliv aplikace používá standardní, veřejně auditovatelné kryptografické
@@ -35,17 +36,16 @@ vždy součástí zdrojového kódu v repozitáři projektu."""
 
 const val PRIVACY_TEXT = """Zásady ochrany soukromí Hertz Chat
 
-Co aplikace NEsbírá ani neukládá na žádném serveru:
+Co aplikace NEsbírá ani neukládá vůbec nikde:
 - obsah zpráv, hlasových zpráv, obrázků ani videí,
 - seznam tvých kontaktů,
-- tvoje jméno, telefonní číslo ani e-mail (aplikace je nevyžaduje).
+- tvoje jméno, telefonní číslo ani e-mail (aplikace je nevyžaduje),
+- tvoji skutečnou IP adresu vůči tvým kontaktům (o tu se stará Tor).
 
-Co dočasně prochází signalizačním serverem (a NIKDY se tam neukládá):
-- tvoje pseudonymní ID (otisk veřejného klíče) a zvolená přezdívka, po dobu,
-  kdy jsi v aplikaci online, aby tě mohli ostatní najít,
-  - toto lze v Nastavení → Soukromí kdykoliv vypnout,
-- technické údaje pro navázání přímého P2P spojení (WebRTC nabídky/odpovědi
-  a ICE kandidáti) - server je jen slepě přeposílá mezi dvěma zařízeními.
+Jak tě může někdo najít:
+- neexistuje žádný adresář ani seznam "kdo je online" - kontaktovat můžeš
+  jen někoho, jehož Hertz ID už znáš (dostal jsi ho mimo appku - QR kód,
+  ústně, jinou appkou). Žádost appka pošle přímo na jeho onion adresu.
 
 Kde jsou tvoje data doopravdy uložená:
 - výhradně na tvém zařízení, v databázi zašifrované klíčem vázaným na

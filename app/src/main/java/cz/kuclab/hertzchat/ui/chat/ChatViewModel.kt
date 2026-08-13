@@ -6,6 +6,7 @@ import android.webkit.MimeTypeMap
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import cz.kuclab.hertzchat.data.db.ContactDao
 import cz.kuclab.hertzchat.data.db.MessageDao
 import cz.kuclab.hertzchat.data.model.PayloadKind
 import cz.kuclab.hertzchat.data.repository.P2pChatService
@@ -17,7 +18,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -26,6 +27,7 @@ import kotlinx.coroutines.withContext
 class ChatViewModel @Inject constructor(
     savedStateHandle: SavedStateHandle,
     messageDao: MessageDao,
+    contactDao: ContactDao,
     private val p2pChatService: P2pChatService,
     @ApplicationContext private val context: Context,
 ) : ViewModel() {
@@ -35,15 +37,16 @@ class ChatViewModel @Inject constructor(
     private val _draft = MutableStateFlow("")
     val draft: StateFlow<String> = _draft
 
-    val uiState = combine(
-        messageDao.observeMessages(contactId),
-        p2pChatService.onlinePresence,
-    ) { messages, presence ->
-        ChatUiState(
-            messages = messages,
-            peerOnline = presence.any { it.contactId == contactId },
-        )
-    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), ChatUiState())
+    private val _contactNickname = MutableStateFlow("")
+    val contactNickname: StateFlow<String> = _contactNickname
+
+    init {
+        viewModelScope.launch { _contactNickname.value = contactDao.find(contactId)?.nickname.orEmpty() }
+    }
+
+    val uiState = messageDao.observeMessages(contactId)
+        .map { messages -> ChatUiState(messages = messages) }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), ChatUiState())
 
     fun onDraftChange(value: String) {
         _draft.value = value
@@ -86,5 +89,4 @@ class ChatViewModel @Inject constructor(
 
 data class ChatUiState(
     val messages: List<cz.kuclab.hertzchat.data.db.MessageEntity> = emptyList(),
-    val peerOnline: Boolean = false,
 )

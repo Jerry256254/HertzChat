@@ -21,9 +21,6 @@ captures/
 /app/release/
 /app/debug/
 
-# --- Node (signaling-relay) ---
-node_modules/
-
 # --- Kotlin/Gradle build cache ---
 .kotlin/
 
@@ -32,4 +29,5 @@ keystore/
 *.jks
 *.keystore
 
-
+# Tor binaries unpacked into jniLibs by the :app:unpackTorBinaries Gradle task
+app/src/main/jniLibs/

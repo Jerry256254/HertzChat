@@ -1,6 +1,6 @@
 # Hertz Chat
 
-Peer-to-peer, end-to-end šifrovaná chatovací aplikace pro Android bez serveru, cloudu a registrace.
+Peer-to-peer, end-to-end šifrovaná chatovací aplikace pro Android - bez serveru, bez cloudu, bez registrace, bez jakékoliv firmy uprostřed.
 
 [![Stáhnout nejnovější verzi](https://img.shields.io/github/v/release/Jerry256254/HertzChat?label=St%C3%A1hnout&style=for-the-badge&color=D97757)](https://github.com/Jerry256254/HertzChat/releases/latest)
 
@@ -12,30 +12,38 @@ appka není z Play Store.
 
 ## Funkce
 
-- **Čistě P2P a end-to-end šifrované** — text, obrázky, videa i hlasové
-  zprávy jdou vždy přímo mezi zařízeními (WebRTC), šifrované Signal
-  Protokolem (X3DH + Double Ratchet). Média mají navíc vlastní jednorázový
-  klíč doručený stejnou šifrovanou cestou, takže se dají přenášet po
-  částech bez zbytečného zatěžování ratchetu. Žádný server nikdy neuvidí
-  obsah, nic se nikde neukládá kromě zařízení odesílatele a příjemce.
+- **Skutečně bez serveru** — dvě zařízení se najdou a spojí přímo přes
+  veřejnou síť [Tor](https://www.torproject.org/) (každé zařízení si
+  publikuje vlastní "onion" adresu). Tor je zdarma, decentralizovaný,
+  nikým nevlastněný a nevyžaduje žádný účet ani registraci - a jako vedlejší
+  efekt to řeší i procházení NAT/routerů a schová oběma stranám navzájem
+  jejich skutečnou IP adresu. Nikdy tu není žádný server (ani náš, ani
+  cizí), který by cokoliv přeposílal nebo ukládal.
+- **End-to-end šifrované** — text, obrázky, videa i hlasové zprávy jsou
+  šifrované Signal Protokolem (X3DH + Double Ratchet). Média mají navíc
+  vlastní jednorázový klíč doručený stejnou šifrovanou cestou, takže se
+  dají přenášet po částech bez zbytečného zatěžování ratchetu.
+- **Zprávy počkají, až budeš online** — když příjemce zrovna nemá internet,
+  zpráva se u odesílatele uloží a appka to zkouší znovu, dokud se nedoručí.
+  "Online" tu neznamená mít appku otevřenou - stačí mít internet, appka
+  naslouchá i na pozadí.
 - **Prohlížeč a editor médií** — fotky a videa na celou obrazovku (přiblížení
   gestem), přehrávač hlasovek, základní úprava obrázku (rotace, oříznutí na
   poměr stran) před odesláním.
 - **Plně anonymní identita** — žádné telefonní číslo, e-mail ani účet.
   Identita je kryptografický klíč vygenerovaný a uložený jen na tvém
   zařízení, s volitelnou přezdívkou (nebo náhodně vygenerovanou anonymní).
-- **Vyhledávání online kontaktů** — najdeš jen ty, kdo mají appku zrovna
-  otevřenou; žádosti o přátelství se přijímají/odmítají a jednou přijatý
-  kontakt zůstává uložený lokálně.
+- **Přidávání kontaktů podle ID, ne procházením cizích lidí** — bez
+  centrálního adresáře nejde "procházet, kdo je zrovna online". Místo toho
+  ukážeš příteli svoje Hertz ID (QR kód nebo textový řetězec) mimo appku -
+  on ho naskenuje/vloží a pošle ti žádost o přátelství přímo na tvou
+  onion adresu.
 - **Správa chatů** — připínání chatů, blokování uživatelů, historie zpráv
   šifrovaná na disku (SQLCipher, klíč vázaný na Android Keystore).
 - **Přenos identity mezi zařízeními** — naskenováním QR kódu ze starého
-  telefonu pokračuješ se stejnou identitou na novém.
-- **Rozšířené soukromí a nastavení** — přepínač viditelnosti online, vlastní
-  signalizační/TURN server, kvalita odesílaných médií.
-- **Otevřený zdrojový kód** — včetně volitelného slepého signalizačního
-  serveru pro navázání P2P spojení (`/signaling-relay`), který si může
-  kdokoliv sám nasadit.
+  telefonu pokračuješ se stejnou identitou (i stejnou onion adresou) na
+  novém zařízení.
+- **Otevřený zdrojový kód** — kompletně, žádná skrytá součást.
 
 ## Design
 
@@ -53,13 +61,11 @@ wrapper je součástí repozitáře.
 
 Výsledný balíček najdete v `app/build/outputs/apk/debug/`.
 
-Volitelný signalizační relay server pro P2P handshake je v `/signaling-relay`
-(Node.js) — viz jeho vlastní README.
-
 ## Technologie
 
 Kotlin, Jetpack Compose, Signal Protocol (`libsignal-client`) pro E2E
-šifrování, WebRTC pro P2P přenos, Room/SQLCipher pro lokální úložiště.
+šifrování, Tor onion služby (`org.briarproject:onionwrapper`) pro
+serverless P2P rendezvous a přenos, Room/SQLCipher pro lokální úložiště.
 
 ## Licence
 

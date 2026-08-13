@@ -1,6 +1,6 @@
 package cz.kuclab.hertzchat.data.repository
 
-import android.content.Context
+import android.util.Base64
 import cz.kuclab.hertzchat.crypto.EncryptedEnvelope
 import cz.kuclab.hertzchat.crypto.IdentityKeyManager
 import cz.kuclab.hertzchat.crypto.MessageCipher
@@ -17,46 +17,41 @@ import cz.kuclab.hertzchat.data.model.ChatPayload
 import cz.kuclab.hertzchat.data.model.PayloadKind
 import cz.kuclab.hertzchat.media.MediaCrypto
 import cz.kuclab.hertzchat.media.MediaStorage
-import cz.kuclab.hertzchat.network.signaling.FriendRequestPayload
-import cz.kuclab.hertzchat.network.signaling.FriendResponsePayload
-import cz.kuclab.hertzchat.network.signaling.IceCandidatePayload
-import cz.kuclab.hertzchat.network.signaling.PresenceEntry
-import cz.kuclab.hertzchat.network.signaling.SdpPayload
-import cz.kuclab.hertzchat.network.signaling.SignalingClient
-import cz.kuclab.hertzchat.network.signaling.SignalingEvent
-import cz.kuclab.hertzchat.network.webrtc.P2pEvent
-import cz.kuclab.hertzchat.network.webrtc.PeerConnection2
-import cz.kuclab.hertzchat.network.webrtc.defaultIceServers
-import dagger.hilt.android.qualifiers.ApplicationContext
+import cz.kuclab.hertzchat.network.tor.FriendRequestPayload
+import cz.kuclab.hertzchat.network.tor.FriendResponsePayload
+import cz.kuclab.hertzchat.network.tor.HertzId
+import cz.kuclab.hertzchat.network.tor.TorConnection
+import cz.kuclab.hertzchat.network.tor.TorTransport
 import java.io.BufferedOutputStream
 import java.io.File
 import java.io.FileOutputStream
+import java.net.Socket
 import java.util.UUID
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
-import kotlinx.serialization.json.JsonElement
-import kotlinx.serialization.json.JsonPrimitive
-import kotlinx.serialization.json.buildJsonObject
-import kotlinx.serialization.json.jsonObject
-import kotlinx.serialization.json.jsonPrimitive
-import org.webrtc.IceCandidate
-import org.webrtc.PeerConnection
-import org.webrtc.SessionDescription
+import org.briarproject.onionwrapper.TorWrapper
 
-// Wire framing prefix byte for data-channel messages.
-private const val FRAME_MESSAGE: Byte = 0
-private const val FRAME_PREKEY: Byte = 1
-private const val FRAME_MEDIA_CHUNK: Byte = 2
+// Wire framing prefix byte for the length-prefixed frames sent over a TorConnection.
+private const val FRAME_HELLO: Byte = 0
+private const val FRAME_MESSAGE: Byte = 1
+private const val FRAME_PREKEY: Byte = 2
+private const val FRAME_MEDIA_CHUNK: Byte = 3
+private const val FRAME_FRIEND_REQUEST: Byte = 4
+private const val FRAME_FRIEND_RESPONSE: Byte = 5
+
+private const val RETRY_INTERVAL_MS = 60_000L
 
 data class IncomingFriendRequest(val contactId: String, val nickname: String, val request: FriendRequestPayload)
 
@@ -66,44 +61,38 @@ sealed interface ChatServiceEvent {
 }
 
 /**
- * Orchestrates the whole P2P pipeline for the app: signaling (presence +
- * handshake rendezvous), WebRTC data channels (the actual transport) and the
- * Signal Protocol session per contact (the actual end-to-end encryption).
- * A message never exists in plaintext anywhere except on the two devices
- * that are party to the conversation.
+ * Orchestrates the whole P2P pipeline: Tor onion services are the transport
+ * (no server of ours or anyone's is ever involved in finding a peer or
+ * carrying a message/media byte), and the Signal Protocol session per
+ * contact is the end-to-end encryption. A message never exists in
+ * plaintext anywhere except on the two devices party to the conversation.
  */
 @Singleton
 class P2pChatService @Inject constructor(
-    @ApplicationContext private val context: Context,
     private val identityKeyManager: IdentityKeyManager,
     private val protocolStore: RoomSignalProtocolStore,
     private val contactDao: ContactDao,
     private val messageDao: MessageDao,
     private val mediaStorage: MediaStorage,
+    private val torTransport: TorTransport,
 ) {
     private val json = Json { ignoreUnknownKeys = true }
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
-    private var signalingClient: SignalingClient? = null
-    private val connections = mutableMapOf<String, PeerConnection2>()
+    private val connections = mutableMapOf<String, TorConnection>()
     private val ciphers = mutableMapOf<String, MessageCipher>()
-    private val pendingOutgoing = mutableMapOf<String, MutableList<ByteArray>>()
 
-    private val _onlinePresence = MutableStateFlow<List<PresenceEntry>>(emptyList())
-    val onlinePresence: StateFlow<List<PresenceEntry>> = _onlinePresence
-
-    private val _events = MutableSharedFlow<ChatServiceEvent>(extraBufferCapacity = 64)
-    val events: SharedFlow<ChatServiceEvent> = _events
+    val torState: StateFlow<TorWrapper.TorState> get() = torTransport.state
+    val bootstrapPercent: StateFlow<Int> get() = torTransport.bootstrapPercent
 
     private val _incomingRequests = MutableStateFlow<List<IncomingFriendRequest>>(emptyList())
     val incomingRequests: StateFlow<List<IncomingFriendRequest>> = _incomingRequests
 
-    var relayUrl: String = DEFAULT_RELAY_URL
-    var turnUrl: String? = null
-    var turnUsername: String? = null
-    var turnPassword: String? = null
+    private val _events = MutableSharedFlow<ChatServiceEvent>(extraBufferCapacity = 64)
+    val events: SharedFlow<ChatServiceEvent> = _events
 
     private var blockedContactIds: Set<String> = emptySet()
+    private var started = false
 
     private data class IncomingTransfer(
         val contactId: String,
@@ -113,7 +102,6 @@ class P2pChatService @Inject constructor(
         val nonceSalt: ByteArray,
         val chunkCount: Int,
         val mimeType: String,
-        val fileName: String?,
         val durationMs: Long?,
         val outputFile: File,
         val out: BufferedOutputStream,
@@ -123,64 +111,81 @@ class P2pChatService @Inject constructor(
     private val incomingTransfers = mutableMapOf<String, IncomingTransfer>()
 
     fun start() {
+        if (started) return
+        started = true
         scope.launch { contactDao.observeBlocked().collect { blocked -> blockedContactIds = blocked.map { it.contactId }.toSet() } }
-        if (signalingClient != null) return
-        val client = SignalingClient(relayUrl, identityKeyManager.contactId(), identityKeyManager.nickname)
-        signalingClient = client
+        torTransport.start(identityKeyManager.torPrivateKey) { newKey -> identityKeyManager.torPrivateKey = newKey }
         scope.launch {
-            client.events.collect { event -> handleSignalingEvent(event) }
+            torTransport.onionAddress.collect { address -> if (address != null) identityKeyManager.onionAddress = address }
         }
-        client.connect()
+        scope.launch {
+            torTransport.incomingConnections.collect { socket -> handleIncomingSocket(socket) }
+        }
+        scope.launch { retryPendingLoop() }
     }
 
     fun stop() {
-        signalingClient?.disconnect()
-        signalingClient = null
+        torTransport.stop()
         connections.values.forEach { it.close() }
         connections.clear()
+        started = false
     }
 
     private fun cipherFor(contactId: String): MessageCipher =
         ciphers.getOrPut(contactId) { MessageCipher(protocolStore, contactId) }
 
-    // --- Friend requests ---
+    // --- Identity / friend requests ---
 
-    fun sendFriendRequest(targetContactId: String) {
-        val payload = FriendRequestPayload(
-            nickname = identityKeyManager.nickname,
-            identityKeyBase64 = android.util.Base64.encodeToString(
-                identityKeyManager.identityKeyPair().publicKey.serialize(),
-                android.util.Base64.NO_WRAP,
-            ),
-            preKeyBundle = identityKeyManager.currentPreKeyBundle().toWire(),
-        )
-        relay(targetContactId, "friend_request", payload)
+    fun myHertzId(): HertzId = HertzId(
+        contactId = identityKeyManager.contactId(),
+        nickname = identityKeyManager.nickname,
+        identityKeyBase64 = Base64.encodeToString(identityKeyManager.identityKeyPair().publicKey.serialize(), Base64.NO_WRAP),
+        onionAddress = identityKeyManager.onionAddress,
+    )
+
+    fun sendFriendRequest(target: HertzId) {
+        scope.launch {
+            val payload = FriendRequestPayload(
+                nickname = identityKeyManager.nickname,
+                identityKeyBase64 = Base64.encodeToString(identityKeyManager.identityKeyPair().publicKey.serialize(), Base64.NO_WRAP),
+                onionAddress = identityKeyManager.onionAddress,
+                preKeyBundle = identityKeyManager.currentPreKeyBundle().toWire(),
+            )
+            runCatching {
+                val connection = dialAndRegister(target.contactId, target.onionAddress)
+                connection.send(frame(FRAME_FRIEND_REQUEST, json.encodeToString(payload).encodeToByteArray()))
+            }
+        }
     }
 
     fun respondFriendRequest(request: IncomingFriendRequest, accept: Boolean) {
         _incomingRequests.value = _incomingRequests.value.filterNot { it.contactId == request.contactId }
         if (accept) {
-            addTrustedContact(request.contactId, request.nickname, request.request.identityKeyBase64)
+            addTrustedContact(request.contactId, request.nickname, request.request.identityKeyBase64, request.request.onionAddress)
             cipherFor(request.contactId).establishSessionFromBundle(request.request.preKeyBundle.toPreKeyBundle())
         }
-        val response = FriendResponsePayload(
-            accepted = accept,
-            nickname = identityKeyManager.nickname,
-            identityKeyBase64 = android.util.Base64.encodeToString(
-                identityKeyManager.identityKeyPair().publicKey.serialize(),
-                android.util.Base64.NO_WRAP,
-            ),
-        )
-        relay(request.contactId, "friend_response", response)
+        scope.launch {
+            val response = FriendResponsePayload(
+                accepted = accept,
+                nickname = identityKeyManager.nickname,
+                identityKeyBase64 = Base64.encodeToString(identityKeyManager.identityKeyPair().publicKey.serialize(), Base64.NO_WRAP),
+                onionAddress = identityKeyManager.onionAddress,
+            )
+            runCatching {
+                val connection = dialAndRegister(request.contactId, request.request.onionAddress)
+                connection.send(frame(FRAME_FRIEND_RESPONSE, json.encodeToString(response).encodeToByteArray()))
+            }
+        }
     }
 
-    private fun addTrustedContact(contactId: String, nickname: String, identityKeyBase64: String) {
+    private fun addTrustedContact(contactId: String, nickname: String, identityKeyBase64: String, onionAddress: String) {
         scope.launch {
             contactDao.upsert(
                 ContactEntity(
                     contactId = contactId,
                     nickname = nickname,
-                    identityKeyBytes = android.util.Base64.decode(identityKeyBase64, android.util.Base64.NO_WRAP),
+                    identityKeyBytes = Base64.decode(identityKeyBase64, Base64.NO_WRAP),
+                    onionAddress = onionAddress,
                     addedAt = System.currentTimeMillis(),
                 ),
             )
@@ -196,8 +201,6 @@ class P2pChatService @Inject constructor(
             kind = PayloadKind.TEXT,
             text = text,
         )
-        sendPayload(contactId, payload)
-
         scope.launch {
             messageDao.upsert(
                 MessageEntity(
@@ -207,44 +210,43 @@ class P2pChatService @Inject constructor(
                     type = MessageType.TEXT,
                     text = text,
                     timestamp = payload.sentAt,
-                    deliveryState = DeliveryState.SENDING,
+                    deliveryState = DeliveryState.PENDING,
                 ),
             )
+            val delivered = trySendPayload(contactId, payload)
+            messageDao.updateState(payload.messageId, if (delivered) DeliveryState.SENT else DeliveryState.PENDING)
         }
     }
 
-    private fun sendPayload(contactId: String, payload: ChatPayload) {
+    /** Returns true if the envelope made it onto a connection successfully - not a delivery receipt, just "left this device". */
+    private suspend fun trySendPayload(contactId: String, payload: ChatPayload): Boolean {
+        val contact = contactDao.find(contactId) ?: return false
         val envelope = cipherFor(contactId).encrypt(json.encodeToString(payload).encodeToByteArray())
-        sendRaw(contactId, frame(envelope))
+        val frameType = if (envelope.isPreKeyMessage) FRAME_PREKEY else FRAME_MESSAGE
+        return sendFrameTo(contactId, contact.onionAddress, frame(frameType, envelope.ciphertext))
     }
 
-    private fun sendRaw(contactId: String, bytes: ByteArray) {
-        val connection = connections[contactId]
-        if (connection != null && connection.isOpen() && connection.send(bytes)) return
-        pendingOutgoing.getOrPut(contactId) { mutableListOf() }.add(bytes)
-        ensureConnection(contactId, asInitiator = true)
+    private suspend fun sendFrameTo(contactId: String, onionAddress: String, bytes: ByteArray): Boolean = runCatching {
+        val connection = connections[contactId]?.takeIf { runCatching { it.send(bytes) }.isSuccess }
+            ?: dialAndRegister(contactId, onionAddress).also { it.send(bytes) }
+        connection
+    }.isSuccess
+
+    private suspend fun dialAndRegister(contactId: String, onionAddress: String): TorConnection = withContext(Dispatchers.IO) {
+        val socket: Socket = torTransport.connectTo(onionAddress)
+        val connection = TorConnection(socket)
+        connection.send(frame(FRAME_HELLO, identityKeyManager.contactId().encodeToByteArray()))
+        registerConnection(contactId, connection)
+        scope.launch { readLoop(contactId, connection) }
+        connection
     }
 
-    private fun frame(envelope: EncryptedEnvelope): ByteArray {
-        val prefix = if (envelope.isPreKeyMessage) FRAME_PREKEY else FRAME_MESSAGE
-        return byteArrayOf(prefix) + envelope.ciphertext
-    }
-
-    private fun unframe(bytes: ByteArray): EncryptedEnvelope =
-        EncryptedEnvelope(isPreKeyMessage = bytes[0] == FRAME_PREKEY, ciphertext = bytes.copyOfRange(1, bytes.size))
-
-    private fun frameMediaChunk(transferId: UUID, chunkIndex: Int, ciphertext: ByteArray): ByteArray {
-        val header = java.nio.ByteBuffer.allocate(1 + 16 + 4)
-            .put(FRAME_MEDIA_CHUNK)
-            .putLong(transferId.mostSignificantBits)
-            .putLong(transferId.leastSignificantBits)
-            .putInt(chunkIndex)
-        return header.array() + ciphertext
+    private fun registerConnection(contactId: String, connection: TorConnection) {
+        connections.put(contactId, connection)?.let { old -> if (old !== connection) old.close() }
     }
 
     // --- Media ---
 
-    /** Reads the picked/captured file, generates a per-attachment AES key, and streams it to the peer as a Signal-encrypted control message followed by raw encrypted chunks. */
     fun sendMedia(contactId: String, sourceBytes: ByteArray, mimeType: String, kind: PayloadKind, fileName: String?, durationMs: Long? = null) {
         val transferId = UUID.randomUUID()
         val key = MediaCrypto.generateKey()
@@ -263,22 +265,10 @@ class P2pChatService @Inject constructor(
             mediaSizeBytes = sourceBytes.size.toLong(),
             mediaDurationMs = durationMs,
             mediaTransferId = transferId.toString(),
-            mediaKeyBase64 = android.util.Base64.encodeToString(key, android.util.Base64.NO_WRAP),
-            mediaNonceSaltBase64 = android.util.Base64.encodeToString(nonceSalt, android.util.Base64.NO_WRAP),
+            mediaKeyBase64 = Base64.encodeToString(key, Base64.NO_WRAP),
+            mediaNonceSaltBase64 = Base64.encodeToString(nonceSalt, Base64.NO_WRAP),
             mediaChunkCount = chunkCount,
         )
-        sendPayload(contactId, control)
-
-        var offset = 0
-        var index = 0
-        while (offset < sourceBytes.size) {
-            val end = minOf(offset + MediaCrypto.CHUNK_SIZE, sourceBytes.size)
-            val plainChunk = sourceBytes.copyOfRange(offset, end)
-            val cipherChunk = MediaCrypto.encryptChunk(key, nonceSalt, index, plainChunk)
-            sendRaw(contactId, frameMediaChunk(transferId, index, cipherChunk))
-            offset = end
-            index++
-        }
 
         scope.launch {
             messageDao.upsert(
@@ -291,20 +281,43 @@ class P2pChatService @Inject constructor(
                     mediaMimeType = mimeType,
                     mediaDurationMs = durationMs,
                     timestamp = control.sentAt,
-                    deliveryState = DeliveryState.SENT,
+                    deliveryState = DeliveryState.PENDING,
                 ),
             )
+
+            val contact = contactDao.find(contactId)
+            val delivered = contact != null && runCatching {
+                check(trySendPayload(contactId, control))
+                var offset = 0
+                var index = 0
+                while (offset < sourceBytes.size) {
+                    val end = minOf(offset + MediaCrypto.CHUNK_SIZE, sourceBytes.size)
+                    val cipherChunk = MediaCrypto.encryptChunk(key, nonceSalt, index, sourceBytes.copyOfRange(offset, end))
+                    check(sendFrameTo(contactId, contact.onionAddress, frameMediaChunk(transferId, index, cipherChunk)))
+                    offset = end
+                    index++
+                }
+            }.isSuccess
+            messageDao.updateState(messageId, if (delivered) DeliveryState.SENT else DeliveryState.PENDING)
         }
+    }
+
+    private fun frameMediaChunk(transferId: UUID, chunkIndex: Int, ciphertext: ByteArray): ByteArray {
+        val header = java.nio.ByteBuffer.allocate(1 + 16 + 4)
+            .put(FRAME_MEDIA_CHUNK)
+            .putLong(transferId.mostSignificantBits)
+            .putLong(transferId.leastSignificantBits)
+            .putInt(chunkIndex)
+        return header.array() + ciphertext
     }
 
     private fun beginIncomingTransfer(contactId: String, payload: ChatPayload) {
         val transferId = payload.mediaTransferId ?: return
-        val key = payload.mediaKeyBase64?.let { android.util.Base64.decode(it, android.util.Base64.NO_WRAP) } ?: return
-        val nonceSalt = payload.mediaNonceSaltBase64?.let { android.util.Base64.decode(it, android.util.Base64.NO_WRAP) } ?: return
+        val key = payload.mediaKeyBase64?.let { Base64.decode(it, Base64.NO_WRAP) } ?: return
+        val nonceSalt = payload.mediaNonceSaltBase64?.let { Base64.decode(it, Base64.NO_WRAP) } ?: return
         val chunkCount = payload.mediaChunkCount ?: return
         val mimeType = payload.mediaMimeType ?: "application/octet-stream"
-        val extension = mediaStorage.extensionFor(mimeType)
-        val outputFile = mediaStorage.fileFor(transferId, extension)
+        val outputFile = mediaStorage.fileFor(transferId, mediaStorage.extensionFor(mimeType))
 
         incomingTransfers[transferId] = IncomingTransfer(
             contactId = contactId,
@@ -314,7 +327,6 @@ class P2pChatService @Inject constructor(
             nonceSalt = nonceSalt,
             chunkCount = chunkCount,
             mimeType = mimeType,
-            fileName = payload.mediaFileName,
             durationMs = payload.mediaDurationMs,
             outputFile = outputFile,
             out = BufferedOutputStream(FileOutputStream(outputFile)),
@@ -362,50 +374,125 @@ class P2pChatService @Inject constructor(
         else -> MessageType.FILE
     }
 
-    // --- WebRTC connection lifecycle ---
+    // --- Retry queue for contacts who were unreachable ---
 
-    private fun ensureConnection(contactId: String, asInitiator: Boolean): PeerConnection2 {
-        connections[contactId]?.let { return it }
-        val pc = PeerConnection2(context, defaultIceServers(turnUrl, turnUsername, turnPassword), isInitiator = asInitiator)
-        connections[contactId] = pc
-        scope.launch { pc.eventFlow.collect { handlePeerEvent(contactId, it) } }
-        if (asInitiator) {
-            pc.createOffer { sdp -> relay(contactId, "sdp", SdpPayload("offer", sdp.description)) }
+    private suspend fun retryPendingLoop() {
+        while (started) {
+            delay(RETRY_INTERVAL_MS)
+            runCatching { retryPendingNow() }
         }
-        return pc
     }
 
-    private fun handlePeerEvent(contactId: String, event: P2pEvent) {
-        when (event) {
-            is P2pEvent.IceCandidateGenerated -> relay(
-                contactId,
-                "ice",
-                IceCandidatePayload(event.candidate.sdpMid, event.candidate.sdpMLineIndex, event.candidate.sdp),
-            )
-            is P2pEvent.DataChannelOpen -> if (event.open) flushPending(contactId)
-            is P2pEvent.MessageReceived -> onDataReceived(contactId, event.bytes)
-            is P2pEvent.ConnectionStateChanged -> if (event.state == PeerConnection.PeerConnectionState.FAILED ||
-                event.state == PeerConnection.PeerConnectionState.CLOSED
-            ) {
-                connections.remove(contactId)?.close()
+    private suspend fun retryPendingNow() {
+        val pending = messageDao.findAllPending()
+        for (message in pending) {
+            val contact = contactDao.find(message.contactId) ?: continue
+            if (contact.contactId in blockedContactIds) continue
+            val delivered = if (message.type == MessageType.TEXT) {
+                trySendPayload(message.contactId, ChatPayload(message.messageId, message.timestamp, PayloadKind.TEXT, text = message.text))
+            } else {
+                val bytes = message.mediaPath?.let { runCatching { File(it).readBytes() }.getOrNull() }
+                bytes != null && resendMedia(message, bytes, contact.onionAddress)
+            }
+            if (delivered) messageDao.updateState(message.messageId, DeliveryState.SENT)
+        }
+    }
+
+    private suspend fun resendMedia(message: MessageEntity, sourceBytes: ByteArray, onionAddress: String): Boolean {
+        // A retried media message reuses a fresh transfer id/key - the original attempt may have
+        // partially landed on the peer's side, and re-keying is simpler and just as cheap as
+        // trying to resume a specific byte offset.
+        val transferId = UUID.randomUUID()
+        val key = MediaCrypto.generateKey()
+        val nonceSalt = MediaCrypto.generateNonceSalt()
+        val chunkCount = (sourceBytes.size + MediaCrypto.CHUNK_SIZE - 1) / MediaCrypto.CHUNK_SIZE
+        val control = ChatPayload(
+            messageId = message.messageId,
+            sentAt = message.timestamp,
+            kind = when (message.type) {
+                MessageType.IMAGE -> PayloadKind.IMAGE
+                MessageType.VIDEO -> PayloadKind.VIDEO
+                MessageType.VOICE -> PayloadKind.VOICE
+                else -> PayloadKind.FILE
+            },
+            mediaMimeType = message.mediaMimeType,
+            mediaSizeBytes = sourceBytes.size.toLong(),
+            mediaDurationMs = message.mediaDurationMs,
+            mediaTransferId = transferId.toString(),
+            mediaKeyBase64 = Base64.encodeToString(key, Base64.NO_WRAP),
+            mediaNonceSaltBase64 = Base64.encodeToString(nonceSalt, Base64.NO_WRAP),
+            mediaChunkCount = chunkCount,
+        )
+        return runCatching {
+            check(trySendPayload(message.contactId, control))
+            var offset = 0
+            var index = 0
+            while (offset < sourceBytes.size) {
+                val end = minOf(offset + MediaCrypto.CHUNK_SIZE, sourceBytes.size)
+                val cipherChunk = MediaCrypto.encryptChunk(key, nonceSalt, index, sourceBytes.copyOfRange(offset, end))
+                check(sendFrameTo(message.contactId, onionAddress, frameMediaChunk(transferId, index, cipherChunk)))
+                offset = end
+                index++
+            }
+        }.isSuccess
+    }
+
+    // --- Connection handling ---
+
+    private fun handleIncomingSocket(socket: Socket) {
+        scope.launch {
+            val connection = TorConnection(socket)
+            var fromContactId: String? = null
+            try {
+                while (true) {
+                    val bytes = withContext(Dispatchers.IO) { connection.receive() }
+                    if (bytes.isEmpty()) continue
+                    when (bytes[0]) {
+                        FRAME_HELLO -> {
+                            fromContactId = bytes.copyOfRange(1, bytes.size).decodeToString()
+                            fromContactId.takeIf { it !in blockedContactIds }?.let { registerConnection(it, connection) }
+                        }
+                        FRAME_MEDIA_CHUNK -> onMediaChunkReceived(bytes)
+                        FRAME_FRIEND_REQUEST -> handleFriendRequestFrame(bytes)
+                        FRAME_FRIEND_RESPONSE -> handleFriendResponseFrame(bytes)
+                        FRAME_MESSAGE, FRAME_PREKEY -> {
+                            val senderId = fromContactId ?: continue
+                            if (senderId in blockedContactIds) continue
+                            onEnvelopeReceived(senderId, bytes)
+                        }
+                    }
+                }
+            } catch (_: Exception) {
+                // connection closed by peer, or network error - normal, nothing to do
+            } finally {
+                connection.close()
             }
         }
     }
 
-    private fun flushPending(contactId: String) {
-        val queued = pendingOutgoing.remove(contactId) ?: return
-        val connection = connections[contactId] ?: return
-        queued.forEach { connection.send(it) }
+    private suspend fun readLoop(contactId: String, connection: TorConnection) {
+        try {
+            while (true) {
+                val bytes = withContext(Dispatchers.IO) { connection.receive() }
+                if (bytes.isEmpty()) continue
+                when (bytes[0]) {
+                    FRAME_MEDIA_CHUNK -> onMediaChunkReceived(bytes)
+                    FRAME_FRIEND_RESPONSE -> handleFriendResponseFrame(bytes)
+                    FRAME_MESSAGE, FRAME_PREKEY -> if (contactId !in blockedContactIds) onEnvelopeReceived(contactId, bytes)
+                    else -> Unit
+                }
+            }
+        } catch (_: Exception) {
+            // normal on connection close
+        } finally {
+            if (connections[contactId] === connection) connections.remove(contactId)
+            connection.close()
+        }
     }
 
-    private fun onDataReceived(contactId: String, bytes: ByteArray) {
-        if (bytes.isEmpty()) return
-        if (bytes[0] == FRAME_MEDIA_CHUNK) {
-            onMediaChunkReceived(bytes)
-            return
-        }
-
-        val plaintext = runCatching { cipherFor(contactId).decrypt(unframe(bytes)) }.getOrNull() ?: return
+    private fun onEnvelopeReceived(contactId: String, bytes: ByteArray) {
+        val envelope = EncryptedEnvelope(isPreKeyMessage = bytes[0] == FRAME_PREKEY, ciphertext = bytes.copyOfRange(1, bytes.size))
+        val plaintext = runCatching { cipherFor(contactId).decrypt(envelope) }.getOrNull() ?: return
         val payload = runCatching { json.decodeFromString(ChatPayload.serializer(), plaintext.decodeToString()) }.getOrNull() ?: return
 
         if (payload.kind == PayloadKind.IMAGE || payload.kind == PayloadKind.VIDEO || payload.kind == PayloadKind.VOICE) {
@@ -429,66 +516,25 @@ class P2pChatService @Inject constructor(
         }
     }
 
-    // --- Signaling glue ---
-
-    private fun relay(to: String, kind: String, payload: Any) {
-        val element: JsonElement = when (payload) {
-            is FriendRequestPayload -> json.encodeToJsonElement(FriendRequestPayload.serializer(), payload)
-            is FriendResponsePayload -> json.encodeToJsonElement(FriendResponsePayload.serializer(), payload)
-            is SdpPayload -> json.encodeToJsonElement(SdpPayload.serializer(), payload)
-            is IceCandidatePayload -> json.encodeToJsonElement(IceCandidatePayload.serializer(), payload)
-            else -> return
-        }
-        val wrapped = buildJsonObject {
-            put("kind", JsonPrimitive(kind))
-            put("data", element)
-        }
-        signalingClient?.relay(to, wrapped)
+    private fun handleFriendRequestFrame(bytes: ByteArray) {
+        val request = runCatching {
+            json.decodeFromString(FriendRequestPayload.serializer(), bytes.copyOfRange(1, bytes.size).decodeToString())
+        }.getOrNull() ?: return
+        val senderContactId = identityKeyManager.contactIdFor(Base64.decode(request.identityKeyBase64, Base64.NO_WRAP))
+        if (senderContactId in blockedContactIds) return
+        val incoming = IncomingFriendRequest(senderContactId, request.nickname, request)
+        _incomingRequests.value = _incomingRequests.value.filterNot { it.contactId == senderContactId } + incoming
+        _events.tryEmit(ChatServiceEvent.FriendRequestReceived(incoming))
     }
 
-    private fun handleSignalingEvent(event: SignalingEvent) {
-        when (event) {
-            is SignalingEvent.Presence -> _onlinePresence.value = event.update.online.filter { it.contactId != identityKeyManager.contactId() }
-            is SignalingEvent.Relay -> handleRelay(event.envelope.from, event.envelope.payload)
-            else -> Unit
-        }
+    private fun handleFriendResponseFrame(bytes: ByteArray) {
+        val response = runCatching {
+            json.decodeFromString(FriendResponsePayload.serializer(), bytes.copyOfRange(1, bytes.size).decodeToString())
+        }.getOrNull() ?: return
+        if (!response.accepted) return
+        val senderContactId = identityKeyManager.contactIdFor(Base64.decode(response.identityKeyBase64, Base64.NO_WRAP))
+        addTrustedContact(senderContactId, response.nickname, response.identityKeyBase64, response.onionAddress)
     }
 
-    private fun handleRelay(from: String, payload: JsonElement) {
-        if (from in blockedContactIds) return
-        val obj = payload.jsonObject
-        val kind = obj["kind"]?.jsonPrimitive?.content ?: return
-        val data = obj["data"] ?: return
-        when (kind) {
-            "friend_request" -> {
-                val request = runCatching { json.decodeFromJsonElement(FriendRequestPayload.serializer(), data) }.getOrNull() ?: return
-                val claimedId = identityKeyManager.contactIdFor(
-                    android.util.Base64.decode(request.identityKeyBase64, android.util.Base64.NO_WRAP),
-                )
-                if (claimedId != from) return // identity key doesn't match the claimed sender - drop it
-                val incoming = IncomingFriendRequest(from, request.nickname, request)
-                _incomingRequests.value = _incomingRequests.value.filterNot { it.contactId == from } + incoming
-                _events.tryEmit(ChatServiceEvent.FriendRequestReceived(incoming))
-            }
-            "friend_response" -> {
-                val response = runCatching { json.decodeFromJsonElement(FriendResponsePayload.serializer(), data) }.getOrNull() ?: return
-                if (response.accepted) addTrustedContact(from, response.nickname, response.identityKeyBase64)
-            }
-            "sdp" -> {
-                val sdp = runCatching { json.decodeFromJsonElement(SdpPayload.serializer(), data) }.getOrNull() ?: return
-                val type = if (sdp.kind == "offer") SessionDescription.Type.OFFER else SessionDescription.Type.ANSWER
-                if (sdp.kind == "offer") {
-                    val pc = ensureConnection(from, asInitiator = false)
-                    pc.setRemoteDescription(SessionDescription(type, sdp.sdp))
-                    pc.createAnswer { answer -> relay(from, "sdp", SdpPayload("answer", answer.description)) }
-                } else {
-                    connections[from]?.setRemoteDescription(SessionDescription(type, sdp.sdp))
-                }
-            }
-            "ice" -> {
-                val ice = runCatching { json.decodeFromJsonElement(IceCandidatePayload.serializer(), data) }.getOrNull() ?: return
-                connections[from]?.addIceCandidate(IceCandidate(ice.sdpMid, ice.sdpMLineIndex, ice.candidate))
-            }
-        }
-    }
+    private fun frame(type: Byte, payload: ByteArray): ByteArray = byteArrayOf(type) + payload
 }

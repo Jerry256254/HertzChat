@@ -4,11 +4,9 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import cz.kuclab.hertzchat.data.db.ContactDao
 import cz.kuclab.hertzchat.data.db.MessageDao
-import cz.kuclab.hertzchat.data.repository.P2pChatService
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
 import kotlinx.coroutines.flow.SharingStarted
-import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
@@ -17,7 +15,6 @@ data class ChatListItem(
     val contactId: String,
     val nickname: String,
     val pinned: Boolean,
-    val online: Boolean,
     val lastMessagePreview: String?,
     val lastMessageAt: Long?,
 )
@@ -26,18 +23,15 @@ data class ChatListItem(
 class ChatListViewModel @Inject constructor(
     private val contactDao: ContactDao,
     private val messageDao: MessageDao,
-    private val p2pChatService: P2pChatService,
 ) : ViewModel() {
 
-    val items = combine(contactDao.observeContacts(), p2pChatService.onlinePresence) { contacts, presence ->
-        val onlineIds = presence.map { it.contactId }.toSet()
+    val items = contactDao.observeContacts().map { contacts ->
         contacts.map { contact ->
             val last = messageDao.lastMessage(contact.contactId)
             ChatListItem(
                 contactId = contact.contactId,
                 nickname = contact.nickname,
                 pinned = contact.pinned,
-                online = contact.contactId in onlineIds,
                 lastMessagePreview = last?.text,
                 lastMessageAt = last?.timestamp,
             )

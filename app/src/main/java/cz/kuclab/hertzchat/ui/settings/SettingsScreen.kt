@@ -12,7 +12,6 @@ import androidx.compose.material3.Divider
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
@@ -34,41 +33,19 @@ fun SettingsScreen(viewModel: SettingsViewModel = hiltViewModel()) {
     val settings by viewModel.settings.collectAsState()
     val blocked by viewModel.blockedContacts.collectAsState()
 
-    var relayUrlField by remember(settings.relayUrl) { mutableStateOf(settings.relayUrl) }
-
     Scaffold(topBar = { TopAppBar(title = { Text("Nastavení") }) }) { padding ->
         LazyColumn(
             modifier = Modifier.fillMaxSize().padding(padding).padding(horizontal = 16.dp),
             verticalArrangement = Arrangement.spacedBy(4.dp),
         ) {
-            item { SectionTitle("Soukromí") }
+            item { SectionTitle("Soukromí a síť") }
             item {
                 SettingsSwitchRow(
-                    title = "Být viditelný online",
-                    subtitle = "Když je vypnuto, nikdo tě nenajde ani ti nemůže poslat zprávu",
+                    title = "Být dosažitelný",
+                    subtitle = "Vypne Tor síť a onion službu - nikdo tě nenajde ani ti nemůže poslat zprávu, dokud to znovu nezapneš. Žádný server (ani náš, ani cizí) do toho není nikdy zapojený - appka se spojuje přímo s veřejnou sítí Tor.",
                     checked = settings.discoverable,
                     onCheckedChange = viewModel::setDiscoverable,
                 )
-            }
-            item { Divider() }
-
-            item { SectionTitle("Síť (P2P rendezvous)") }
-            item {
-                Column {
-                    OutlinedTextField(
-                        value = relayUrlField,
-                        onValueChange = { relayUrlField = it },
-                        label = { Text("Adresa signalizačního serveru") },
-                        modifier = Modifier.fillMaxWidth(),
-                    )
-                    TextButton(onClick = { viewModel.setRelayUrl(relayUrlField) }) { Text("Uložit") }
-                    Text(
-                        "Signalizační server jen zprostředkuje spojení mezi tebou a přítelem - " +
-                            "zprávy, hovory ani média přes něj nikdy neprochází. Klidně si spusť vlastní " +
-                            "(viz /signaling-relay v repozitáři).",
-                        style = MaterialTheme.typography.labelSmall,
-                    )
-                }
             }
             item { Divider() }
 

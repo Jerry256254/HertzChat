@@ -76,7 +76,7 @@ fun ChatListScreen(
     ) { padding ->
         if (items.isEmpty()) {
             Box(modifier = Modifier.fillMaxSize().padding(padding), contentAlignment = Alignment.Center) {
-                Text("Zatím žádné chaty. Přidej si přátele přes vyhledávání online kontaktů.")
+                Text("Zatím žádné chaty. Přidej si přátele přes tlačítko + (sdílej nebo naskenuj Hertz ID).")
             }
         } else {
             LazyColumn(modifier = Modifier.fillMaxSize().padding(padding)) {
@@ -140,19 +140,11 @@ private fun ChatListRow(
                 }
             }
             Text(
-                text = item.lastMessagePreview ?: if (item.online) "Online" else "Offline",
+                text = item.lastMessagePreview ?: "Zatím žádné zprávy",
                 style = MaterialTheme.typography.bodyLarge,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-        }
-        if (item.online) {
-            Box(
-                modifier = Modifier
-                    .size(10.dp)
-                    .clip(CircleShape)
-                    .background(MaterialTheme.colorScheme.secondary),
             )
         }
     }

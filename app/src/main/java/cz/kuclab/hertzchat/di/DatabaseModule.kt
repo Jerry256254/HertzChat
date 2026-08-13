@@ -48,6 +48,7 @@ object DatabaseModule {
         val factory = SupportFactory(dbPassphrase(context))
         return Room.databaseBuilder(context, AppDatabase::class.java, "hertzchat.db")
             .openHelperFactory(factory)
+            .fallbackToDestructiveMigration()
             .build()
     }
 

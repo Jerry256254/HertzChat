@@ -2,38 +2,42 @@ package cz.kuclab.hertzchat.ui.contacts
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import cz.kuclab.hertzchat.crypto.IdentityKeyManager
-import cz.kuclab.hertzchat.data.db.ContactDao
 import cz.kuclab.hertzchat.data.repository.IncomingFriendRequest
 import cz.kuclab.hertzchat.data.repository.P2pChatService
+import cz.kuclab.hertzchat.network.tor.HertzId
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
-import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.stateIn
-
-data class DiscoveredPeer(val contactId: String, val nickname: String, val alreadyContact: Boolean)
+import kotlinx.serialization.encodeToString
+import kotlinx.serialization.json.Json
 
 @HiltViewModel
 class ContactsViewModel @Inject constructor(
     private val p2pChatService: P2pChatService,
-    contactDao: ContactDao,
-    val identityKeyManager: IdentityKeyManager,
 ) : ViewModel() {
 
-    val discoveredPeers = combine(p2pChatService.onlinePresence, contactDao.observeContacts()) { presence, contacts ->
-        val known = contacts.map { it.contactId }.toSet()
-        presence.map { DiscoveredPeer(it.contactId, it.nickname, it.contactId in known) }
-    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+    private val json = Json { ignoreUnknownKeys = true }
 
     val incomingRequests = p2pChatService.incomingRequests
+    val torState = p2pChatService.torState.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
+    val bootstrapPercent = p2pChatService.bootstrapPercent.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 0)
 
-    fun refresh() {
-        p2pChatService.start()
-    }
+    private val _addError = MutableStateFlow<String?>(null)
+    val addError: StateFlow<String?> = _addError
 
-    fun sendFriendRequest(contactId: String) {
-        p2pChatService.sendFriendRequest(contactId)
+    fun myHertzIdQrText(): String = json.encodeToString(p2pChatService.myHertzId())
+
+    fun addByHertzId(text: String) {
+        val id = runCatching { json.decodeFromString(HertzId.serializer(), text.trim()) }.getOrNull()
+        if (id == null) {
+            _addError.value = "Neplatné Hertz ID"
+            return
+        }
+        _addError.value = null
+        p2pChatService.sendFriendRequest(id)
     }
 
     fun respond(request: IncomingFriendRequest, accept: Boolean) {

@@ -8,9 +8,13 @@ import android.content.Intent
 import android.os.Build
 import android.os.IBinder
 import androidx.core.app.NotificationCompat
+import androidx.work.ExistingPeriodicWorkPolicy
+import androidx.work.PeriodicWorkRequestBuilder
+import androidx.work.WorkManager
 import cz.kuclab.hertzchat.data.repository.P2pChatService
 import cz.kuclab.hertzchat.data.repository.SettingsRepository
 import dagger.hilt.android.AndroidEntryPoint
+import java.util.concurrent.TimeUnit
 import javax.inject.Inject
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -21,9 +25,10 @@ import kotlinx.coroutines.launch
 
 private const val CHANNEL_ID = "hertzchat_p2p"
 private const val NOTIFICATION_ID = 1
+private const val RETRY_WORK_NAME = "hertzchat_retry_wake"
 
 /**
- * Keeps the signaling connection (and any active WebRTC data channels) alive
+ * Keeps the embedded Tor client (and our published onion service) alive
  * while the app is in use, so friends can reach you and in-flight messages
  * don't get dropped because Android suspended the process in the background.
  */
@@ -39,15 +44,18 @@ class P2pForegroundService : Service() {
         super.onCreate()
         createChannelIfNeeded()
         startForeground(NOTIFICATION_ID, buildNotification())
+        scheduleRetryWakeWorker()
         scope.launch {
             val settings = settingsRepository.settings.first()
             if (!settings.discoverable) return@launch
-            p2pChatService.relayUrl = settings.relayUrl
-            p2pChatService.turnUrl = settings.turnUrl.takeIf { it.isNotBlank() }
-            p2pChatService.turnUsername = settings.turnUsername
-            p2pChatService.turnPassword = settings.turnPassword
             p2pChatService.start()
         }
+    }
+
+    private fun scheduleRetryWakeWorker() {
+        val request = PeriodicWorkRequestBuilder<RetryWakeWorker>(15, TimeUnit.MINUTES).build()
+        WorkManager.getInstance(applicationContext)
+            .enqueueUniquePeriodicWork(RETRY_WORK_NAME, ExistingPeriodicWorkPolicy.KEEP, request)
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int = START_STICKY

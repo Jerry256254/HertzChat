@@ -1,7 +1,7 @@
 package cz.kuclab.hertzchat.crypto
 
 import android.util.Base64
-import cz.kuclab.hertzchat.network.signaling.PreKeyBundleWire
+import cz.kuclab.hertzchat.network.tor.PreKeyBundleWire
 import org.signal.libsignal.protocol.IdentityKey
 import org.signal.libsignal.protocol.ecc.ECPublicKey
 import org.signal.libsignal.protocol.kem.KEMPublicKey

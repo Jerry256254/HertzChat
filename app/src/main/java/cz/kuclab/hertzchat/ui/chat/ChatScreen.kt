@@ -50,6 +50,7 @@ import cz.kuclab.hertzchat.media.VoiceRecorder
 fun ChatScreen(contactId: String, onBack: () -> Unit, viewModel: ChatViewModel = hiltViewModel()) {
     val state by viewModel.uiState.collectAsState()
     val draft by viewModel.draft.collectAsState()
+    val nickname by viewModel.contactNickname.collectAsState()
     val context = LocalContext.current
 
     var attachMenuOpen by remember { mutableStateOf(false) }
@@ -72,7 +73,7 @@ fun ChatScreen(contactId: String, onBack: () -> Unit, viewModel: ChatViewModel =
 
     Scaffold(
         topBar = {
-            TopAppBar(title = { Text(if (state.peerOnline) "Online" else "Offline") })
+            TopAppBar(title = { Text(nickname) })
         },
         bottomBar = {
             Row(
@@ -158,33 +159,52 @@ private fun MessageBubble(message: MessageEntity) {
     val textColor = if (message.fromMe) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant
     val alignment = if (message.fromMe) Alignment.CenterEnd else Alignment.CenterStart
 
-    Box(modifier = Modifier.fillMaxWidth(), contentAlignment = alignment) {
-        when (message.type) {
-            MessageType.TEXT -> Box(
-                modifier = Modifier
-                    .clip(RoundedCornerShape(16.dp))
-                    .background(bubbleColor)
-                    .padding(horizontal = 14.dp, vertical = 8.dp),
-            ) {
-                Text(message.text.orEmpty(), color = textColor)
-            }
-            MessageType.IMAGE -> ImageBubble(message)
-            MessageType.VIDEO -> VideoBubble(message)
-            MessageType.VOICE -> Box(
-                modifier = Modifier
-                    .clip(RoundedCornerShape(16.dp))
-                    .background(bubbleColor),
-            ) {
-                VoiceBubble(message, onSurface = textColor, accent = textColor)
-            }
-            MessageType.FILE -> Box(
-                modifier = Modifier
-                    .clip(RoundedCornerShape(16.dp))
-                    .background(bubbleColor)
-                    .padding(horizontal = 14.dp, vertical = 8.dp),
-            ) {
-                Text("Soubor", color = textColor)
+    androidx.compose.foundation.layout.Column(modifier = Modifier.fillMaxWidth(), horizontalAlignment = if (message.fromMe) Alignment.End else Alignment.Start) {
+        Box(modifier = Modifier.fillMaxWidth(), contentAlignment = alignment) {
+            when (message.type) {
+                MessageType.TEXT -> Box(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(16.dp))
+                        .background(bubbleColor)
+                        .padding(horizontal = 14.dp, vertical = 8.dp),
+                ) {
+                    Text(message.text.orEmpty(), color = textColor)
+                }
+                MessageType.IMAGE -> ImageBubble(message)
+                MessageType.VIDEO -> VideoBubble(message)
+                MessageType.VOICE -> Box(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(16.dp))
+                        .background(bubbleColor),
+                ) {
+                    VoiceBubble(message, onSurface = textColor, accent = textColor)
+                }
+                MessageType.FILE -> Box(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(16.dp))
+                        .background(bubbleColor)
+                        .padding(horizontal = 14.dp, vertical = 8.dp),
+                ) {
+                    Text("Soubor", color = textColor)
+                }
             }
         }
+        if (message.fromMe) {
+            Text(
+                text = deliveryStateLabel(message.deliveryState),
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(horizontal = 4.dp),
+            )
+        }
     }
+}
+
+private fun deliveryStateLabel(state: cz.kuclab.hertzchat.data.db.DeliveryState): String = when (state) {
+    cz.kuclab.hertzchat.data.db.DeliveryState.PENDING -> "Čeká se, až bude příjemce online..."
+    cz.kuclab.hertzchat.data.db.DeliveryState.SENDING -> "Odesílá se..."
+    cz.kuclab.hertzchat.data.db.DeliveryState.SENT -> "Odesláno"
+    cz.kuclab.hertzchat.data.db.DeliveryState.DELIVERED -> "Doručeno"
+    cz.kuclab.hertzchat.data.db.DeliveryState.READ -> "Přečteno"
+    cz.kuclab.hertzchat.data.db.DeliveryState.FAILED -> "Nepodařilo se odeslat"
 }

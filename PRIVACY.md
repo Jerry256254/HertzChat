@@ -1,33 +1,46 @@
 # Zásady ochrany soukromí Hertz Chat
 
-## Co aplikace NEsbírá ani neukládá na žádném serveru
+## Co aplikace NEsbírá ani neukládá vůbec nikde
 
 - obsah zpráv, hlasových zpráv, obrázků ani videí,
 - seznam tvých kontaktů,
-- tvoje jméno, telefonní číslo ani e-mail (aplikace je nevyžaduje).
+- tvoje jméno, telefonní číslo ani e-mail (aplikace je nevyžaduje),
+- tvoji skutečnou IP adresu vůči tvým kontaktům (o tu se stará Tor).
 
-## Co dočasně prochází signalizačním serverem (a nikdy se tam neukládá)
+Neexistuje žádný server - ani náš, ani cizí, ani dočasný - kterým by tvoje
+zprávy nebo média kdy procházely. Dvě zařízení se najdou a spojí přímo přes
+veřejnou síť [Tor](https://www.torproject.org/): každé zařízení si publikuje
+vlastní "onion" (skrytou) službu a druhá strana se k ní připojí napřímo.
 
-- tvoje pseudonymní ID (otisk veřejného klíče) a zvolená přezdívka, po dobu,
-  kdy jsi v aplikaci online, aby tě mohli ostatní najít - lze v
-  Nastavení → Soukromí kdykoliv vypnout,
-- technické údaje pro navázání přímého P2P spojení (WebRTC nabídky/odpovědi a
-  ICE kandidáti) - server (viz `/signaling-relay`) je jen slepě přeposílá mezi
-  dvěma zařízeními a nic z toho nezapisuje na disk.
+## Jak tě může někdo najít
 
-Pokud přímé P2P spojení kvůli přísnému NATu/firewallu nejde navázat, provoz se
-přesměruje přes záložní TURN relay - ten ale stejně jako signalizační server
-vidí jen již zašifrovaná data, nikdy obsah zprávy.
+Neexistuje žádný adresář ani seznam "kdo je online" - stejně jako u Tor
+adresy samotné, kontaktovat můžeš jen někoho, jehož Hertz ID už znáš (dostal
+jsi ho od něj mimo appku - QR kód, ústně, jinou appkou). To ID v sobě nese
+i jeho onion adresu. Žádost o přátelství appka pošle přímo na tuto adresu -
+nikam jinam.
+
+## Co vidí síť Tor po cestě
+
+Uzly v síti Tor (které appka ani nikdo jiný neprovozuje - jsou to tisíce
+dobrovolnických serverů po celém světě) vidí jen zašifrovaná data mezi
+jednotlivými přeskoky, nikdy ne oba konce spojení najednou ani obsah zpráv -
+to je celý smysl cibulového směrování. Nad tím vším navíc leží ještě
+end-to-end šifrování Signal Protokolem, takže i kdyby něco selhalo na úrovni
+Toru, obsah zůstává čitelný jen tobě a příjemci.
 
 ## Kde jsou tvoje data doopravdy uložená
 
 Výhradně na tvém zařízení, v databázi zašifrované klíčem vázaným na Android
 Keystore tohoto konkrétního telefonu (SQLCipher). Při přechodu na nové
-zařízení se přenáší jen kryptografická identita (QR kód) - historie zpráv a
-média zůstávají na původním zařízení, protože nikdy neopustila jeho úložiště.
+zařízení se přenáší jen kryptografická identita a onion adresa (QR kód) -
+historie zpráv a média zůstávají na původním zařízení, protože nikdy
+neopustila jeho úložiště.
 
-## Kontrola nad viditelností
+## Kontrola nad dosažitelností
 
-V Nastavení → Soukromí lze kdykoliv vypnout "Být viditelný online" - pak tě
-signalizační server vůbec nezaregistruje a nikdo (ani stávající kontakty) tě
-nemůže najít ani ti poslat zprávu, dokud to znovu nezapneš.
+V Nastavení → Soukromí lze kdykoliv vypnout "Být dosažitelný" - appka pak
+vypne Tor a onion službu a nikdo (ani stávající kontakty) tě nemůže najít
+ani ti poslat zprávu, dokud to znovu nezapneš. Zprávy, které jsi mezitím
+poslal ty a čekají na doručení, appka dál zkouší odeslat, jakmile budeš mít
+internet znovu zapnutý.

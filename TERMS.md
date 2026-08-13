@@ -3,9 +3,11 @@
 ## 1. Povaha aplikace
 
 Hertz Chat je peer-to-peer (P2P) komunikační aplikace s koncovým šifrováním.
-Neexistuje žádný centrální server, který by ukládal, četl nebo zprostředkovával
-tvoje zprávy, kontakty či média. Zprávy a soubory se přenáší přímo mezi
-zařízeními a zůstávají uložené pouze lokálně na zařízeních účastníků konverzace.
+Neexistuje žádný centrální server - ani provozovaný autorem aplikace, ani
+třetí stranou - který by ukládal, četl nebo zprostředkovával tvoje zprávy,
+kontakty či média. Zařízení se navzájem nachází a spojují přímo přes veřejnou
+síť Tor; zprávy a soubory se přenáší přímo mezi zařízeními a zůstávají
+uložené pouze lokálně na zařízeních účastníků konverzace.
 
 ## 2. Identita a účet
 
@@ -24,8 +26,7 @@ odpovídá výhradně uživatel, který je odeslal.
 
 Hertz Chat je open source software šířený pod licencí [MIT](LICENSE). Zdrojový
 kód je veřejně dostupný a kdokoliv si může ověřit, jak aplikace pracuje se
-šifrováním a daty, nebo si spustit vlastní instanci volitelného signalizačního
-serveru (`/signaling-relay`).
+šifrováním, daty a síťovým provozem.
 
 ## 5. Bezpečnostní upozornění
 

@@ -15,8 +15,8 @@ android {
         applicationId = "cz.kuclab.hertzchat"
         minSdk = 26
         targetSdk = 34
-        versionCode = 4
-        versionName = "0.2.2"
+        versionCode = 5
+        versionName = "0.3.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
@@ -83,9 +83,38 @@ android {
             // only for the library's own test suite - it's dead weight
             // (tens of MB per ABI) in a shipped app and pulls in nothing we use.
             excludes += "**/libsignal_jni_testing.so"
+            keepDebugSymbols += "**/libtor.so"
         }
     }
 }
+
+// The Tor binary (used for onion-service based P2P rendezvous - see
+// network/tor/TorTransport.kt) ships as a plain jar with per-ABI libtor.so
+// files as raw entries, not as a proper AAR. Android 10+'s W^X policy means
+// a binary extracted to writable storage at runtime can't be executed - it
+// has to be installed as a real JNI library instead, so unpack it straight
+// into src/main/jniLibs before the build (same approach used by the Briar
+// messaging app, which this dependency comes from).
+val tor: Configuration by configurations.creating
+
+dependencies {
+    tor("org.briarproject:tor-android:0.4.9.11")
+}
+
+val torLibsDir = "src/main/jniLibs"
+
+val cleanTorBinaries by tasks.registering(Delete::class) {
+    delete(fileTree(torLibsDir))
+}
+
+val unpackTorBinaries by tasks.registering(Copy::class) {
+    dependsOn(cleanTorBinaries)
+    tor.files.forEach { from(zipTree(it)) }
+    into(torLibsDir)
+}
+
+tasks.named("preBuild") { dependsOn(unpackTorBinaries) }
+tasks.named("clean") { dependsOn(cleanTorBinaries) }
 
 dependencies {
     // Core / Compose
@@ -122,11 +151,22 @@ dependencies {
     implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.6.3")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.8.1")
 
-    // P2P transport: WebRTC (ICE/STUN/TURN + DataChannel)
-    implementation("io.getstream:stream-webrtc-android:1.3.10")
+    // P2P transport: Tor onion services. No server of ours is involved at
+    // any point - two devices find and reach each other directly over the
+    // public Tor network (free, no account, no registration), which also
+    // solves NAT traversal and hides both parties' real IP addresses from
+    // each other. See network/tor/TorTransport.kt.
+    implementation("org.briarproject:onionwrapper-android:0.1.6")
+    implementation("org.briarproject:jtorctl:0.5")
+    implementation("org.briarproject:socks-socket:0.1")
+    implementation("org.briarproject:dont-kill-me-lib:0.2.8")
 
-    // Signaling client (WebSocket to blind rendezvous relay)
-    implementation("com.squareup.okhttp3:okhttp:4.12.0")
+    // Local retry queue for messages to a contact who's currently unreachable,
+    // and a periodic safety-net that restarts the P2P foreground service if
+    // Android ever killed it.
+    implementation("androidx.work:work-runtime-ktx:2.9.1")
+    implementation("androidx.hilt:hilt-work:1.2.0")
+    ksp("androidx.hilt:hilt-compiler:1.2.0")
 
     // End-to-end encryption: Signal Protocol (X3DH + Double Ratchet)
     implementation("org.signal:libsignal-client:0.86.5")

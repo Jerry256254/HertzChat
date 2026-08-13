@@ -20,9 +20,6 @@ class SettingsViewModel @Inject constructor(
     val settings = settingsRepository.settings.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), AppSettings())
     val blockedContacts = contactDao.observeBlocked().stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
-    fun setRelayUrl(value: String) = viewModelScope.launch { settingsRepository.setRelayUrl(value) }
-    fun setTurnServer(url: String, username: String, password: String) =
-        viewModelScope.launch { settingsRepository.setTurnServer(url, username, password) }
     fun setDiscoverable(value: Boolean) = viewModelScope.launch { settingsRepository.setDiscoverable(value) }
     fun setAutoDownloadMedia(value: Boolean) = viewModelScope.launch { settingsRepository.setAutoDownloadMedia(value) }
     fun setMediaQuality(value: String) = viewModelScope.launch { settingsRepository.setMediaQuality(value) }
