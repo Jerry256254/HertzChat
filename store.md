@@ -10,10 +10,11 @@ category: Komunikace
 short_description: >-
   Peer-to-peer, end-to-end šifrovaný chat bez serveru a registrace.
 full_description: |-
-  Hertz Chat je chatovací aplikace bez centrálního serveru: zprávy, hlasovky,
-  obrázky a videa jdou vždy přímo mezi zařízeními přes WebRTC a jsou šifrované
-  Signal Protokolem (X3DH + Double Ratchet), takže je nikdy nikdo jiný nemůže
-  přečíst - ani autor aplikace.
+  Hertz Chat je textová chatovací aplikace bez centrálního serveru: zprávy
+  jdou vždy přímo mezi zařízeními přes WebRTC a jsou šifrované Signal
+  Protokolem (X3DH + Double Ratchet), takže je nikdy nikdo jiný nemůže
+  přečíst - ani autor aplikace. Sdílení obrázků, videí a hlasových zpráv je
+  naplánované pro některou z dalších verzí.
 
   Identita je čistě zařízení - žádné telefonní číslo, e-mail ani registrace.
   Kontakty se hledají mezi právě online uživateli, žádosti o přátelství se
@@ -28,9 +29,7 @@ tags:
 repository_url: https://github.com/Jerry256254/HertzChat
 download_url: https://github.com/Jerry256254/HertzChat/releases/latest
 logo: store/logo.png
-screenshots:
-  - store/screenshots/01_chat_list.png
-  - store/screenshots/02_chat.png
+screenshots: []
 changelog:
   - version: "0.1.0"
     date: 2026-08-13
@@ -41,6 +40,7 @@ changelog:
       - Seznam chatů s pinováním, textové zprávy
       - Přenos identity mezi zařízeními přes QR kód
       - Rozšířené nastavení soukromí a sítě
+      - Sdílení médií (obrázky/video/hlasovky) zatím není součástí této verze
 ---
 
 # Hertz Chat
@@ -49,10 +49,11 @@ Peer-to-peer, end-to-end šifrovaný chat bez serveru a registrace.
 
 ## Popis
 
-Hertz Chat je chatovací aplikace bez centrálního serveru: zprávy, hlasovky,
-obrázky a videa jdou vždy přímo mezi zařízeními přes WebRTC a jsou šifrované
-Signal Protokolem (X3DH + Double Ratchet), takže je nikdy nikdo jiný nemůže
-přečíst - ani autor aplikace.
+Hertz Chat je textová chatovací aplikace bez centrálního serveru: zprávy jdou
+vždy přímo mezi zařízeními přes WebRTC a jsou šifrované Signal Protokolem
+(X3DH + Double Ratchet), takže je nikdy nikdo jiný nemůže přečíst - ani autor
+aplikace. Sdílení obrázků, videí a hlasových zpráv je naplánované pro
+některou z dalších verzí.
 
 Identita je čistě zařízení - žádné telefonní číslo, e-mail ani registrace.
 Kontakty se hledají mezi právě online uživateli, žádosti o přátelství se
@@ -62,12 +63,6 @@ kódu.
 ## Logo
 
 ![Hertz Chat logo](store/logo.png)
-
-## Screenshoty
-
-| Seznam chatů | Konverzace |
-|---|---|
-| ![Seznam chatů](store/screenshots/01_chat_list.png) | ![Konverzace](store/screenshots/02_chat.png) |
 
 ## Odkazy
 
