@@ -29,7 +29,7 @@
     <string name="settings_notifications_subtitle">Vyskakovací upozornění, i když je appka zavřená (pokud má telefon internet)</string>
     <string name="settings_section_privacy">Soukromí a síť</string>
     <string name="settings_discoverable_title">Být dosažitelný</string>
-    <string name="settings_discoverable_subtitle">Vypnutím se úplně zastaví síť Tor i služba na pozadí - nikdo tě nenajde ani ti nemůže poslat zprávu, ale appka nespotřebovává baterii navíc.</string>
+    <string name="settings_discoverable_subtitle">Vypnutím se úplně zastaví síť I2P i služba na pozadí - nikdo tě nenajde ani ti nemůže poslat zprávu, ale appka nespotřebovává baterii navíc.</string>
     <string name="settings_auto_accept_title">Automaticky přijímat žádosti o přátelství</string>
     <string name="settings_auto_accept_subtitle">Nové kontakty se přidají rovnou, bez tvého potvrzení.</string>
     <string name="settings_allow_mistral_title">Povolit ostatním @Mistral u mých zpráv</string>
@@ -67,5 +67,5 @@
     <string name="settings_update_available">K dispozici je verze %1$s</string>
     <string name="settings_open_release">Otevřít stránku ke stažení</string>
     <string name="settings_section_about">O aplikaci</string>
-    <string name="settings_about_description">Open source, žádný server, end-to-end šifrované přes Signal Protokol, přenos přes síť Tor.</string>
+    <string name="settings_about_description">Open source, žádný server, end-to-end šifrované přes Signal Protokol, přenos přes síť I2P.</string>
 </resources>

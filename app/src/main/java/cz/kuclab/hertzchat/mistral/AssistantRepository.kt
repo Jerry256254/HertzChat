@@ -21,7 +21,7 @@ private const val HISTORY_WINDOW = 30
  * Owns the assistant's own local-only conversation history and talks to
  * [MistralApiClient] - entirely separate from the P2P/Signal pipeline in
  * [cz.kuclab.hertzchat.data.repository.P2pChatService], since this never
- * goes over Tor or through a Signal session at all.
+ * goes over I2P or through a Signal session at all.
  */
 @Singleton
 class AssistantRepository @Inject constructor(

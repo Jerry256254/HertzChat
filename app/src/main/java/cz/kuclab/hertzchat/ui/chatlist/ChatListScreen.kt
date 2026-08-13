@@ -1,11 +1,13 @@
 package cz.kuclab.hertzchat.ui.chatlist
 
-import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -18,20 +20,21 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.ChatBubbleOutline
 import androidx.compose.material.icons.filled.Groups
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.PushPin
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
-import androidx.compose.material3.HorizontalDivider
-import androidx.compose.material3.FloatingActionButton
+import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.LargeTopAppBar
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
-import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -44,11 +47,13 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import coil.compose.AsyncImage
 import cz.kuclab.hertzchat.R
+import cz.kuclab.hertzchat.ui.common.AppCard
 
 @Composable
 fun ChatListScreen(
@@ -65,8 +70,8 @@ fun ChatListScreen(
 
     Scaffold(
         topBar = {
-            TopAppBar(
-                title = { Text("Hertz Chat") },
+            LargeTopAppBar(
+                title = { Text("Hertz Chat", fontWeight = FontWeight.Bold) },
                 actions = {
                     IconButton(onClick = onOpenProfile) {
                         Icon(Icons.Filled.Person, contentDescription = "Profil")
@@ -75,28 +80,58 @@ fun ChatListScreen(
                         Icon(Icons.Filled.Settings, contentDescription = "Nastavení")
                     }
                 },
+                colors = TopAppBarDefaults.largeTopAppBarColors(containerColor = MaterialTheme.colorScheme.surface),
             )
         },
         floatingActionButton = {
-            FloatingActionButton(
+            ExtendedFloatingActionButton(
                 onClick = onOpenContacts,
                 containerColor = MaterialTheme.colorScheme.primary,
                 contentColor = MaterialTheme.colorScheme.onPrimary,
-            ) {
-                Icon(Icons.Filled.Add, contentDescription = "Nový chat")
-            }
+                icon = { Icon(Icons.Filled.Add, contentDescription = null) },
+                text = { Text("Nový chat") },
+            )
         },
     ) { padding ->
         if (items.isEmpty()) {
-            Box(modifier = Modifier.fillMaxSize().padding(padding).padding(32.dp), contentAlignment = Alignment.Center) {
+            Column(
+                modifier = Modifier.fillMaxSize().padding(padding).padding(32.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.Center,
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(88.dp)
+                        .clip(CircleShape)
+                        .background(MaterialTheme.colorScheme.primaryContainer),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Icon(
+                        Icons.Filled.ChatBubbleOutline,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.onPrimaryContainer,
+                        modifier = Modifier.size(40.dp),
+                    )
+                }
                 Text(
-                    "Zatím žádné chaty. Přidej si přátele přes tlačítko + (sdílej nebo naskenuj Hertz ID).",
-                    textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                    "Zatím žádné chaty",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.SemiBold,
+                    modifier = Modifier.padding(top = 20.dp),
+                )
+                Text(
+                    "Přidej si přátele přes tlačítko dole (sdílej nebo naskenuj Hertz ID).",
+                    textAlign = TextAlign.Center,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(top = 8.dp),
                 )
             }
         } else {
-            LazyColumn(modifier = Modifier.fillMaxSize().padding(padding)) {
+            LazyColumn(
+                modifier = Modifier.fillMaxSize(),
+                contentPadding = PaddingValues(start = 12.dp, end = 12.dp, top = padding.calculateTopPadding() + 8.dp, bottom = 96.dp),
+                verticalArrangement = Arrangement.spacedBy(4.dp),
+            ) {
                 items(items, key = { it.contactId }) { item ->
                     ChatListRow(
                         item = item,
@@ -110,7 +145,6 @@ fun ChatListScreen(
                         onTogglePin = { viewModel.togglePin(item) },
                         onBlock = { viewModel.block(item.contactId) },
                     )
-                    HorizontalDivider()
                 }
             }
         }
@@ -129,68 +163,79 @@ private fun ChatListRow(
     val isAssistant = item.kind == ChatListItemKind.ASSISTANT
     val isGroup = item.kind == ChatListItemKind.GROUP
 
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .combinedClickable(onClick = onClick, onLongClick = { if (!isAssistant) menuOpen = true })
-            .padding(horizontal = 16.dp, vertical = 12.dp),
-        verticalAlignment = Alignment.CenterVertically,
+    AppCard(
+        modifier = Modifier.fillMaxWidth(),
+        containerColor = if (item.pinned) MaterialTheme.colorScheme.secondaryContainer else MaterialTheme.colorScheme.surfaceContainer,
     ) {
-        if (!isAssistant) {
-            DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
-                DropdownMenuItem(
-                    text = { Text(if (item.pinned) "Odepnout" else "Připnout") },
-                    onClick = { menuOpen = false; onTogglePin() },
-                )
-                DropdownMenuItem(
-                    text = { Text("Blokovat") },
-                    onClick = { menuOpen = false; onBlock() },
-                )
-            }
-        }
-        Box(
+        Row(
             modifier = Modifier
-                .size(48.dp)
-                .clip(CircleShape)
-                .background(MaterialTheme.colorScheme.primaryContainer),
-            contentAlignment = Alignment.Center,
+                .fillMaxWidth()
+                .combinedClickable(onClick = onClick, onLongClick = { if (!isAssistant) menuOpen = true })
+                .padding(horizontal = 16.dp, vertical = 14.dp),
+            verticalAlignment = Alignment.CenterVertically,
         ) {
-            if (isAssistant) {
-                Image(
-                    painter = painterResource(R.drawable.mistral_avatar),
-                    contentDescription = null,
-                    contentScale = ContentScale.Crop,
-                    modifier = Modifier.fillMaxSize().clip(CircleShape),
-                )
-            } else if (isGroup) {
-                Icon(Icons.Filled.Groups, contentDescription = null, tint = MaterialTheme.colorScheme.onPrimaryContainer)
-            } else if (item.avatarPath != null) {
-                AsyncImage(
-                    model = java.io.File(item.avatarPath),
-                    contentDescription = null,
-                    contentScale = ContentScale.Crop,
-                    modifier = Modifier.fillMaxSize().clip(CircleShape),
-                )
-            } else {
-                Text(item.nickname.take(1).uppercase(), color = MaterialTheme.colorScheme.onPrimaryContainer)
-            }
-        }
-        Spacer(modifier = Modifier.width(12.dp))
-        Column(modifier = Modifier.weight(1f)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(item.nickname, fontWeight = FontWeight.SemiBold)
-                if (item.pinned) {
-                    Spacer(modifier = Modifier.width(4.dp))
-                    Icon(Icons.Filled.PushPin, contentDescription = "Připnuto", modifier = Modifier.size(14.dp))
+            if (!isAssistant) {
+                DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
+                    DropdownMenuItem(
+                        text = { Text(if (item.pinned) "Odepnout" else "Připnout") },
+                        onClick = { menuOpen = false; onTogglePin() },
+                    )
+                    DropdownMenuItem(
+                        text = { Text("Blokovat") },
+                        onClick = { menuOpen = false; onBlock() },
+                    )
                 }
             }
-            Text(
-                text = item.lastMessagePreview ?: "Zatím žádné zprávy",
-                style = MaterialTheme.typography.bodyLarge,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
+            Box(
+                modifier = Modifier
+                    .size(56.dp)
+                    .clip(CircleShape)
+                    .background(MaterialTheme.colorScheme.primaryContainer),
+                contentAlignment = Alignment.Center,
+            ) {
+                if (isAssistant) {
+                    Image(
+                        painter = painterResource(R.drawable.mistral_avatar),
+                        contentDescription = null,
+                        contentScale = ContentScale.Crop,
+                        modifier = Modifier.fillMaxSize().clip(CircleShape),
+                    )
+                } else if (isGroup) {
+                    Icon(Icons.Filled.Groups, contentDescription = null, tint = MaterialTheme.colorScheme.onPrimaryContainer)
+                } else if (item.avatarPath != null) {
+                    AsyncImage(
+                        model = java.io.File(item.avatarPath),
+                        contentDescription = null,
+                        contentScale = ContentScale.Crop,
+                        modifier = Modifier.fillMaxSize().clip(CircleShape),
+                    )
+                } else {
+                    Text(
+                        item.nickname.take(1).uppercase(),
+                        color = MaterialTheme.colorScheme.onPrimaryContainer,
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                    )
+                }
+            }
+            Spacer(modifier = Modifier.width(14.dp))
+            Column(modifier = Modifier.weight(1f)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(item.nickname, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleSmall)
+                    if (item.pinned) {
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Icon(Icons.Filled.PushPin, contentDescription = "Připnuto", modifier = Modifier.size(14.dp))
+                    }
+                }
+                Text(
+                    text = item.lastMessagePreview ?: "Zatím žádné zprávy",
+                    style = MaterialTheme.typography.bodyMedium,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(top = 2.dp),
+                )
+            }
         }
     }
 }

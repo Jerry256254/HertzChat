@@ -29,7 +29,7 @@ private const val NOTIFICATION_ID = 1
 private const val RETRY_WORK_NAME = "hertzchat_retry_wake"
 
 /**
- * Keeps the embedded Tor client (and our published onion service) alive
+ * Keeps the embedded I2P router (and our published destination) alive
  * while the app is in use, so friends can reach you and in-flight messages
  * don't get dropped because Android suspended the process in the background.
  */
@@ -49,8 +49,8 @@ class P2pForegroundService : Service() {
         scheduleRetryWakeWorker()
         messageNotifier.start(scope, p2pChatService)
         // React to the "Být dosažitelný" toggle live, not just at service start: turning it off
-        // should actually stop Tor and shut this service down instead of leaving an idle
-        // foreground service (and its wake lock machinery) running for nothing.
+        // should actually stop I2P and shut this service down instead of leaving an idle
+        // foreground service running for nothing.
         scope.launch {
             settingsRepository.settings.map { it.discoverable }.distinctUntilChanged().collect { discoverable ->
                 if (discoverable) {

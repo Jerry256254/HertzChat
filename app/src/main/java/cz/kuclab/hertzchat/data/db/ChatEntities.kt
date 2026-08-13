@@ -17,7 +17,7 @@ data class ContactEntity(
     @PrimaryKey val contactId: String, // stable fingerprint of the contact's identity key
     val nickname: String,
     val identityKeyBytes: ByteArray,
-    val onionAddress: String,
+    val i2pDestination: String,
     val avatarPath: String? = null,
     val pinned: Boolean = false,
     val blocked: Boolean = false,

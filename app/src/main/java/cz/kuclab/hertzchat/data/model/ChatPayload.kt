@@ -1,6 +1,6 @@
 package cz.kuclab.hertzchat.data.model
 
-import cz.kuclab.hertzchat.network.tor.HertzId
+import cz.kuclab.hertzchat.network.p2p.HertzId
 import kotlinx.serialization.Serializable
 
 /**

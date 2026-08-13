@@ -71,8 +71,8 @@ import cz.kuclab.hertzchat.ui.common.AppCard
 import cz.kuclab.hertzchat.ui.migration.QrCodeScannerAnalyzer
 import cz.kuclab.hertzchat.ui.migration.generateQrBitmap
 import java.util.concurrent.Executors
+import cz.kuclab.hertzchat.network.p2p.I2pState
 import kotlinx.coroutines.delay
-import org.briarproject.onionwrapper.TorWrapper
 
 @Composable
 fun ContactsScreen(
@@ -82,9 +82,9 @@ fun ContactsScreen(
     viewModel: ContactsViewModel = hiltViewModel(),
 ) {
     val requests by viewModel.incomingRequests.collectAsState()
-    val torState by viewModel.torState.collectAsState()
+    val i2pState by viewModel.i2pState.collectAsState()
     val bootstrapPercent by viewModel.bootstrapPercent.collectAsState()
-    val torError by viewModel.torError.collectAsState()
+    val i2pError by viewModel.i2pError.collectAsState()
     val addError by viewModel.addError.collectAsState()
     val addSuccess by viewModel.addSuccess.collectAsState()
     val myQrText by viewModel.myHertzIdQrText.collectAsState()
@@ -118,7 +118,7 @@ fun ContactsScreen(
                     )
                 }
             }
-            item { TorStatusRow(torState, bootstrapPercent, torError, onRetry = viewModel::retryTor) }
+            item { I2pStatusRow(i2pState, bootstrapPercent, i2pError, onRetry = viewModel::retryI2p) }
 
             item {
                 AppCard {
@@ -134,19 +134,19 @@ fun ContactsScreen(
                                     val bitmap = remember(qrText) { generateQrBitmap(qrText) }
                                     Image(bitmap = bitmap.asImageBitmap(), contentDescription = "Moje Hertz ID QR kód")
                                 }
-                                torError != null -> {
+                                i2pError != null -> {
                                     Column(
                                         horizontalAlignment = Alignment.CenterHorizontally,
                                         modifier = Modifier.size(220.dp),
                                         verticalArrangement = Arrangement.Center,
                                     ) {
                                         Text(
-                                            "Připojení k síti Tor selhalo",
+                                            "Připojení k síti I2P selhalo",
                                             style = MaterialTheme.typography.labelSmall,
                                             color = MaterialTheme.colorScheme.error,
                                             textAlign = androidx.compose.ui.text.style.TextAlign.Center,
                                         )
-                                        OutlinedButton(onClick = viewModel::retryTor, modifier = Modifier.padding(top = 12.dp)) {
+                                        OutlinedButton(onClick = viewModel::retryI2p, modifier = Modifier.padding(top = 12.dp)) {
                                             Text("Zkusit znovu")
                                         }
                                     }
@@ -155,7 +155,7 @@ fun ContactsScreen(
                                     Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.size(220.dp)) {
                                         CircularProgressIndicator(modifier = Modifier.padding(bottom = 12.dp))
                                         Text(
-                                            "Připravuje se tvoje adresa v síti Tor...",
+                                            "Připravuje se tvoje adresa v síti I2P...",
                                             style = MaterialTheme.typography.labelSmall,
                                             textAlign = androidx.compose.ui.text.style.TextAlign.Center,
                                         )
@@ -289,13 +289,12 @@ private fun MistralAssistantCard(configured: Boolean, onClick: () -> Unit) {
 }
 
 @Composable
-private fun TorStatusRow(state: TorWrapper.TorState?, bootstrapPercent: Int, error: String?, onRetry: () -> Unit) {
+private fun I2pStatusRow(state: I2pState?, bootstrapPercent: Int, error: String?, onRetry: () -> Unit) {
     val label = when {
-        error != null -> "Nepodařilo se připojit k síti Tor"
-        state == TorWrapper.TorState.CONNECTED -> "Připojeno k síti Tor"
-        state == TorWrapper.TorState.CONNECTING || state == TorWrapper.TorState.STARTING || state == TorWrapper.TorState.STARTED ->
-            "Připojování k síti Tor... $bootstrapPercent %"
-        state == TorWrapper.TorState.DISABLED -> "Síť vypnutá"
+        error != null -> "Nepodařilo se připojit k síti I2P"
+        state == I2pState.CONNECTED -> "Připojeno k síti I2P"
+        state == I2pState.STARTING -> "Připojování k síti I2P... $bootstrapPercent %"
+        state == I2pState.STOPPED -> "Síť vypnutá"
         else -> "Navazuje se spojení..."
     }
     val color = if (error != null) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant
@@ -308,7 +307,7 @@ private fun TorStatusRow(state: TorWrapper.TorState?, bootstrapPercent: Int, err
         }
         if (error != null) {
             Text(error, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.error)
-        } else if (state != TorWrapper.TorState.CONNECTED) {
+        } else if (state != I2pState.CONNECTED) {
             LinearProgressIndicator(modifier = Modifier.fillMaxWidth().padding(top = 4.dp).clip(RoundedCornerShape(4.dp)))
         }
     }

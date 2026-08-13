@@ -27,7 +27,7 @@
     <string name="settings_notifications_subtitle">Pop-up-Hinweise, auch wenn die App geschlossen ist (solange das Handy Internet hat)</string>
     <string name="settings_section_privacy">Datenschutz &amp; Netzwerk</string>
     <string name="settings_discoverable_title">Erreichbar sein</string>
-    <string name="settings_discoverable_subtitle">Wird dies deaktiviert, stoppt das Tor-Netzwerk und der Hintergrunddienst vollständig - niemand findet dich, aber die App verbraucht keinen zusätzlichen Akku.</string>
+    <string name="settings_discoverable_subtitle">Wird dies deaktiviert, stoppt das I2P-Netzwerk und der Hintergrunddienst vollständig - niemand findet dich, aber die App verbraucht keinen zusätzlichen Akku.</string>
     <string name="settings_auto_accept_title">Freundschaftsanfragen automatisch annehmen</string>
     <string name="settings_auto_accept_subtitle">Neue Kontakte werden sofort hinzugefügt, ohne deine Bestätigung.</string>
     <string name="settings_section_mistral">Mistral AI</string>
@@ -63,5 +63,5 @@
     <string name="settings_update_available">Version %1$s ist verfügbar</string>
     <string name="settings_open_release">Download-Seite öffnen</string>
     <string name="settings_section_about">Über die App</string>
-    <string name="settings_about_description">Open Source, kein Server, Ende-zu-Ende-verschlüsselt über das Signal-Protokoll, Übertragung über das Tor-Netzwerk.</string>
+    <string name="settings_about_description">Open Source, kein Server, Ende-zu-Ende-verschlüsselt über das Signal-Protokoll, Übertragung über das I2P-Netzwerk.</string>
 </resources>

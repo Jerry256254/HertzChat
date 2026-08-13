@@ -7,6 +7,7 @@ import androidx.security.crypto.MasterKey
 import cz.kuclab.hertzchat.crypto.IdentityKeyManager
 import cz.kuclab.hertzchat.crypto.RoomSignalProtocolStore
 import cz.kuclab.hertzchat.data.db.AppDatabase
+import cz.kuclab.hertzchat.data.db.MIGRATION_4_5
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
@@ -48,6 +49,9 @@ object DatabaseModule {
         val factory = SupportFactory(dbPassphrase(context))
         return Room.databaseBuilder(context, AppDatabase::class.java, "hertzchat.db")
             .openHelperFactory(factory)
+            .addMigrations(MIGRATION_4_5)
+            // Only bridges the gap for anyone still behind version 4 - a real
+            // Migration always wins over this when one is registered above.
             .fallbackToDestructiveMigration()
             .build()
     }

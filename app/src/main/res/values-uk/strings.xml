@@ -27,7 +27,7 @@
     <string name="settings_notifications_subtitle">Спливаючі сповіщення, навіть коли застосунок закрито (якщо телефон має інтернет)</string>
     <string name="settings_section_privacy">Конфіденційність і мережа</string>
     <string name="settings_discoverable_title">Бути доступним</string>
-    <string name="settings_discoverable_subtitle">Вимкнення повністю зупиняє мережу Tor і фонову службу - ніхто не зможе тебе знайти, але застосунок не витрачає зайвий заряд батареї.</string>
+    <string name="settings_discoverable_subtitle">Вимкнення повністю зупиняє мережу I2P і фонову службу - ніхто не зможе тебе знайти, але застосунок не витрачає зайвий заряд батареї.</string>
     <string name="settings_auto_accept_title">Автоматично приймати запити в друзі</string>
     <string name="settings_auto_accept_subtitle">Нові контакти додаються одразу, без твого підтвердження.</string>
     <string name="settings_section_mistral">Mistral AI</string>
@@ -63,5 +63,5 @@
     <string name="settings_update_available">Доступна версія %1$s</string>
     <string name="settings_open_release">Відкрити сторінку завантаження</string>
     <string name="settings_section_about">Про застосунок</string>
-    <string name="settings_about_description">Відкритий код, без сервера, наскрізне шифрування через протокол Signal, передача через мережу Tor.</string>
+    <string name="settings_about_description">Відкритий код, без сервера, наскрізне шифрування через протокол Signal, передача через мережу I2P.</string>
 </resources>

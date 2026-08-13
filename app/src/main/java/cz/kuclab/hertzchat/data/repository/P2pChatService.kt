@@ -25,11 +25,12 @@ import cz.kuclab.hertzchat.mistral.MISTRAL_ASSISTANT_CONTACT_ID
 import cz.kuclab.hertzchat.mistral.MistralApiClient
 import cz.kuclab.hertzchat.mistral.MistralKeyStore
 import cz.kuclab.hertzchat.mistral.MistralMessage
-import cz.kuclab.hertzchat.network.tor.FriendRequestPayload
-import cz.kuclab.hertzchat.network.tor.FriendResponsePayload
-import cz.kuclab.hertzchat.network.tor.HertzId
-import cz.kuclab.hertzchat.network.tor.TorConnection
-import cz.kuclab.hertzchat.network.tor.TorTransport
+import cz.kuclab.hertzchat.network.p2p.FriendRequestPayload
+import cz.kuclab.hertzchat.network.p2p.FriendResponsePayload
+import cz.kuclab.hertzchat.network.p2p.HertzId
+import cz.kuclab.hertzchat.network.p2p.I2pState
+import cz.kuclab.hertzchat.network.p2p.I2pTransport
+import cz.kuclab.hertzchat.network.p2p.P2pConnection
 import java.io.BufferedOutputStream
 import java.io.File
 import java.io.FileOutputStream
@@ -50,9 +51,8 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
-import org.briarproject.onionwrapper.TorWrapper
 
-// Wire framing prefix byte for the length-prefixed frames sent over a TorConnection.
+// Wire framing prefix byte for the length-prefixed frames sent over a P2pConnection.
 private const val FRAME_HELLO: Byte = 0
 private const val FRAME_MESSAGE: Byte = 1
 private const val FRAME_PREKEY: Byte = 2
@@ -76,7 +76,7 @@ sealed interface ChatServiceEvent {
 }
 
 /**
- * Orchestrates the whole P2P pipeline: Tor onion services are the transport
+ * Orchestrates the whole P2P pipeline: I2P destinations are the transport
  * (no server of ours or anyone's is ever involved in finding a peer or
  * carrying a message/media byte), and the Signal Protocol session per
  * contact is the end-to-end encryption. A message never exists in
@@ -91,7 +91,7 @@ class P2pChatService @Inject constructor(
     private val groupDao: GroupDao,
     private val groupMemberDao: GroupMemberDao,
     private val mediaStorage: MediaStorage,
-    private val torTransport: TorTransport,
+    private val i2pTransport: I2pTransport,
     private val settingsRepository: SettingsRepository,
     private val mistralKeyStore: MistralKeyStore,
     private val mistralApiClient: MistralApiClient,
@@ -99,17 +99,17 @@ class P2pChatService @Inject constructor(
     private val json = Json { ignoreUnknownKeys = true }
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
-    private val connections = mutableMapOf<String, TorConnection>()
+    private val connections = mutableMapOf<String, P2pConnection>()
     private val ciphers = mutableMapOf<String, MessageCipher>()
 
-    val torState: StateFlow<TorWrapper.TorState> get() = torTransport.state
-    val bootstrapPercent: StateFlow<Int> get() = torTransport.bootstrapPercent
-    val onionAddress: StateFlow<String?> get() = torTransport.onionAddress
-    val torError: StateFlow<String?> get() = torTransport.error
+    val i2pState: StateFlow<I2pState> get() = i2pTransport.state
+    val bootstrapPercent: StateFlow<Int> get() = i2pTransport.bootstrapPercent
+    val i2pDestination: StateFlow<String?> get() = i2pTransport.i2pDestination
+    val i2pError: StateFlow<String?> get() = i2pTransport.error
 
-    /** Retries starting the Tor client after a previous failure (e.g. no internet at the time). */
-    fun retryTor() {
-        torTransport.retry(identityKeyManager.torPrivateKey) { newKey -> identityKeyManager.torPrivateKey = newKey }
+    /** Retries starting the I2P router after a previous failure (e.g. no internet at the time). */
+    fun retryI2p() {
+        i2pTransport.start(identityKeyManager.i2pPrivateKey) { newKey -> identityKeyManager.i2pPrivateKey = newKey }
     }
 
     private val _incomingRequests = MutableStateFlow<List<IncomingFriendRequest>>(emptyList())
@@ -141,18 +141,18 @@ class P2pChatService @Inject constructor(
         if (started) return
         started = true
         scope.launch { contactDao.observeBlocked().collect { blocked -> blockedContactIds = blocked.map { it.contactId }.toSet() } }
-        torTransport.start(identityKeyManager.torPrivateKey) { newKey -> identityKeyManager.torPrivateKey = newKey }
+        i2pTransport.start(identityKeyManager.i2pPrivateKey) { newKey -> identityKeyManager.i2pPrivateKey = newKey }
         scope.launch {
-            torTransport.onionAddress.collect { address -> if (address != null) identityKeyManager.onionAddress = address }
+            i2pTransport.i2pDestination.collect { address -> if (address != null) identityKeyManager.i2pDestination = address }
         }
         scope.launch {
-            torTransport.incomingConnections.collect { socket -> handleIncomingSocket(socket) }
+            i2pTransport.incomingConnections.collect { socket -> handleIncomingSocket(socket) }
         }
         scope.launch { retryPendingLoop() }
     }
 
     fun stop() {
-        torTransport.stop()
+        i2pTransport.stop()
         connections.values.forEach { it.close() }
         connections.clear()
         started = false
@@ -163,31 +163,31 @@ class P2pChatService @Inject constructor(
 
     // --- Identity / friend requests ---
 
-    /** Null until Tor has published our onion service - there's no usable Hertz ID to share before that. */
+    /** Null until I2P has opened our destination - there's no usable Hertz ID to share before that. */
     fun myHertzId(): HertzId? {
-        val address = torTransport.onionAddress.value ?: return null
+        val address = i2pTransport.i2pDestination.value ?: return null
         return HertzId(
             contactId = identityKeyManager.contactId(),
             nickname = identityKeyManager.nickname,
             identityKeyBase64 = Base64.encodeToString(identityKeyManager.identityKeyPair().publicKey.serialize(), Base64.NO_WRAP),
-            onionAddress = address,
+            i2pDestination = address,
         )
     }
 
     /** Result carries a human-readable reason on failure, since "nothing happened" after scanning a QR code is a bad silent failure mode. */
     suspend fun sendFriendRequest(target: HertzId, viaGroupId: String? = null): Result<Unit> = withContext(Dispatchers.IO) {
-        val me = myHertzId() ?: return@withContext Result.failure(IllegalStateException("Tor síť ještě není připravená - zkus to za chvíli znovu"))
-        if (target.onionAddress.isBlank()) return@withContext Result.failure(IllegalStateException("Neplatné Hertz ID (chybí adresa)"))
+        val me = myHertzId() ?: return@withContext Result.failure(IllegalStateException("Síť I2P ještě není připravená - zkus to za chvíli znovu"))
+        if (target.i2pDestination.isBlank()) return@withContext Result.failure(IllegalStateException("Neplatné Hertz ID (chybí adresa)"))
         runCatching {
             val payload = FriendRequestPayload(
                 nickname = me.nickname,
                 identityKeyBase64 = me.identityKeyBase64,
-                onionAddress = me.onionAddress,
+                i2pDestination = me.i2pDestination,
                 preKeyBundle = identityKeyManager.currentPreKeyBundle().toWire(),
                 viaGroupId = viaGroupId,
                 allowsMistralAccess = settingsRepository.settings.first().allowMistralOnMyMessages,
             )
-            val connection = dialAndRegister(target.contactId, target.onionAddress)
+            val connection = dialAndRegister(target.contactId, target.i2pDestination)
             connection.send(frame(FRAME_FRIEND_REQUEST, json.encodeToString(payload).encodeToByteArray()))
         }
     }
@@ -199,7 +199,7 @@ class P2pChatService @Inject constructor(
                 request.contactId,
                 request.nickname,
                 request.request.identityKeyBase64,
-                request.request.onionAddress,
+                request.request.i2pDestination,
                 request.request.allowsMistralAccess,
             )
             cipherFor(request.contactId).establishSessionFromBundle(request.request.preKeyBundle.toPreKeyBundle())
@@ -211,24 +211,24 @@ class P2pChatService @Inject constructor(
                 accepted = accept,
                 nickname = me.nickname,
                 identityKeyBase64 = me.identityKeyBase64,
-                onionAddress = me.onionAddress,
+                i2pDestination = me.i2pDestination,
                 allowsMistralAccess = settingsRepository.settings.first().allowMistralOnMyMessages,
             )
             runCatching {
-                val connection = dialAndRegister(request.contactId, request.request.onionAddress)
+                val connection = dialAndRegister(request.contactId, request.request.i2pDestination)
                 connection.send(frame(FRAME_FRIEND_RESPONSE, json.encodeToString(response).encodeToByteArray()))
             }
         }
     }
 
-    private fun addTrustedContact(contactId: String, nickname: String, identityKeyBase64: String, onionAddress: String, allowsMistralAccess: Boolean = true) {
+    private fun addTrustedContact(contactId: String, nickname: String, identityKeyBase64: String, i2pDestination: String, allowsMistralAccess: Boolean = true) {
         scope.launch {
             contactDao.upsert(
                 ContactEntity(
                     contactId = contactId,
                     nickname = nickname,
                     identityKeyBytes = Base64.decode(identityKeyBase64, Base64.NO_WRAP),
-                    onionAddress = onionAddress,
+                    i2pDestination = i2pDestination,
                     addedAt = System.currentTimeMillis(),
                     allowsMistralAccess = allowsMistralAccess,
                 ),
@@ -249,7 +249,7 @@ class P2pChatService @Inject constructor(
 
             val me = myHertzId() ?: return@launch
             // Every member's HertzId (including the creator) so recipients who don't know each other yet can auto-introduce themselves.
-            val roster = listOf(me) + members.map { HertzId(it.contactId, it.nickname, Base64.encodeToString(it.identityKeyBytes, Base64.NO_WRAP), it.onionAddress) }
+            val roster = listOf(me) + members.map { HertzId(it.contactId, it.nickname, Base64.encodeToString(it.identityKeyBytes, Base64.NO_WRAP), it.i2pDestination) }
             val invite = ChatPayload(UUID.randomUUID().toString(), now, PayloadKind.GROUP_INVITE, groupId = groupId, groupName = name, groupMembers = roster)
             members.forEach { trySendPayload(it.contactId, invite) }
         }
@@ -425,25 +425,25 @@ class P2pChatService @Inject constructor(
         val contact = contactDao.find(contactId) ?: return false
         val envelope = cipherFor(contactId).encrypt(json.encodeToString(payload).encodeToByteArray())
         val frameType = if (envelope.isPreKeyMessage) FRAME_PREKEY else FRAME_MESSAGE
-        return sendFrameTo(contactId, contact.onionAddress, frame(frameType, envelope.ciphertext))
+        return sendFrameTo(contactId, contact.i2pDestination, frame(frameType, envelope.ciphertext))
     }
 
-    private suspend fun sendFrameTo(contactId: String, onionAddress: String, bytes: ByteArray): Boolean = runCatching {
+    private suspend fun sendFrameTo(contactId: String, i2pDestination: String, bytes: ByteArray): Boolean = runCatching {
         val connection = connections[contactId]?.takeIf { runCatching { it.send(bytes) }.isSuccess }
-            ?: dialAndRegister(contactId, onionAddress).also { it.send(bytes) }
+            ?: dialAndRegister(contactId, i2pDestination).also { it.send(bytes) }
         connection
     }.isSuccess
 
-    private suspend fun dialAndRegister(contactId: String, onionAddress: String): TorConnection = withContext(Dispatchers.IO) {
-        val socket: Socket = torTransport.connectTo(onionAddress)
-        val connection = TorConnection(socket)
+    private suspend fun dialAndRegister(contactId: String, i2pDestination: String): P2pConnection = withContext(Dispatchers.IO) {
+        val socket: Socket = i2pTransport.connectTo(i2pDestination)
+        val connection = P2pConnection(socket)
         connection.send(frame(FRAME_HELLO, identityKeyManager.contactId().encodeToByteArray()))
         registerConnection(contactId, connection)
         scope.launch { readLoop(contactId, connection) }
         connection
     }
 
-    private fun registerConnection(contactId: String, connection: TorConnection) {
+    private fun registerConnection(contactId: String, connection: P2pConnection) {
         connections.put(contactId, connection)?.let { old -> if (old !== connection) old.close() }
     }
 
@@ -495,7 +495,7 @@ class P2pChatService @Inject constructor(
                 while (offset < sourceBytes.size) {
                     val end = minOf(offset + MediaCrypto.CHUNK_SIZE, sourceBytes.size)
                     val cipherChunk = MediaCrypto.encryptChunk(key, nonceSalt, index, sourceBytes.copyOfRange(offset, end))
-                    check(sendFrameTo(contactId, contact.onionAddress, frameMediaChunk(transferId, index, cipherChunk)))
+                    check(sendFrameTo(contactId, contact.i2pDestination, frameMediaChunk(transferId, index, cipherChunk)))
                     offset = end
                     index++
                 }
@@ -539,7 +539,7 @@ class P2pChatService @Inject constructor(
                 while (offset < jpegBytes.size) {
                     val end = minOf(offset + MediaCrypto.CHUNK_SIZE, jpegBytes.size)
                     val cipherChunk = MediaCrypto.encryptChunk(key, nonceSalt, index, jpegBytes.copyOfRange(offset, end))
-                    check(sendFrameTo(contactId, contact.onionAddress, frameMediaChunk(transferId, index, cipherChunk)))
+                    check(sendFrameTo(contactId, contact.i2pDestination, frameMediaChunk(transferId, index, cipherChunk)))
                     offset = end
                     index++
                 }
@@ -650,13 +650,13 @@ class P2pChatService @Inject constructor(
                 trySendPayload(message.contactId, ChatPayload(message.messageId, message.timestamp, PayloadKind.TEXT, text = message.text))
             } else {
                 val bytes = message.mediaPath?.let { runCatching { File(it).readBytes() }.getOrNull() }
-                bytes != null && resendMedia(message, bytes, contact.onionAddress)
+                bytes != null && resendMedia(message, bytes, contact.i2pDestination)
             }
             if (delivered) messageDao.updateState(message.messageId, DeliveryState.SENT)
         }
     }
 
-    private suspend fun resendMedia(message: MessageEntity, sourceBytes: ByteArray, onionAddress: String): Boolean {
+    private suspend fun resendMedia(message: MessageEntity, sourceBytes: ByteArray, i2pDestination: String): Boolean {
         // A retried media message reuses a fresh transfer id/key - the original attempt may have
         // partially landed on the peer's side, and re-keying is simpler and just as cheap as
         // trying to resume a specific byte offset.
@@ -688,7 +688,7 @@ class P2pChatService @Inject constructor(
             while (offset < sourceBytes.size) {
                 val end = minOf(offset + MediaCrypto.CHUNK_SIZE, sourceBytes.size)
                 val cipherChunk = MediaCrypto.encryptChunk(key, nonceSalt, index, sourceBytes.copyOfRange(offset, end))
-                check(sendFrameTo(message.contactId, onionAddress, frameMediaChunk(transferId, index, cipherChunk)))
+                check(sendFrameTo(message.contactId, i2pDestination, frameMediaChunk(transferId, index, cipherChunk)))
                 offset = end
                 index++
             }
@@ -699,7 +699,7 @@ class P2pChatService @Inject constructor(
 
     private fun handleIncomingSocket(socket: Socket) {
         scope.launch {
-            val connection = TorConnection(socket)
+            val connection = P2pConnection(socket)
             var fromContactId: String? = null
             try {
                 while (true) {
@@ -728,7 +728,7 @@ class P2pChatService @Inject constructor(
         }
     }
 
-    private suspend fun readLoop(contactId: String, connection: TorConnection) {
+    private suspend fun readLoop(contactId: String, connection: P2pConnection) {
         try {
             while (true) {
                 val bytes = withContext(Dispatchers.IO) { connection.receive() }
@@ -806,7 +806,7 @@ class P2pChatService @Inject constructor(
         }.getOrNull() ?: return
         if (!response.accepted) return
         val senderContactId = identityKeyManager.contactIdFor(Base64.decode(response.identityKeyBase64, Base64.NO_WRAP))
-        addTrustedContact(senderContactId, response.nickname, response.identityKeyBase64, response.onionAddress, response.allowsMistralAccess)
+        addTrustedContact(senderContactId, response.nickname, response.identityKeyBase64, response.i2pDestination, response.allowsMistralAccess)
         mediaStorage.selfAvatarFile().takeIf { it.exists() }?.let { sendAvatarTo(senderContactId, it.readBytes()) }
     }
 

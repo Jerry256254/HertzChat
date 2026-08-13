@@ -2,8 +2,18 @@
 -keep class org.signal.libsignal.** { *; }
 -keepclassmembers class org.signal.libsignal.** { *; }
 
-# WebRTC
--keep class org.webrtc.** { *; }
+# I2P router/streaming - like SQLCipher below, this is a large third-party
+# library with real crypto/native (libjbigi.so) surface and no consumer
+# proguard rules of its own; keeping it whole avoids a repeat of the exact
+# class of crash that SQLCipher's stripped classes caused (R8 renaming
+# something a native/reflective caller expects by exact name).
+-keep class net.i2p.** { *; }
+-keepclassmembers class net.i2p.** { *; }
+-dontwarn net.i2p.**
+# Apache HttpClient code bundled inside net.i2p (used for I2P's own reseed
+# HTTPS fetches) references javax.naming/LDAP classes that don't exist on
+# Android - that code path isn't reachable from how we use the library.
+-dontwarn javax.naming.**
 
 # Room
 -keep class cz.kuclab.hertzchat.data.db.** { *; }

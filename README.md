@@ -13,12 +13,15 @@ appka není z Play Store.
 ## Funkce
 
 - **Skutečně bez serveru** — dvě zařízení se najdou a spojí přímo přes
-  veřejnou síť [Tor](https://www.torproject.org/) (každé zařízení si
-  publikuje vlastní "onion" adresu). Tor je zdarma, decentralizovaný,
-  nikým nevlastněný a nevyžaduje žádný účet ani registraci - a jako vedlejší
+  veřejnou síť [I2P](https://geti2p.net/) (každé zařízení si otevře vlastní
+  "destinaci" - I2P obdobu adresy). I2P je zdarma, decentralizovaná,
+  nikým nevlastněná a nevyžaduje žádný účet ani registraci - a jako vedlejší
   efekt to řeší i procházení NAT/routerů a schová oběma stranám navzájem
   jejich skutečnou IP adresu. Nikdy tu není žádný server (ani náš, ani
-  cizí), který by cokoliv přeposílal nebo ukládal.
+  cizí), který by cokoliv přeposílal nebo ukládal. Běží přímo v appce jako
+  obyčejný Java kód (ne jako samostatný spouštěný proces), takže appku
+  nemůže rozbít to, že Android v novějších verzích omezuje spouštění
+  vlastních binárek jako podprocesů - přesně to, co dřív rozbilo Tor.
 - **End-to-end šifrované** — text, obrázky, videa i hlasové zprávy jsou
   šifrované Signal Protokolem (X3DH + Double Ratchet). Média mají navíc
   vlastní jednorázový klíč doručený stejnou šifrovanou cestou, takže se
@@ -41,16 +44,16 @@ appka není z Play Store.
   centrálního adresáře nejde "procházet, kdo je zrovna online". Místo toho
   ukážeš příteli svoje Hertz ID (QR kód nebo textový řetězec) mimo appku -
   on ho naskenuje/vloží a pošle ti žádost o přátelství přímo na tvou
-  onion adresu. Přijímání žádostí lze v nastavení i zautomatizovat.
+  I2P adresu. Přijímání žádostí lze v nastavení i zautomatizovat.
 - **Vypínatelné pozadí** — "Být dosažitelný" v nastavení opravdu vypne
-  síť Tor i službu na pozadí, když zrovna nechceš být k zastižení - žádná
+  síť I2P i službu na pozadí, když zrovna nechceš být k zastižení - žádná
   appka tiše neběží dál a nebere baterii navíc.
 - **Kontrola aktualizací přímo v appce** — nastavení umí zkontrolovat
   nejnovější verzi na GitHubu a rovnou nabídnout stažení.
 - **Správa chatů** — připínání chatů, blokování uživatelů, historie zpráv
   šifrovaná na disku (SQLCipher, klíč vázaný na Android Keystore).
 - **Přenos identity mezi zařízeními** — naskenováním QR kódu ze starého
-  telefonu pokračuješ se stejnou identitou (i stejnou onion adresou) na
+  telefonu pokračuješ se stejnou identitou (i stejnou I2P adresou) na
   novém zařízení.
 - **Otevřený zdrojový kód** — kompletně, žádná skrytá součást.
 - **Volitelný Mistral AI asistent** — vestavěný chatovací asistent, vypnutý
@@ -90,8 +93,8 @@ Výsledný balíček najdete v `app/build/outputs/apk/debug/`.
 ## Technologie
 
 Kotlin, Jetpack Compose, Signal Protocol (`libsignal-client`) pro E2E
-šifrování, Tor onion služby (`org.briarproject:onionwrapper`) pro
-serverless P2P rendezvous a přenos, Room/SQLCipher pro lokální úložiště.
+šifrování, embedded I2P router (`net.i2p:router`) pro serverless P2P
+rendezvous a přenos, Room/SQLCipher pro lokální úložiště.
 
 ## Licence
 

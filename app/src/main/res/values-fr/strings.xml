@@ -27,7 +27,7 @@
     <string name="settings_notifications_subtitle">Alertes même quand l\'appli est fermée (si le téléphone a internet)</string>
     <string name="settings_section_privacy">Confidentialité et réseau</string>
     <string name="settings_discoverable_title">Être joignable</string>
-    <string name="settings_discoverable_subtitle">La désactivation arrête complètement le réseau Tor et le service en arrière-plan - personne ne peut te trouver, mais l\'appli ne consomme pas de batterie supplémentaire.</string>
+    <string name="settings_discoverable_subtitle">La désactivation arrête complètement le réseau I2P et le service en arrière-plan - personne ne peut te trouver, mais l\'appli ne consomme pas de batterie supplémentaire.</string>
     <string name="settings_auto_accept_title">Accepter automatiquement les demandes d\'ami</string>
     <string name="settings_auto_accept_subtitle">Les nouveaux contacts sont ajoutés directement, sans ta confirmation.</string>
     <string name="settings_section_mistral">Mistral AI</string>
@@ -63,5 +63,5 @@
     <string name="settings_update_available">La version %1$s est disponible</string>
     <string name="settings_open_release">Ouvrir la page de téléchargement</string>
     <string name="settings_section_about">À propos</string>
-    <string name="settings_about_description">Open source, aucun serveur, chiffré de bout en bout via le protocole Signal, transport via le réseau Tor.</string>
+    <string name="settings_about_description">Open source, aucun serveur, chiffré de bout en bout via le protocole Signal, transport via le réseau I2P.</string>
 </resources>

@@ -15,8 +15,8 @@ android {
         applicationId = "cz.kuclab.hertzchat"
         minSdk = 26
         targetSdk = 34
-        versionCode = 10
-        versionName = "0.8.0"
+        versionCode = 11
+        versionName = "0.9.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
@@ -78,53 +78,18 @@ android {
     packaging {
         resources {
             excludes += "/META-INF/{AL2.0,LGPL2.1}"
+            // I2P's jars carry duplicate licensing/service-loader metadata across modules.
+            excludes += "META-INF/LICENSE*"
+            pickFirsts += "META-INF/services/net.i2p.util.EventDispatcher"
         }
         jniLibs {
             // libsignal ships a *_testing variant of its native lib that's
             // only for the library's own test suite - it's dead weight
             // (tens of MB per ABI) in a shipped app and pulls in nothing we use.
             excludes += "**/libsignal_jni_testing.so"
-            keepDebugSymbols += "**/libtor.so"
         }
     }
 }
-
-// The Tor binary (used for onion-service based P2P rendezvous - see
-// network/tor/TorTransport.kt) ships as a plain jar with per-ABI libtor.so
-// files as raw entries, not as a proper AAR. Android 10+'s W^X policy means
-// a binary extracted to writable storage at runtime can't be executed - it
-// has to be installed as a real JNI library instead, so unpack it straight
-// into src/main/jniLibs before the build (same approach used by the Briar
-// messaging app, which this dependency comes from).
-//
-// lyrebird-android ships liblyrebird.so the same way. We never actually use
-// pluggable transports/bridges, but AndroidTorWrapper.installAssets() calls
-// installLyrebirdExecutable() unconditionally on every Tor start, and on
-// Android 10+ that throws FileNotFoundException if the lib isn't present as
-// a real JNI library - silently breaking Tor startup forever (it never
-// leaves NOT_STARTED, so the onion address never appears and every peer
-// looks permanently offline). Bundling the lib is the fix, not a feature we use.
-val tor: Configuration by configurations.creating
-
-dependencies {
-    tor("org.briarproject:tor-android:0.4.9.11")
-    tor("org.briarproject:lyrebird-android:0.5.0-3")
-}
-
-val torLibsDir = "src/main/jniLibs"
-
-val cleanTorBinaries by tasks.registering(Delete::class) {
-    delete(fileTree(torLibsDir))
-}
-
-val unpackTorBinaries by tasks.registering(Copy::class) {
-    dependsOn(cleanTorBinaries)
-    tor.files.forEach { from(zipTree(it)) }
-    into(torLibsDir)
-}
-
-tasks.named("preBuild") { dependsOn(unpackTorBinaries) }
-tasks.named("clean") { dependsOn(cleanTorBinaries) }
 
 dependencies {
     // Core / Compose
@@ -161,15 +126,27 @@ dependencies {
     implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.6.3")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.8.1")
 
-    // P2P transport: Tor onion services. No server of ours is involved at
+    // P2P transport: an embedded I2P router. No server of ours is involved at
     // any point - two devices find and reach each other directly over the
-    // public Tor network (free, no account, no registration), which also
+    // public I2P network (free, no account, no registration), which also
     // solves NAT traversal and hides both parties' real IP addresses from
-    // each other. See network/tor/TorTransport.kt.
-    implementation("org.briarproject:onionwrapper-android:0.1.6")
-    implementation("org.briarproject:jtorctl:0.5")
-    implementation("org.briarproject:socks-socket:0.1")
-    implementation("org.briarproject:dont-kill-me-lib:0.2.8")
+    // each other. See network/i2p/I2pTransport.kt.
+    //
+    // Unlike the Tor daemon this replaces, the I2P router is a plain Java
+    // class run in-process (new Router(...).runRouter()) rather than a
+    // separate executable launched via ProcessBuilder - Android 10+'s
+    // restrictions on executing arbitrary binaries as subprocesses (which
+    // broke Tor on real hardware: java.io.IOException naming the extracted
+    // libtor.so path, with no workaround from application code) don't apply
+    // here. Its one native library (libjbigi.so, a modular-exponentiation
+    // accelerator bundled inside net.i2p.android:client) is a normal JNI
+    // library loaded in-process, the same mechanism already used successfully
+    // for SQLCipher and libsignal in this app - not a subprocess.
+    implementation("net.i2p:i2p:2.7.0")
+    implementation("net.i2p:router:2.7.0")
+    implementation("net.i2p.client:mstreaming:2.7.0")
+    implementation("net.i2p.client:streaming:2.7.0")
+    implementation("net.i2p.android:client:0.9.49")
 
     // Local retry queue for messages to a contact who's currently unreachable,
     // and a periodic safety-net that restarts the P2P foreground service if

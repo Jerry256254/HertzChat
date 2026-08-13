@@ -6,7 +6,7 @@ import cz.kuclab.hertzchat.data.db.ContactDao
 import cz.kuclab.hertzchat.data.repository.IncomingFriendRequest
 import cz.kuclab.hertzchat.data.repository.P2pChatService
 import cz.kuclab.hertzchat.mistral.MistralKeyStore
-import cz.kuclab.hertzchat.network.tor.HertzId
+import cz.kuclab.hertzchat.network.p2p.HertzId
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -37,14 +37,14 @@ class ContactsViewModel @Inject constructor(
     }
 
     val incomingRequests = p2pChatService.incomingRequests
-    val torState = p2pChatService.torState.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
+    val i2pState = p2pChatService.i2pState.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
     val bootstrapPercent = p2pChatService.bootstrapPercent.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 0)
-    val torError = p2pChatService.torError.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
+    val i2pError = p2pChatService.i2pError.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
 
-    fun retryTor() = p2pChatService.retryTor()
+    fun retryI2p() = p2pChatService.retryI2p()
 
-    /** Null until Tor has published our onion service - the QR/ID isn't shareable before that. */
-    val myHertzIdQrText: StateFlow<String?> = p2pChatService.onionAddress
+    /** Null until I2P has opened our destination - the QR/ID isn't shareable before that. */
+    val myHertzIdQrText: StateFlow<String?> = p2pChatService.i2pDestination
         .map { it?.let { json.encodeToString(p2pChatService.myHertzId()) } }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
 

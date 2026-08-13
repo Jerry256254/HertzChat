@@ -27,8 +27,8 @@ private const val PREFS_NAME = "hertzchat_identity_prefs"
 private const val KEY_IDENTITY_KEYPAIR = "identity_keypair"
 private const val KEY_REGISTRATION_ID = "registration_id"
 private const val KEY_NICKNAME = "nickname"
-private const val KEY_TOR_PRIVATE_KEY = "tor_private_key"
-private const val KEY_TOR_ONION_ADDRESS = "tor_onion_address"
+private const val KEY_I2P_PRIVATE_KEY = "i2p_private_key"
+private const val KEY_I2P_DESTINATION = "i2p_destination"
 
 private const val ONE_TIME_PREKEY_COUNT = 100
 private const val ONE_TIME_PREKEY_LOW_WATERMARK = 20
@@ -90,14 +90,14 @@ class IdentityKeyManager @Inject constructor(
     /** Stable, shareable contact ID derived from the public identity key - this is what you show a friend so they can find/add you. */
     fun contactId(): String = contactIdFor(identityKeyPair().publicKey.serialize())
 
-    /** Opaque Tor ADD_ONION key blob - empty until [TorTransport][cz.kuclab.hertzchat.network.tor.TorTransport] first publishes our hidden service, after which it's persisted so the .onion address stays stable across restarts. */
-    var torPrivateKey: String
-        get() = prefs.getString(KEY_TOR_PRIVATE_KEY, "") ?: ""
-        set(value) = prefs.edit().putString(KEY_TOR_PRIVATE_KEY, value).apply()
+    /** Opaque I2P destination keypair blob - empty until [I2pTransport][cz.kuclab.hertzchat.network.p2p.I2pTransport] first opens our destination, after which it's persisted so the address stays stable across restarts. */
+    var i2pPrivateKey: String
+        get() = prefs.getString(KEY_I2P_PRIVATE_KEY, "") ?: ""
+        set(value) = prefs.edit().putString(KEY_I2P_PRIVATE_KEY, value).apply()
 
-    var onionAddress: String
-        get() = prefs.getString(KEY_TOR_ONION_ADDRESS, "") ?: ""
-        set(value) = prefs.edit().putString(KEY_TOR_ONION_ADDRESS, value).apply()
+    var i2pDestination: String
+        get() = prefs.getString(KEY_I2P_DESTINATION, "") ?: ""
+        set(value) = prefs.edit().putString(KEY_I2P_DESTINATION, value).apply()
 
     fun contactIdFor(identityKeyBytes: ByteArray): String {
         val digest = MessageDigest.getInstance("SHA-256").digest(identityKeyBytes)
@@ -189,7 +189,7 @@ class IdentityKeyManager @Inject constructor(
             append("\"identityKeyPair\":\"").append(Base64.encodeToString(identityKeyPair().serialize(), Base64.NO_WRAP)).append("\",")
             append("\"registrationId\":").append(registrationId()).append(',')
             append("\"nickname\":\"").append(nickname.replace("\"", "")).append("\",")
-            append("\"torPrivateKey\":\"").append(torPrivateKey).append('"')
+            append("\"i2pPrivateKey\":\"").append(i2pPrivateKey).append('"')
             append('}')
         }
         return payload
@@ -197,8 +197,8 @@ class IdentityKeyManager @Inject constructor(
 
     /**
      * Overwrites the local identity with one exported from another device,
-     * including the Tor onion key - without that, contacts would keep
-     * trying to reach the old device's .onion address and never find the
+     * including the I2P destination key - without that, contacts would keep
+     * trying to reach the old device's destination and never find the
      * new one. Only ever call this from a dedicated migration flow the user
      * explicitly confirmed.
      */
@@ -210,8 +210,8 @@ class IdentityKeyManager @Inject constructor(
             .putString(KEY_IDENTITY_KEYPAIR, Base64.encodeToString(keyPairBytes, Base64.NO_WRAP))
             .putInt(KEY_REGISTRATION_ID, obj.getInt("registrationId"))
             .putString(KEY_NICKNAME, obj.getString("nickname"))
-            .putString(KEY_TOR_PRIVATE_KEY, obj.optString("torPrivateKey", ""))
-            .remove(KEY_TOR_ONION_ADDRESS) // republished on next start; keep the key, drop the cached address until Tor confirms it
+            .putString(KEY_I2P_PRIVATE_KEY, obj.optString("i2pPrivateKey", ""))
+            .remove(KEY_I2P_DESTINATION) // republished on next start; keep the key, drop the cached address until I2P confirms it
             .apply()
     }
 

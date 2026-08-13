@@ -27,7 +27,7 @@
     <string name="settings_notifications_subtitle">Avisos emergentes aunque la app esté cerrada (si el teléfono tiene internet)</string>
     <string name="settings_section_privacy">Privacidad y red</string>
     <string name="settings_discoverable_title">Estar disponible</string>
-    <string name="settings_discoverable_subtitle">Al desactivarlo se detiene por completo la red Tor y el servicio en segundo plano - nadie puede encontrarte, pero la app no consume batería extra.</string>
+    <string name="settings_discoverable_subtitle">Al desactivarlo se detiene por completo la red I2P y el servicio en segundo plano - nadie puede encontrarte, pero la app no consume batería extra.</string>
     <string name="settings_auto_accept_title">Aceptar automáticamente solicitudes de amistad</string>
     <string name="settings_auto_accept_subtitle">Los nuevos contactos se añaden directamente, sin tu confirmación.</string>
     <string name="settings_section_mistral">Mistral AI</string>
@@ -63,5 +63,5 @@
     <string name="settings_update_available">Hay disponible la versión %1$s</string>
     <string name="settings_open_release">Abrir página de descarga</string>
     <string name="settings_section_about">Acerca de</string>
-    <string name="settings_about_description">Código abierto, sin servidor, cifrado de extremo a extremo mediante el protocolo Signal, transporte a través de la red Tor.</string>
+    <string name="settings_about_description">Código abierto, sin servidor, cifrado de extremo a extremo mediante el protocolo Signal, transporte a través de la red I2P.</string>
 </resources>

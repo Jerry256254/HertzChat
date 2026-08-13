@@ -27,7 +27,7 @@
     <string name="settings_notifications_subtitle">Pop-up alerts even when the app is closed (as long as the phone has internet)</string>
     <string name="settings_section_privacy">Privacy &amp; network</string>
     <string name="settings_discoverable_title">Be reachable</string>
-    <string name="settings_discoverable_subtitle">Turning this off fully stops the Tor network and the background service - nobody can find or message you, but the app uses no extra battery.</string>
+    <string name="settings_discoverable_subtitle">Turning this off fully stops the I2P network and the background service - nobody can find or message you, but the app uses no extra battery.</string>
     <string name="settings_auto_accept_title">Auto-accept friend requests</string>
     <string name="settings_auto_accept_subtitle">New contacts get added right away, without your confirmation.</string>
     <string name="settings_allow_mistral_title">Allow others to @Mistral my messages</string>
@@ -65,5 +65,5 @@
     <string name="settings_update_available">Version %1$s is available</string>
     <string name="settings_open_release">Open download page</string>
     <string name="settings_section_about">About</string>
-    <string name="settings_about_description">Open source, no server, end-to-end encrypted via the Signal Protocol, transported over the Tor network.</string>
+    <string name="settings_about_description">Open source, no server, end-to-end encrypted via the Signal Protocol, transported over the I2P network.</string>
 </resources>

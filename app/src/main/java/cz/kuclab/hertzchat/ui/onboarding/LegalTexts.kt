@@ -6,7 +6,7 @@ const val TERMS_TEXT = """Podmínky užití Hertz Chat
 Hertz Chat je peer-to-peer (P2P) komunikační aplikace s koncovým šifrováním.
 Neexistuje žádný centrální server - ani provozovaný autorem aplikace, ani
 třetí stranou. Zařízení se navzájem nachází a spojují přímo přes veřejnou
-síť Tor; zprávy a soubory se přenáší přímo mezi zařízeními a zůstávají
+síť I2P; zprávy a soubory se přenáší přímo mezi zařízeními a zůstávají
 uložené pouze lokálně na zařízeních účastníků konverzace.
 
 2. Identita a účet
@@ -67,12 +67,12 @@ Co aplikace NEsbírá ani neukládá vůbec nikde:
 - obsah zpráv, hlasových zpráv, obrázků ani videí,
 - seznam tvých kontaktů,
 - tvoje jméno, telefonní číslo ani e-mail (aplikace je nevyžaduje),
-- tvoji skutečnou IP adresu vůči tvým kontaktům (o tu se stará Tor).
+- tvoji skutečnou IP adresu vůči tvým kontaktům (o tu se stará I2P).
 
 Jak tě může někdo najít:
 - neexistuje žádný adresář ani seznam "kdo je online" - kontaktovat můžeš
   jen někoho, jehož Hertz ID už znáš (dostal jsi ho mimo appku - QR kód,
-  ústně, jinou appkou). Žádost appka pošle přímo na jeho onion adresu.
+  ústně, jinou appkou). Žádost appka pošle přímo na jeho I2P adresu.
 
 Kde jsou tvoje data doopravdy uložená:
 - výhradně na tvém zařízení, v databázi zašifrované klíčem vázaným na

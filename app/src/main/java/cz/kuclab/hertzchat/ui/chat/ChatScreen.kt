@@ -17,6 +17,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.AttachFile
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.Send
@@ -30,6 +31,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
@@ -49,7 +51,11 @@ import coil.compose.AsyncImage
 import cz.kuclab.hertzchat.data.db.MessageEntity
 import cz.kuclab.hertzchat.data.db.MessageType
 import cz.kuclab.hertzchat.media.VoiceRecorder
+import cz.kuclab.hertzchat.ui.theme.HertzGreen
 import java.io.File
+
+private val BubbleShapeMine = RoundedCornerShape(topStart = 18.dp, topEnd = 18.dp, bottomStart = 18.dp, bottomEnd = 4.dp)
+private val BubbleShapeTheirs = RoundedCornerShape(topStart = 18.dp, topEnd = 18.dp, bottomStart = 4.dp, bottomEnd = 18.dp)
 
 @Composable
 fun ChatScreen(contactId: String, onBack: () -> Unit, viewModel: ChatViewModel = hiltViewModel()) {
@@ -80,11 +86,12 @@ fun ChatScreen(contactId: String, onBack: () -> Unit, viewModel: ChatViewModel =
     Scaffold(
         topBar = {
             TopAppBar(
+                navigationIcon = { IconButton(onClick = onBack) { Icon(Icons.Filled.ArrowBack, contentDescription = "Zpět") } },
                 title = {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Box(
                             modifier = Modifier
-                                .size(36.dp)
+                                .size(38.dp)
                                 .clip(CircleShape)
                                 .background(MaterialTheme.colorScheme.primaryContainer),
                             contentAlignment = Alignment.Center,
@@ -94,21 +101,21 @@ fun ChatScreen(contactId: String, onBack: () -> Unit, viewModel: ChatViewModel =
                                     model = File(avatarPath!!),
                                     contentDescription = null,
                                     contentScale = ContentScale.Crop,
-                                    modifier = Modifier.fillMaxWidth().size(36.dp).clip(CircleShape),
+                                    modifier = Modifier.fillMaxWidth().size(38.dp).clip(CircleShape),
                                 )
                             } else {
                                 Text(nickname.take(1).uppercase(), color = MaterialTheme.colorScheme.onPrimaryContainer)
                             }
                         }
-                        Text(nickname, modifier = Modifier.padding(start = 12.dp))
+                        Text(nickname, modifier = Modifier.padding(start = 12.dp), style = MaterialTheme.typography.titleMedium)
                     }
                 },
             )
         },
         bottomBar = {
             Row(
-                modifier = Modifier.fillMaxWidth().padding(8.dp),
-                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 10.dp),
+                verticalAlignment = Alignment.Bottom,
             ) {
                 Box {
                     IconButton(onClick = { attachMenuOpen = true }) {
@@ -131,31 +138,49 @@ fun ChatScreen(contactId: String, onBack: () -> Unit, viewModel: ChatViewModel =
                     onValueChange = viewModel::onDraftChange,
                     modifier = Modifier.weight(1f),
                     placeholder = { Text("Zpráva") },
+                    shape = RoundedCornerShape(24.dp),
+                    colors = TextFieldDefaults.colors(
+                        unfocusedContainerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+                        focusedContainerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+                        unfocusedIndicatorColor = androidx.compose.ui.graphics.Color.Transparent,
+                        focusedIndicatorColor = androidx.compose.ui.graphics.Color.Transparent,
+                    ),
                 )
-                IconButton(onClick = {
-                    if (isRecording) {
-                        isRecording = false
-                        voiceRecorder.stop()?.let { (file, durationMs) ->
-                            if (durationMs > 400) viewModel.sendVoice(file, durationMs) else file.delete()
-                        }
-                    } else {
-                        val hasPermission = ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED
-                        if (hasPermission) {
-                            isRecording = true
-                            voiceRecorder.start()
-                        } else {
-                            micPermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
-                        }
+                Box(modifier = Modifier.padding(start = 4.dp)) {
+                    IconButton(
+                        onClick = {
+                            if (isRecording) {
+                                isRecording = false
+                                voiceRecorder.stop()?.let { (file, durationMs) ->
+                                    if (durationMs > 400) viewModel.sendVoice(file, durationMs) else file.delete()
+                                }
+                            } else if (draft.isNotBlank()) {
+                                viewModel.send()
+                            } else {
+                                val hasPermission = ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED
+                                if (hasPermission) {
+                                    isRecording = true
+                                    voiceRecorder.start()
+                                } else {
+                                    micPermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
+                                }
+                            }
+                        },
+                        modifier = Modifier
+                            .size(44.dp)
+                            .clip(CircleShape)
+                            .background(if (isRecording) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary),
+                    ) {
+                        Icon(
+                            when {
+                                isRecording -> Icons.Filled.Stop
+                                draft.isNotBlank() -> Icons.Filled.Send
+                                else -> Icons.Filled.Mic
+                            },
+                            contentDescription = if (isRecording) "Zastavit nahrávání" else if (draft.isNotBlank()) "Odeslat" else "Nahrát hlasovku",
+                            tint = MaterialTheme.colorScheme.onPrimary,
+                        )
                     }
-                }) {
-                    Icon(
-                        if (isRecording) Icons.Filled.Stop else Icons.Filled.Mic,
-                        contentDescription = if (isRecording) "Zastavit nahrávání" else "Nahrát hlasovku",
-                        tint = if (isRecording) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface,
-                    )
-                }
-                IconButton(onClick = viewModel::send) {
-                    Icon(Icons.Filled.Send, contentDescription = "Odeslat")
                 }
             }
         },
@@ -190,16 +215,17 @@ private fun MessageBubble(message: MessageEntity) {
     val isAssistant = message.fromAssistant
     val bubbleColor = when {
         isAssistant -> MaterialTheme.colorScheme.tertiaryContainer
-        message.fromMe -> MaterialTheme.colorScheme.primary
+        message.fromMe -> HertzGreen
         else -> MaterialTheme.colorScheme.surfaceVariant
     }
     val textColor = when {
         isAssistant -> MaterialTheme.colorScheme.onTertiaryContainer
-        message.fromMe -> MaterialTheme.colorScheme.onPrimary
+        message.fromMe -> androidx.compose.ui.graphics.Color.White
         else -> MaterialTheme.colorScheme.onSurfaceVariant
     }
     val alignedRight = message.fromMe && !isAssistant
     val alignment = if (alignedRight) Alignment.CenterEnd else Alignment.CenterStart
+    val bubbleShape = if (alignedRight) BubbleShapeMine else BubbleShapeTheirs
 
     androidx.compose.foundation.layout.Column(modifier = Modifier.fillMaxWidth(), horizontalAlignment = if (alignedRight) Alignment.End else Alignment.Start) {
         if (isAssistant) {
@@ -214,9 +240,9 @@ private fun MessageBubble(message: MessageEntity) {
             when (message.type) {
                 MessageType.TEXT -> Box(
                     modifier = Modifier
-                        .clip(RoundedCornerShape(16.dp))
+                        .clip(bubbleShape)
                         .background(bubbleColor)
-                        .padding(horizontal = 14.dp, vertical = 8.dp),
+                        .padding(horizontal = 14.dp, vertical = 10.dp),
                 ) {
                     Text(message.text.orEmpty(), color = textColor)
                 }
@@ -224,16 +250,16 @@ private fun MessageBubble(message: MessageEntity) {
                 MessageType.VIDEO -> VideoBubble(message)
                 MessageType.VOICE -> Box(
                     modifier = Modifier
-                        .clip(RoundedCornerShape(16.dp))
+                        .clip(bubbleShape)
                         .background(bubbleColor),
                 ) {
                     VoiceBubble(message, onSurface = textColor, accent = textColor)
                 }
                 MessageType.FILE -> Box(
                     modifier = Modifier
-                        .clip(RoundedCornerShape(16.dp))
+                        .clip(bubbleShape)
                         .background(bubbleColor)
-                        .padding(horizontal = 14.dp, vertical = 8.dp),
+                        .padding(horizontal = 14.dp, vertical = 10.dp),
                 ) {
                     Text("Soubor", color = textColor)
                 }
@@ -244,7 +270,7 @@ private fun MessageBubble(message: MessageEntity) {
                 text = deliveryStateLabel(message.deliveryState),
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(horizontal = 4.dp),
+                modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp),
             )
         }
     }

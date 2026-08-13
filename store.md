@@ -2,20 +2,20 @@
 schema_version: 1
 app_name: Hertz Chat
 package_id: cz.kuclab.hertzchat
-version_name: "0.8.0"
-version_code: 10
+version_name: "0.9.0"
+version_code: 11
 last_updated: 2026-08-13
 license: MIT
 category: Komunikace
 short_description: >-
-  Peer-to-peer, end-to-end šifrovaný chat bez serveru, přes síť Tor.
+  Peer-to-peer, end-to-end šifrovaný chat bez serveru, přes síť I2P.
 full_description: |-
   Hertz Chat je chatovací aplikace, za kterou nestojí žádný server - ani náš,
-  ani cizí. Dvě zařízení se najdou a spojí přímo přes veřejnou síť Tor
-  (každé si publikuje vlastní onion adresu), zdarma, bez registrace, bez
-  jakékoliv firmy uprostřed. Text, obrázky, videa i hlasové zprávy jsou navíc
-  šifrované Signal Protokolem (X3DH + Double Ratchet), takže je nikdy nikdo
-  jiný nemůže přečíst - ani autor aplikace.
+  ani cizí. Dvě zařízení se najdou a spojí přímo přes veřejnou síť I2P
+  (každé si otevře vlastní "destinaci" - I2P obdobu adresy), zdarma, bez
+  registrace, bez jakékoliv firmy uprostřed. Text, obrázky, videa i hlasové
+  zprávy jsou navíc šifrované Signal Protokolem (X3DH + Double Ratchet),
+  takže je nikdy nikdo jiný nemůže přečíst - ani autor aplikace.
 
   Identita je čistě zařízení - žádné telefonní číslo, e-mail ani registrace.
   Bez centrálního adresáře nejde procházet cizí online uživatele - kontakty
@@ -27,12 +27,20 @@ tags:
   - encryption
   - p2p
   - privacy
-  - tor
+  - i2p
 repository_url: https://github.com/Jerry256254/HertzChat
 download_url: https://github.com/Jerry256254/HertzChat/releases/latest
 logo: store/logo.png
 screenshots: []
 changelog:
+  - version: "0.9.0"
+    date: 2026-08-13
+    notes:
+      - "Zásadní změna architektury: síť Tor nahrazena sítí I2P. Na reálném zařízení se ukázalo, že Android v novějších verzích umí zablokovat spouštění vlastní binárky (tor) jako podprocesu - appka na to narážela nepředvídatelně a bez opravy z naší strany. I2P router běží přímo v appce jako obyčejný Java kód, ne jako spouštěný proces, takže na stejný problém narazit nemůže."
+      - "Oprava: release v0.8.0 omylem obsahoval starší sestavení appky (verze 0.7.0) - appka si po instalaci nejnovějšího souboru mylně myslela, že běží stará verze"
+      - "Oprava: aktualizace appky už nemaže uloženou historii zpráv a kontakty (kromě jednorázového smazání při přechodu na tuto verzi) - od teď mají databázové změny opravdovou migraci, ne jen smazání a založení znovu"
+      - Redesign seznamu chatů a otevřeného chatu (větší úvodní lišta, výraznější avatary, karty místo rovných řádků, zaoblené „bubliny" zpráv s ocáskem, kulaté tlačítko odeslat/nahrát)
+      - Oprava chybějícího tlačítka zpět v otevřeném chatu
   - version: "0.8.0"
     date: 2026-08-13
     notes:
@@ -112,12 +120,12 @@ changelog:
 
 # Hertz Chat
 
-Peer-to-peer, end-to-end šifrovaný chat bez serveru, přes síť Tor.
+Peer-to-peer, end-to-end šifrovaný chat bez serveru, přes síť I2P.
 
 ## Popis
 
 Hertz Chat je chatovací aplikace, za kterou nestojí žádný server - ani náš,
-ani cizí. Dvě zařízení se najdou a spojí přímo přes veřejnou síť Tor, zdarma,
+ani cizí. Dvě zařízení se najdou a spojí přímo přes veřejnou síť I2P, zdarma,
 bez registrace. Text, obrázky, videa i hlasové zprávy jsou navíc šifrované
 Signal Protokolem (X3DH + Double Ratchet), takže je nikdy nikdo jiný nemůže
 přečíst - ani autor aplikace.
