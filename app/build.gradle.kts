@@ -15,8 +15,8 @@ android {
         applicationId = "cz.kuclab.hertzchat"
         minSdk = 26
         targetSdk = 34
-        versionCode = 11
-        versionName = "0.9.0"
+        versionCode = 12
+        versionName = "0.9.1"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 

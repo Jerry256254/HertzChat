@@ -32,7 +32,8 @@ enum class I2pState { NOT_STARTED, STARTING, CONNECTED, STOPPED }
 private const val I2CP_HOST = "127.0.0.1"
 private const val I2CP_PORT = 7654
 private const val ROUTER_START_TIMEOUT_MS = 90_000L
-private const val SOCKET_MANAGER_TIMEOUT_MS = 60_000L
+private const val SOCKET_MANAGER_TIMEOUT_MS = 120_000L
+private const val I2CP_RETRY_DELAY_MS = 1_000L
 private const val READY_PEER_COUNT = 3
 
 /**
@@ -108,7 +109,11 @@ class I2pTransport @Inject constructor(
                 return@launch
             }
 
-            monitorReadiness()
+            // Best-effort progress/ready signal only - a failure here must never crash the
+            // app or leave the destination we just opened unusable, so it's non-fatal.
+            runCatching { monitorReadiness() }.onFailure {
+                _state.value = I2pState.CONNECTED
+            }
         }
     }
 
@@ -165,7 +170,15 @@ class I2pTransport @Inject constructor(
             Base64.decode(persistedPrivateKeyBase64, Base64.NO_WRAP)
         }
 
-        val manager = I2PSocketManagerFactory.createManager(ByteArrayInputStream(keyBytes), I2CP_HOST, I2CP_PORT, Properties())
+        // createManager() connects to the router's local I2CP port and returns null
+        // (rather than throwing) if that listener isn't up yet - runRouter() returns
+        // once startup is kicked off, not once every subsystem is actually ready, so
+        // this has to be retried instead of assumed to work on the first try.
+        var manager: I2PSocketManager? = null
+        while (manager == null) {
+            manager = I2PSocketManagerFactory.createManager(ByteArrayInputStream(keyBytes), I2CP_HOST, I2CP_PORT, Properties())
+            if (manager == null) Thread.sleep(I2CP_RETRY_DELAY_MS)
+        }
         socketManager = manager
         if (_i2pDestination.value == null) {
             _i2pDestination.value = manager.session.myDestination.toBase64()

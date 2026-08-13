@@ -2,9 +2,9 @@
 schema_version: 1
 app_name: Hertz Chat
 package_id: cz.kuclab.hertzchat
-version_name: "0.9.0"
-version_code: 11
-last_updated: 2026-08-13
+version_name: "0.9.1"
+version_code: 12
+last_updated: 2026-08-14
 license: MIT
 category: Komunikace
 short_description: >-
@@ -33,6 +33,11 @@ download_url: https://github.com/Jerry256254/HertzChat/releases/latest
 logo: store/logo.png
 screenshots: []
 changelog:
+  - version: "0.9.1"
+    date: 2026-08-14
+    notes:
+      - "Oprava pádu appky: po startu I2P routeru appka zkoušela otevřít vlastní adresu dřív, než byl router skutečně připravený - způsobovalo to pád (NullPointerException). Teď appka počká, dokud router opravdu neběží."
+      - "Oprava: horní lišta na obrazovce Chaty byla zbytečně vysoká"
   - version: "0.9.0"
     date: 2026-08-13
     notes:
