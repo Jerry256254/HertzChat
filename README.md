@@ -30,6 +30,10 @@ appka není z Play Store.
 - **Prohlížeč a editor médií** — fotky a videa na celou obrazovku (přiblížení
   gestem), přehrávač hlasovek, základní úprava obrázku (rotace, oříznutí na
   poměr stran) před odesláním.
+- **Profilové fotky** — vlastní i u kontaktů, přenáší se stejně šifrovaně
+  jako ostatní média.
+- **Oznámení o nových zprávách** — i když appka zrovna neběží na popředí,
+  stačí mít internet.
 - **Plně anonymní identita** — žádné telefonní číslo, e-mail ani účet.
   Identita je kryptografický klíč vygenerovaný a uložený jen na tvém
   zařízení, s volitelnou přezdívkou (nebo náhodně vygenerovanou anonymní).
@@ -48,7 +52,8 @@ appka není z Play Store.
 ## Design
 
 Jednoduché, přehledné UI v duchu WhatsAppu/Messengeru (Jetpack Compose,
-Material 3) — žádné ICQ retro, žádné přebytečné prvky. Světlý i tmavý režim.
+Material 3) — žádné ICQ retro, žádné přebytečné prvky. Světlý/tmavý/podle
+systému, vlastní barevná paleta (bez Material You).
 
 ## Sestavení ze zdrojového kódu
 

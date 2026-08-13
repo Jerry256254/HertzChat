@@ -44,7 +44,7 @@ private val ASPECT_OPTIONS = listOf(
 )
 
 @Composable
-fun ImageEditorDialog(uri: Uri, onCancel: () -> Unit, onConfirm: (ByteArray) -> Unit) {
+fun ImageEditorDialog(uri: Uri, jpegQuality: Int = 95, onCancel: () -> Unit, onConfirm: (ByteArray) -> Unit) {
     val context = LocalContext.current
     var rotationDegrees by remember { mutableFloatStateOf(0f) }
     var selectedAspect by remember { mutableStateOf<Float?>(null) }
@@ -108,7 +108,7 @@ fun ImageEditorDialog(uri: Uri, onCancel: () -> Unit, onConfirm: (ByteArray) -> 
             ) {
                 OutlinedButton(onClick = onCancel, modifier = Modifier.weight(1f)) { Text("Zrušit") }
                 Button(
-                    onClick = { onConfirm(ImageEditor.toJpegBytes(editedBitmap)) },
+                    onClick = { onConfirm(ImageEditor.toJpegBytes(editedBitmap, jpegQuality)) },
                     modifier = Modifier.weight(1f),
                 ) { Text("Odeslat") }
             }

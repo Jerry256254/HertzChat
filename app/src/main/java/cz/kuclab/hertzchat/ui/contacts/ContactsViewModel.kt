@@ -10,7 +10,9 @@ import javax.inject.Inject
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.launch
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 
@@ -25,10 +27,16 @@ class ContactsViewModel @Inject constructor(
     val torState = p2pChatService.torState.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
     val bootstrapPercent = p2pChatService.bootstrapPercent.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 0)
 
+    /** Null until Tor has published our onion service - the QR/ID isn't shareable before that. */
+    val myHertzIdQrText: StateFlow<String?> = p2pChatService.onionAddress
+        .map { it?.let { json.encodeToString(p2pChatService.myHertzId()) } }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
+
     private val _addError = MutableStateFlow<String?>(null)
     val addError: StateFlow<String?> = _addError
 
-    fun myHertzIdQrText(): String = json.encodeToString(p2pChatService.myHertzId())
+    private val _addSuccess = MutableStateFlow(false)
+    val addSuccess: StateFlow<Boolean> = _addSuccess
 
     fun addByHertzId(text: String) {
         val id = runCatching { json.decodeFromString(HertzId.serializer(), text.trim()) }.getOrNull()
@@ -37,7 +45,19 @@ class ContactsViewModel @Inject constructor(
             return
         }
         _addError.value = null
-        p2pChatService.sendFriendRequest(id)
+        viewModelScope.launch {
+            p2pChatService.sendFriendRequest(id).fold(
+                onSuccess = {
+                    _addSuccess.value = true
+                    _addError.value = null
+                },
+                onFailure = { error -> _addError.value = error.message ?: "Žádost se nepodařilo odeslat" },
+            )
+        }
+    }
+
+    fun clearAddSuccess() {
+        _addSuccess.value = false
     }
 
     fun respond(request: IncomingFriendRequest, accept: Boolean) {

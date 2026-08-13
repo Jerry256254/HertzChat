@@ -30,4 +30,4 @@ data class ChatPayload(
 )
 
 @Serializable
-enum class PayloadKind { TEXT, IMAGE, VIDEO, VOICE, FILE, DELIVERED_ACK, READ_ACK, TYPING }
+enum class PayloadKind { TEXT, IMAGE, VIDEO, VOICE, FILE, AVATAR, DELIVERED_ACK, READ_ACK, TYPING }

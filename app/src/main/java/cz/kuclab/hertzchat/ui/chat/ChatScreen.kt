@@ -11,8 +11,10 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AttachFile
@@ -41,16 +43,20 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
+import androidx.compose.ui.layout.ContentScale
 import androidx.hilt.navigation.compose.hiltViewModel
+import coil.compose.AsyncImage
 import cz.kuclab.hertzchat.data.db.MessageEntity
 import cz.kuclab.hertzchat.data.db.MessageType
 import cz.kuclab.hertzchat.media.VoiceRecorder
+import java.io.File
 
 @Composable
 fun ChatScreen(contactId: String, onBack: () -> Unit, viewModel: ChatViewModel = hiltViewModel()) {
     val state by viewModel.uiState.collectAsState()
     val draft by viewModel.draft.collectAsState()
     val nickname by viewModel.contactNickname.collectAsState()
+    val avatarPath by viewModel.contactAvatarPath.collectAsState()
     val context = LocalContext.current
 
     var attachMenuOpen by remember { mutableStateOf(false) }
@@ -73,7 +79,31 @@ fun ChatScreen(contactId: String, onBack: () -> Unit, viewModel: ChatViewModel =
 
     Scaffold(
         topBar = {
-            TopAppBar(title = { Text(nickname) })
+            TopAppBar(
+                title = {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Box(
+                            modifier = Modifier
+                                .size(36.dp)
+                                .clip(CircleShape)
+                                .background(MaterialTheme.colorScheme.primaryContainer),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            if (avatarPath != null) {
+                                AsyncImage(
+                                    model = File(avatarPath!!),
+                                    contentDescription = null,
+                                    contentScale = ContentScale.Crop,
+                                    modifier = Modifier.fillMaxWidth().size(36.dp).clip(CircleShape),
+                                )
+                            } else {
+                                Text(nickname.take(1).uppercase(), color = MaterialTheme.colorScheme.onPrimaryContainer)
+                            }
+                        }
+                        Text(nickname, modifier = Modifier.padding(start = 12.dp))
+                    }
+                },
+            )
         },
         bottomBar = {
             Row(
@@ -142,8 +172,10 @@ fun ChatScreen(contactId: String, onBack: () -> Unit, viewModel: ChatViewModel =
     }
 
     editingImageUri?.let { uri ->
+        val quality by viewModel.imageJpegQuality.collectAsState()
         ImageEditorDialog(
             uri = uri,
+            jpegQuality = quality,
             onCancel = { editingImageUri = null },
             onConfirm = { bytes ->
                 viewModel.sendImageBytes(bytes)

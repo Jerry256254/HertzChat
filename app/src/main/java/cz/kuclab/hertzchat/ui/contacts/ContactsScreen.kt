@@ -11,16 +11,25 @@ import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.camera.view.PreviewView
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.ContentCopy
+import androidx.compose.material.icons.filled.QrCodeScanner
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.Icon
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
@@ -30,6 +39,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -37,6 +47,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
@@ -51,6 +62,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import cz.kuclab.hertzchat.ui.migration.QrCodeScannerAnalyzer
 import cz.kuclab.hertzchat.ui.migration.generateQrBitmap
 import java.util.concurrent.Executors
+import kotlinx.coroutines.delay
 import org.briarproject.onionwrapper.TorWrapper
 
 @Composable
@@ -62,11 +74,19 @@ fun ContactsScreen(
     val torState by viewModel.torState.collectAsState()
     val bootstrapPercent by viewModel.bootstrapPercent.collectAsState()
     val addError by viewModel.addError.collectAsState()
+    val addSuccess by viewModel.addSuccess.collectAsState()
+    val myQrText by viewModel.myHertzIdQrText.collectAsState()
     val clipboard = LocalClipboardManager.current
 
     var pastedId by remember { mutableStateOf("") }
     var scannerOpen by remember { mutableStateOf(false) }
-    val myQr = remember { generateQrBitmap(viewModel.myHertzIdQrText()) }
+
+    LaunchedEffect(addSuccess) {
+        if (addSuccess) {
+            delay(2500)
+            viewModel.clearAddSuccess()
+        }
+    }
 
     Scaffold(topBar = { TopAppBar(title = { Text("Kontakty") }) }) { padding ->
         LazyColumn(
@@ -74,21 +94,42 @@ fun ContactsScreen(
             contentPadding = PaddingValues(16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            item {
-                TorStatusRow(torState, bootstrapPercent)
-            }
+            item { TorStatusRow(torState, bootstrapPercent) }
 
             item {
                 Card {
-                    Column(modifier = Modifier.padding(16.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                    Column(
+                        modifier = Modifier.padding(20.dp).fillMaxWidth(),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                    ) {
                         Text("Moje Hertz ID", fontWeight = FontWeight.SemiBold)
-                        Image(bitmap = myQr.asImageBitmap(), contentDescription = "Moje Hertz ID QR kód")
+                        Box(modifier = Modifier.padding(vertical = 12.dp), contentAlignment = Alignment.Center) {
+                            val qrText = myQrText
+                            if (qrText != null) {
+                                val bitmap = remember(qrText) { generateQrBitmap(qrText) }
+                                Image(bitmap = bitmap.asImageBitmap(), contentDescription = "Moje Hertz ID QR kód")
+                            } else {
+                                Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.size(220.dp)) {
+                                    CircularProgressIndicator(modifier = Modifier.padding(bottom = 12.dp))
+                                    Text(
+                                        "Připravuje se tvoje adresa v síti Tor...",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                                    )
+                                }
+                            }
+                        }
                         Text(
                             "Ukaž tenhle QR kód příteli (nebo mu ID zkopíruj a pošli), ať tě může přidat. Bez toho tě nikdo nenajde - není tu žádný adresář uživatelů.",
                             style = MaterialTheme.typography.labelSmall,
+                            textAlign = androidx.compose.ui.text.style.TextAlign.Center,
                         )
-                        TextButton(onClick = { clipboard.setText(AnnotatedString(viewModel.myHertzIdQrText())) }) {
-                            Text("Zkopírovat ID")
+                        TextButton(
+                            onClick = { myQrText?.let { clipboard.setText(AnnotatedString(it)) } },
+                            enabled = myQrText != null,
+                        ) {
+                            Icon(Icons.Filled.ContentCopy, contentDescription = null, modifier = Modifier.size(18.dp))
+                            Text("  Zkopírovat ID")
                         }
                     }
                 }
@@ -96,23 +137,32 @@ fun ContactsScreen(
 
             item {
                 Card {
-                    Column(modifier = Modifier.padding(16.dp)) {
+                    Column(modifier = Modifier.padding(20.dp)) {
                         Text("Přidat kontakt", fontWeight = FontWeight.SemiBold)
+                        androidx.compose.foundation.layout.Spacer(modifier = Modifier.padding(top = 8.dp))
                         OutlinedButton(onClick = { scannerOpen = true }, modifier = Modifier.fillMaxWidth()) {
-                            Text("Naskenovat QR kód přítele")
+                            Icon(Icons.Filled.QrCodeScanner, contentDescription = null, modifier = Modifier.size(18.dp))
+                            Text("  Naskenovat QR kód přítele")
                         }
                         OutlinedTextField(
                             value = pastedId,
                             onValueChange = { pastedId = it },
                             label = { Text("nebo sem vlož jeho Hertz ID") },
-                            modifier = Modifier.fillMaxWidth(),
+                            modifier = Modifier.fillMaxWidth().padding(top = 12.dp),
                         )
                         Button(
                             onClick = { viewModel.addByHertzId(pastedId); pastedId = "" },
                             enabled = pastedId.isNotBlank(),
-                            modifier = Modifier.fillMaxWidth(),
+                            modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
                         ) { Text("Odeslat žádost o přátelství") }
-                        addError?.let { Text(it, color = MaterialTheme.colorScheme.error) }
+
+                        if (addSuccess) {
+                            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 8.dp)) {
+                                Icon(Icons.Filled.CheckCircle, contentDescription = null, tint = MaterialTheme.colorScheme.secondary, modifier = Modifier.size(18.dp))
+                                Text("  Žádost odeslána", color = MaterialTheme.colorScheme.secondary)
+                            }
+                        }
+                        addError?.let { Text(it, color = MaterialTheme.colorScheme.error, modifier = Modifier.padding(top = 8.dp)) }
                     }
                 }
             }
@@ -141,7 +191,7 @@ fun ContactsScreen(
     if (scannerOpen) {
         QrScannerDialog(
             onDismiss = { scannerOpen = false },
-            onScanned = { text -> viewModel.addByHertzId(text); scannerOpen = false },
+            onScanned = { text -> scannerOpen = false; viewModel.addByHertzId(text) },
         )
     }
 }
@@ -157,7 +207,7 @@ private fun TorStatusRow(state: TorWrapper.TorState?, bootstrapPercent: Int) {
     Column {
         Text(label, style = MaterialTheme.typography.labelSmall)
         if (state != TorWrapper.TorState.CONNECTED) {
-            LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+            LinearProgressIndicator(modifier = Modifier.fillMaxWidth().padding(top = 4.dp).clip(RoundedCornerShape(4.dp)))
         }
     }
 }

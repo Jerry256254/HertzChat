@@ -20,6 +20,20 @@ class MediaStorage @Inject constructor(@ApplicationContext private val context: 
 
     fun fileFor(transferId: String, extension: String): File = File(root, "$transferId.$extension")
 
+    private val avatarsRoot: File by lazy { File(context.filesDir, "avatars").apply { mkdirs() } }
+
+    fun selfAvatarFile(): File = File(avatarsRoot, "self.jpg")
+
+    fun contactAvatarFile(contactId: String): File = File(avatarsRoot, "$contactId.jpg")
+
+    /** Total bytes used by received/sent media (not counting avatars, which are tiny). */
+    fun mediaStorageBytes(): Long = root.listFiles()?.sumOf { it.length() } ?: 0L
+
+    /** Deletes locally cached media files - the messages that referenced them remain, just without a viewable attachment anymore. */
+    fun clearMedia() {
+        root.listFiles()?.forEach { it.delete() }
+    }
+
     fun extensionFor(mimeType: String): String = when {
         mimeType.contains("jpeg") -> "jpg"
         mimeType.contains("png") -> "png"

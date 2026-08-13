@@ -14,6 +14,7 @@ import kotlinx.coroutines.launch
 data class ChatListItem(
     val contactId: String,
     val nickname: String,
+    val avatarPath: String?,
     val pinned: Boolean,
     val lastMessagePreview: String?,
     val lastMessageAt: Long?,
@@ -31,6 +32,7 @@ class ChatListViewModel @Inject constructor(
             ChatListItem(
                 contactId = contact.contactId,
                 nickname = contact.nickname,
+                avatarPath = contact.avatarPath,
                 pinned = contact.pinned,
                 lastMessagePreview = last?.text,
                 lastMessageAt = last?.timestamp,

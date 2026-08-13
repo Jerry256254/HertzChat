@@ -37,6 +37,7 @@ class P2pForegroundService : Service() {
 
     @Inject lateinit var p2pChatService: P2pChatService
     @Inject lateinit var settingsRepository: SettingsRepository
+    @Inject lateinit var messageNotifier: MessageNotifier
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
@@ -45,6 +46,7 @@ class P2pForegroundService : Service() {
         createChannelIfNeeded()
         startForeground(NOTIFICATION_ID, buildNotification())
         scheduleRetryWakeWorker()
+        messageNotifier.start(scope, p2pChatService)
         scope.launch {
             val settings = settingsRepository.settings.first()
             if (!settings.discoverable) return@launch

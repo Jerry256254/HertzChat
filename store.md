@@ -2,8 +2,8 @@
 schema_version: 1
 app_name: Hertz Chat
 package_id: cz.kuclab.hertzchat
-version_name: "0.3.0"
-version_code: 5
+version_name: "0.4.0"
+version_code: 6
 last_updated: 2026-08-13
 license: MIT
 category: Komunikace
@@ -33,6 +33,15 @@ download_url: https://github.com/Jerry256254/HertzChat/releases/latest
 logo: store/logo.png
 screenshots: []
 changelog:
+  - version: "0.4.0"
+    date: 2026-08-13
+    notes:
+      - "Oprava: přidání kontaktu skenováním QR nefungovalo (vlastní ID se sdílelo dřív, než ho síť Tor vůbec zjistila) - teď appka počká a k tomu ukáže zpětnou vazbu (odesláno/chyba)"
+      - Skutečná vyskakovací oznámení o nových zprávách a žádostech o přátelství
+      - Profilové fotky (vlastní i u kontaktů)
+      - Volba motivu (světlý/tmavý/podle systému) a vypnutí Material You barev z tapety, které appku dělaly fádní
+      - Přehled a mazání uloženého místa zabraného médii
+      - Nastavení kvality odesílaných obrázků teď skutečně ovlivňuje odeslaný soubor
   - version: "0.3.0"
     date: 2026-08-13
     notes:

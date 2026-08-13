@@ -8,10 +8,20 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.material3.Divider
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.DarkMode
+import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.Notifications
+import androidx.compose.material.icons.filled.Storage
+import androidx.compose.material3.AssistChip
+import androidx.compose.material3.Card
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
@@ -27,52 +37,107 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
+import cz.kuclab.hertzchat.BuildConfig
 
 @Composable
 fun SettingsScreen(viewModel: SettingsViewModel = hiltViewModel()) {
     val settings by viewModel.settings.collectAsState()
     val blocked by viewModel.blockedContacts.collectAsState()
+    val mediaBytes by viewModel.mediaBytes.collectAsState()
 
     Scaffold(topBar = { TopAppBar(title = { Text("Nastavení") }) }) { padding ->
         LazyColumn(
             modifier = Modifier.fillMaxSize().padding(padding).padding(horizontal = 16.dp),
             verticalArrangement = Arrangement.spacedBy(4.dp),
         ) {
+            item { SectionTitle("Vzhled") }
+            item {
+                Card {
+                    Column(modifier = Modifier.padding(16.dp)) {
+                        ThemeModeRow(current = settings.themeMode, onChange = viewModel::setThemeMode)
+                    }
+                }
+            }
+
+            item { SectionTitle("Oznámení") }
+            item {
+                Card {
+                    Column(modifier = Modifier.padding(horizontal = 16.dp)) {
+                        SettingsSwitchRow(
+                            icon = Icons.Filled.Notifications,
+                            title = "Oznámení o nových zprávách",
+                            subtitle = "Vyskakovací upozornění, i když je appka zavřená (pokud má telefon internet)",
+                            checked = settings.notificationsEnabled,
+                            onCheckedChange = viewModel::setNotificationsEnabled,
+                        )
+                    }
+                }
+            }
+
             item { SectionTitle("Soukromí a síť") }
             item {
-                SettingsSwitchRow(
-                    title = "Být dosažitelný",
-                    subtitle = "Vypne Tor síť a onion službu - nikdo tě nenajde ani ti nemůže poslat zprávu, dokud to znovu nezapneš. Žádný server (ani náš, ani cizí) do toho není nikdy zapojený - appka se spojuje přímo s veřejnou sítí Tor.",
-                    checked = settings.discoverable,
-                    onCheckedChange = viewModel::setDiscoverable,
-                )
+                Card {
+                    Column(modifier = Modifier.padding(horizontal = 16.dp)) {
+                        SettingsSwitchRow(
+                            icon = null,
+                            title = "Být dosažitelný",
+                            subtitle = "Vypne Tor síť a onion službu - nikdo tě nenajde ani ti nemůže poslat zprávu. Žádný server (ani náš, ani cizí) do toho není nikdy zapojený.",
+                            checked = settings.discoverable,
+                            onCheckedChange = viewModel::setDiscoverable,
+                        )
+                    }
+                }
             }
-            item { Divider() }
 
             item { SectionTitle("Média") }
             item {
-                SettingsSwitchRow(
-                    title = "Automaticky stahovat média",
-                    subtitle = null,
-                    checked = settings.autoDownloadMedia,
-                    onCheckedChange = viewModel::setAutoDownloadMedia,
-                )
+                Card {
+                    Column(modifier = Modifier.padding(horizontal = 16.dp)) {
+                        MediaQualityRow(current = settings.mediaQuality, onChange = viewModel::setMediaQuality)
+                        HorizontalDivider()
+                        StorageRow(bytes = mediaBytes, onClear = viewModel::clearMediaCache)
+                    }
+                }
             }
-            item {
-                MediaQualityRow(current = settings.mediaQuality, onChange = viewModel::setMediaQuality)
-            }
-            item { Divider() }
 
             if (blocked.isNotEmpty()) {
                 item { SectionTitle("Blokovaní uživatelé") }
-                items(blocked, key = { it.contactId }) { contact ->
-                    Row(
-                        modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        Text(contact.nickname)
-                        TextButton(onClick = { viewModel.unblock(contact.contactId) }) { Text("Odblokovat") }
+                item {
+                    Card {
+                        Column(modifier = Modifier.padding(horizontal = 16.dp)) {
+                            blocked.forEachIndexed { index, contact ->
+                                Row(
+                                    modifier = Modifier.fillMaxWidth().padding(vertical = 12.dp),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically,
+                                ) {
+                                    Text(contact.nickname)
+                                    TextButton(onClick = { viewModel.unblock(contact.contactId) }) { Text("Odblokovat") }
+                                }
+                                if (index != blocked.lastIndex) HorizontalDivider()
+                            }
+                        }
+                    }
+                }
+            }
+
+            item { SectionTitle("O aplikaci") }
+            item {
+                Card {
+                    Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(Icons.Filled.Info, contentDescription = null, modifier = Modifier.padding(end = 8.dp))
+                            Text("Hertz Chat ${BuildConfig.VERSION_NAME}")
+                        }
+                        Text(
+                            "Open source, žádný server, end-to-end šifrované přes Signal Protokol, přenos přes síť Tor.",
+                            style = MaterialTheme.typography.labelSmall,
+                        )
+                        Text(
+                            "github.com/Jerry256254/HertzChat",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.primary,
+                        )
                     }
                 }
             }
@@ -86,22 +151,56 @@ private fun SectionTitle(text: String) {
         text,
         style = MaterialTheme.typography.labelSmall,
         color = MaterialTheme.colorScheme.primary,
-        modifier = Modifier.padding(top = 16.dp, bottom = 4.dp),
+        modifier = Modifier.padding(top = 20.dp, bottom = 6.dp),
     )
 }
 
 @Composable
-private fun SettingsSwitchRow(title: String, subtitle: String?, checked: Boolean, onCheckedChange: (Boolean) -> Unit) {
+private fun SettingsSwitchRow(
+    icon: androidx.compose.ui.graphics.vector.ImageVector?,
+    title: String,
+    subtitle: String?,
+    checked: Boolean,
+    onCheckedChange: (Boolean) -> Unit,
+) {
     Row(
-        modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
+        modifier = Modifier.fillMaxWidth().padding(vertical = 12.dp),
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Column(modifier = Modifier.weight(1f)) {
-            Text(title)
-            subtitle?.let { Text(it, style = MaterialTheme.typography.labelSmall) }
+        Row(modifier = Modifier.weight(1f), verticalAlignment = Alignment.CenterVertically) {
+            icon?.let { Icon(it, contentDescription = null, modifier = Modifier.padding(end = 12.dp)) }
+            Column {
+                Text(title)
+                subtitle?.let { Text(it, style = MaterialTheme.typography.labelSmall) }
+            }
         }
         Switch(checked = checked, onCheckedChange = onCheckedChange)
+    }
+}
+
+@Composable
+private fun ThemeModeRow(current: String, onChange: (String) -> Unit) {
+    val options = listOf("SYSTEM" to "Podle systému", "LIGHT" to "Světlý", "DARK" to "Tmavý")
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Icon(Icons.Filled.DarkMode, contentDescription = null, modifier = Modifier.padding(end = 12.dp))
+        Text("Motiv", modifier = Modifier.weight(1f))
+    }
+    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(top = 8.dp)) {
+        options.forEach { (value, label) ->
+            AssistChip(
+                onClick = { onChange(value) },
+                label = { Text(label) },
+                colors = if (current == value) {
+                    androidx.compose.material3.AssistChipDefaults.assistChipColors(
+                        containerColor = MaterialTheme.colorScheme.primary,
+                        labelColor = MaterialTheme.colorScheme.onPrimary,
+                    )
+                } else {
+                    androidx.compose.material3.AssistChipDefaults.assistChipColors()
+                },
+            )
+        }
     }
 }
 
@@ -111,11 +210,11 @@ private fun MediaQualityRow(current: String, onChange: (String) -> Unit) {
     val options = listOf("ORIGINAL" to "Původní kvalita", "HIGH" to "Vysoká", "BALANCED" to "Vyvážená")
 
     Row(
-        modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
+        modifier = Modifier.fillMaxWidth().padding(vertical = 12.dp),
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Text("Kvalita odesílaných médií")
+        Text("Kvalita odesílaných obrázků")
         TextButton(onClick = { expanded = true }) {
             Text(options.firstOrNull { it.first == current }?.second ?: current)
         }
@@ -123,6 +222,21 @@ private fun MediaQualityRow(current: String, onChange: (String) -> Unit) {
             options.forEach { (value, label) ->
                 DropdownMenuItem(text = { Text(label) }, onClick = { onChange(value); expanded = false })
             }
+        }
+    }
+}
+
+@Composable
+private fun StorageRow(bytes: Long, onClear: () -> Unit) {
+    val mb = bytes / (1024.0 * 1024.0)
+    Column(modifier = Modifier.padding(vertical = 12.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Icon(Icons.Filled.Storage, contentDescription = null, modifier = Modifier.padding(end = 12.dp))
+            Text("Média uložená na zařízení: %.1f MB".format(mb))
+        }
+        OutlinedButton(onClick = onClear, modifier = Modifier.padding(top = 8.dp)) {
+            Icon(Icons.Filled.Delete, contentDescription = null, modifier = Modifier.padding(end = 6.dp))
+            Text("Vymazat stažená média")
         }
     }
 }

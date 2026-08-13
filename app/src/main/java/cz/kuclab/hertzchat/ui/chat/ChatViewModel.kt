@@ -10,6 +10,7 @@ import cz.kuclab.hertzchat.data.db.ContactDao
 import cz.kuclab.hertzchat.data.db.MessageDao
 import cz.kuclab.hertzchat.data.model.PayloadKind
 import cz.kuclab.hertzchat.data.repository.P2pChatService
+import cz.kuclab.hertzchat.data.repository.SettingsRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import java.io.File
@@ -18,6 +19,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
@@ -29,6 +31,7 @@ class ChatViewModel @Inject constructor(
     messageDao: MessageDao,
     contactDao: ContactDao,
     private val p2pChatService: P2pChatService,
+    private val settingsRepository: SettingsRepository,
     @ApplicationContext private val context: Context,
 ) : ViewModel() {
 
@@ -40,8 +43,25 @@ class ChatViewModel @Inject constructor(
     private val _contactNickname = MutableStateFlow("")
     val contactNickname: StateFlow<String> = _contactNickname
 
+    private val _contactAvatarPath = MutableStateFlow<String?>(null)
+    val contactAvatarPath: StateFlow<String?> = _contactAvatarPath
+
+    private val _imageJpegQuality = MutableStateFlow(95)
+    val imageJpegQuality: StateFlow<Int> = _imageJpegQuality
+
     init {
-        viewModelScope.launch { _contactNickname.value = contactDao.find(contactId)?.nickname.orEmpty() }
+        viewModelScope.launch {
+            val contact = contactDao.find(contactId)
+            _contactNickname.value = contact?.nickname.orEmpty()
+            _contactAvatarPath.value = contact?.avatarPath
+        }
+        viewModelScope.launch {
+            _imageJpegQuality.value = when (settingsRepository.settings.first().mediaQuality) {
+                "HIGH" -> 85
+                "BALANCED" -> 70
+                else -> 95
+            }
+        }
     }
 
     val uiState = messageDao.observeMessages(contactId)

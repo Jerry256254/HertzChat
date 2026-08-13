@@ -42,7 +42,10 @@ private val DarkColors = darkColorScheme(
 @Composable
 fun HertzChatTheme(
     darkTheme: Boolean = isSystemInDarkTheme(),
-    dynamicColor: Boolean = true,
+    // Off by default: Material You would replace our blue/green brand
+    // palette with one derived from the user's wallpaper, which reads as
+    // generic/washed-out rather than as Hertz Chat's own identity.
+    dynamicColor: Boolean = false,
     content: @Composable () -> Unit,
 ) {
     val context = LocalContext.current
