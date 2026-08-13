@@ -10,11 +10,15 @@ V telefonu je potřeba povolit instalaci z neznámých zdrojů, appka není z Pl
 
 ## Funkce
 
-- **Čistě P2P a end-to-end šifrované textové zprávy** — jdou vždy přímo mezi
-  zařízeními (WebRTC), šifrované Signal Protokolem (X3DH + Double Ratchet).
-  Žádný server nikdy neuvidí obsah, žádná zpráva se nikde neukládá kromě
-  zařízení odesílatele a příjemce. *(Sdílení obrázků, videí a hlasových
-  zpráv je naplánované pro některou z dalších verzí, zatím není hotové.)*
+- **Čistě P2P a end-to-end šifrované** — text, obrázky, videa i hlasové
+  zprávy jdou vždy přímo mezi zařízeními (WebRTC), šifrované Signal
+  Protokolem (X3DH + Double Ratchet). Média mají navíc vlastní jednorázový
+  klíč doručený stejnou šifrovanou cestou, takže se dají přenášet po
+  částech bez zbytečného zatěžování ratchetu. Žádný server nikdy neuvidí
+  obsah, nic se nikde neukládá kromě zařízení odesílatele a příjemce.
+- **Prohlížeč a editor médií** — fotky a videa na celou obrazovku (přiblížení
+  gestem), přehrávač hlasovek, základní úprava obrázku (rotace, oříznutí na
+  poměr stran) před odesláním.
 - **Plně anonymní identita** — žádné telefonní číslo, e-mail ani účet.
   Identita je kryptografický klíč vygenerovaný a uložený jen na tvém
   zařízení, s volitelnou přezdívkou (nebo náhodně vygenerovanou anonymní).
