@@ -103,4 +103,9 @@ class ChatListViewModel @Inject constructor(
     fun block(contactId: String) {
         viewModelScope.launch { contactDao.setBlocked(contactId, true) }
     }
+
+    /** Mistral has no "block" (there's no other party to block) - hiding removes its row instead, reversible in Settings. */
+    fun hideAssistant() {
+        mistralKeyStore.setShowAssistantContact(false)
+    }
 }

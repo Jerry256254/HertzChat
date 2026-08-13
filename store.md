@@ -2,8 +2,8 @@
 schema_version: 1
 app_name: Hertz Chat
 package_id: cz.kuclab.hertzchat
-version_name: "0.9.1"
-version_code: 12
+version_name: "0.9.2"
+version_code: 13
 last_updated: 2026-08-14
 license: MIT
 category: Komunikace
@@ -33,6 +33,14 @@ download_url: https://github.com/Jerry256254/HertzChat/releases/latest
 logo: store/logo.png
 screenshots: []
 changelog:
+  - version: "0.9.2"
+    date: 2026-08-14
+    notes:
+      - "Oprava: síť I2P se uměla zaseknout na „Připojování... 0 %“ donekonečna - appka čekala na síťové potvrzení od více sousedních routerů bez časového limitu. Teď má bootstrap tvrdý časový limit (60 s) a nižší práh, takže appka vždy dojde do stavu Připojeno, i když se síť zrovna rozjíždí pomaleji."
+      - Nový vzhled vstupního pole zpráv (zaoblená "pilulka" ve stylu appky, kulaté tlačítko odeslat/nahrát vedle ní), posunuté výš nade dno obrazovky
+      - "Oprava: vstupní pole zpráv zůstávalo schované za klávesnicí místo aby se zvedlo nad ni"
+      - Dlouhé podržení na kontaktu/chatu v seznamu teď nabídne menu i u Mistral AI (skrytí asistenta místo blokování, které tam nedává smysl)
+      - Klepnutí na jméno nebo fotku kontaktu v otevřeném chatu teď otevře jeho detail (Hertz ID ke zkopírování, tlačítko Blokovat)
   - version: "0.9.1"
     date: 2026-08-14
     notes:

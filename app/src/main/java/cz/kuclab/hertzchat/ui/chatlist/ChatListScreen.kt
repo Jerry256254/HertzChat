@@ -144,6 +144,7 @@ fun ChatListScreen(
                         },
                         onTogglePin = { viewModel.togglePin(item) },
                         onBlock = { viewModel.block(item.contactId) },
+                        onHideAssistant = { viewModel.hideAssistant() },
                     )
                 }
             }
@@ -158,6 +159,7 @@ private fun ChatListRow(
     onClick: () -> Unit,
     onTogglePin: () -> Unit,
     onBlock: () -> Unit,
+    onHideAssistant: () -> Unit,
 ) {
     var menuOpen by remember { mutableStateOf(false) }
     val isAssistant = item.kind == ChatListItemKind.ASSISTANT
@@ -170,12 +172,17 @@ private fun ChatListRow(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .combinedClickable(onClick = onClick, onLongClick = { if (!isAssistant) menuOpen = true })
+                .combinedClickable(onClick = onClick, onLongClick = { menuOpen = true })
                 .padding(horizontal = 16.dp, vertical = 14.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            if (!isAssistant) {
-                DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
+            DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
+                if (isAssistant) {
+                    DropdownMenuItem(
+                        text = { Text("Skrýt asistenta") },
+                        onClick = { menuOpen = false; onHideAssistant() },
+                    )
+                } else {
                     DropdownMenuItem(
                         text = { Text(if (item.pinned) "Odepnout" else "Připnout") },
                         onClick = { menuOpen = false; onTogglePin() },

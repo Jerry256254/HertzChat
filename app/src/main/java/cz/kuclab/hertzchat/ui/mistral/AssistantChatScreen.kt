@@ -25,7 +25,6 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -47,6 +46,8 @@ import cz.kuclab.hertzchat.R
 import cz.kuclab.hertzchat.data.db.AssistantConversationEntity
 import cz.kuclab.hertzchat.data.db.AssistantMessageEntity
 import cz.kuclab.hertzchat.data.db.AssistantRole
+import cz.kuclab.hertzchat.ui.common.ChatInputAccentButton
+import cz.kuclab.hertzchat.ui.common.ChatInputBar
 import java.text.DateFormat
 import java.util.Date
 
@@ -95,20 +96,18 @@ fun AssistantChatScreen(onBack: () -> Unit, viewModel: AssistantChatViewModel = 
                         )
                     }
                 }
-                Row(
-                    modifier = Modifier.fillMaxWidth().padding(8.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    OutlinedTextField(
-                        value = draft,
-                        onValueChange = viewModel::onDraftChange,
-                        modifier = Modifier.weight(1f),
-                        placeholder = { Text("Zpráva, nebo /new a /chats") },
-                    )
-                    IconButton(onClick = viewModel::send) {
-                        Icon(Icons.Filled.Send, contentDescription = "Odeslat")
-                    }
-                }
+                ChatInputBar(
+                    value = draft,
+                    onValueChange = viewModel::onDraftChange,
+                    placeholder = "Zpráva, nebo /new a /chats",
+                    trailingButton = {
+                        ChatInputAccentButton(
+                            onClick = viewModel::send,
+                            icon = Icons.Filled.Send,
+                            contentDescription = "Odeslat",
+                        )
+                    },
+                )
             }
         },
     ) { padding ->

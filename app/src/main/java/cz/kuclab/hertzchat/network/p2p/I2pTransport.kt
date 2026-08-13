@@ -34,7 +34,8 @@ private const val I2CP_PORT = 7654
 private const val ROUTER_START_TIMEOUT_MS = 90_000L
 private const val SOCKET_MANAGER_TIMEOUT_MS = 120_000L
 private const val I2CP_RETRY_DELAY_MS = 1_000L
-private const val READY_PEER_COUNT = 3
+private const val READY_PEER_COUNT = 1
+private const val READINESS_MONITOR_TIMEOUT_MS = 60_000L
 
 /**
  * Two Hertz Chat devices find and reach each other over the public I2P
@@ -193,12 +194,20 @@ class I2pTransport @Inject constructor(
         }
     }
 
+    // The destination is already open and usable for connections by the time this
+    // runs - countActivePeers() (peers we've had recent successful comms with) is
+    // only used as a cosmetic bootstrap indicator, never a gate on functionality.
+    // It's capped to a hard timeout so a slow/stuck reseed can't leave the UI
+    // spinning at "0%" forever with no way out, the same class of bug already
+    // fixed for Tor's "Navazuje se spojení..." hang.
     private suspend fun monitorReadiness() {
         val r = router ?: return
+        val deadline = System.currentTimeMillis() + READINESS_MONITOR_TIMEOUT_MS
         while (router === r) {
             val peers = r.context.commSystem().countActivePeers()
             _bootstrapPercent.value = (peers * 100 / READY_PEER_COUNT).coerceAtMost(100)
-            if (peers >= READY_PEER_COUNT) {
+            if (peers >= READY_PEER_COUNT || System.currentTimeMillis() >= deadline) {
+                _bootstrapPercent.value = 100
                 _state.value = I2pState.CONNECTED
                 return
             }

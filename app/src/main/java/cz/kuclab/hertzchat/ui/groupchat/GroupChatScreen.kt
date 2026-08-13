@@ -26,7 +26,6 @@ import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -47,6 +46,8 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import cz.kuclab.hertzchat.R
 import cz.kuclab.hertzchat.data.db.MessageEntity
+import cz.kuclab.hertzchat.ui.common.ChatInputAccentButton
+import cz.kuclab.hertzchat.ui.common.ChatInputBar
 
 @Composable
 fun GroupChatScreen(groupId: String, onBack: () -> Unit, onLeft: () -> Unit, viewModel: GroupChatViewModel = hiltViewModel()) {
@@ -84,7 +85,7 @@ fun GroupChatScreen(groupId: String, onBack: () -> Unit, onLeft: () -> Unit, vie
             )
         },
         bottomBar = {
-            Box {
+            Column {
                 if (mentionQuery != null) {
                     val suggestions = viewModel.mentionSuggestions()
                     if (suggestions.isNotEmpty()) {
@@ -92,8 +93,7 @@ fun GroupChatScreen(groupId: String, onBack: () -> Unit, onLeft: () -> Unit, vie
                             shape = RoundedCornerShape(12.dp),
                             tonalElevation = 4.dp,
                             modifier = Modifier
-                                .padding(8.dp)
-                                .align(Alignment.BottomStart)
+                                .padding(horizontal = 12.dp)
                                 .fillMaxWidth(),
                         ) {
                             Column {
@@ -110,20 +110,18 @@ fun GroupChatScreen(groupId: String, onBack: () -> Unit, onLeft: () -> Unit, vie
                         }
                     }
                 }
-                Row(
-                    modifier = Modifier.fillMaxWidth().padding(8.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    OutlinedTextField(
-                        value = draft,
-                        onValueChange = viewModel::onDraftChange,
-                        modifier = Modifier.weight(1f),
-                        placeholder = { Text("Zpráva, nebo @jméno / @Mistral N dotaz") },
-                    )
-                    IconButton(onClick = viewModel::send) {
-                        Icon(Icons.Filled.Send, contentDescription = "Odeslat")
-                    }
-                }
+                ChatInputBar(
+                    value = draft,
+                    onValueChange = viewModel::onDraftChange,
+                    placeholder = "Zpráva, nebo @jméno / @Mistral N dotaz",
+                    trailingButton = {
+                        ChatInputAccentButton(
+                            onClick = viewModel::send,
+                            icon = Icons.Filled.Send,
+                            contentDescription = "Odeslat",
+                        )
+                    },
+                )
             }
         },
     ) { padding ->

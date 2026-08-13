@@ -29,7 +29,7 @@ import kotlinx.coroutines.withContext
 class ChatViewModel @Inject constructor(
     savedStateHandle: SavedStateHandle,
     messageDao: MessageDao,
-    contactDao: ContactDao,
+    private val contactDao: ContactDao,
     private val p2pChatService: P2pChatService,
     private val settingsRepository: SettingsRepository,
     @ApplicationContext private val context: Context,
@@ -91,6 +91,10 @@ class ChatViewModel @Inject constructor(
             p2pChatService.sendMedia(contactId, bytes, "audio/mp4", PayloadKind.VOICE, file.name, durationMs)
             file.delete()
         }
+    }
+
+    fun blockContact() {
+        viewModelScope.launch { contactDao.setBlocked(contactId, true) }
     }
 
     private fun sendPickedMedia(uri: Uri, kind: PayloadKind) {

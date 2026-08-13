@@ -5,8 +5,10 @@ import android.content.pm.PackageManager
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -19,6 +21,8 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.AttachFile
+import androidx.compose.material.icons.filled.Block
+import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.Send
 import androidx.compose.material.icons.filled.Stop
@@ -28,10 +32,11 @@ import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextFieldDefaults
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
@@ -42,7 +47,10 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import androidx.compose.ui.layout.ContentScale
@@ -51,6 +59,8 @@ import coil.compose.AsyncImage
 import cz.kuclab.hertzchat.data.db.MessageEntity
 import cz.kuclab.hertzchat.data.db.MessageType
 import cz.kuclab.hertzchat.media.VoiceRecorder
+import cz.kuclab.hertzchat.ui.common.ChatInputAccentButton
+import cz.kuclab.hertzchat.ui.common.ChatInputBar
 import cz.kuclab.hertzchat.ui.theme.HertzGreen
 import java.io.File
 
@@ -67,6 +77,7 @@ fun ChatScreen(contactId: String, onBack: () -> Unit, viewModel: ChatViewModel =
 
     var attachMenuOpen by remember { mutableStateOf(false) }
     var isRecording by remember { mutableStateOf(false) }
+    var detailsOpen by remember { mutableStateOf(false) }
     val voiceRecorder = remember { VoiceRecorder(context) }
 
     var editingImageUri by remember { mutableStateOf<android.net.Uri?>(null) }
@@ -88,7 +99,10 @@ fun ChatScreen(contactId: String, onBack: () -> Unit, viewModel: ChatViewModel =
             TopAppBar(
                 navigationIcon = { IconButton(onClick = onBack) { Icon(Icons.Filled.ArrowBack, contentDescription = "Zpět") } },
                 title = {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.clickable { detailsOpen = true },
+                    ) {
                         Box(
                             modifier = Modifier
                                 .size(38.dp)
@@ -113,41 +127,30 @@ fun ChatScreen(contactId: String, onBack: () -> Unit, viewModel: ChatViewModel =
             )
         },
         bottomBar = {
-            Row(
-                modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 10.dp),
-                verticalAlignment = Alignment.Bottom,
-            ) {
-                Box {
-                    IconButton(onClick = { attachMenuOpen = true }) {
-                        Icon(Icons.Filled.AttachFile, contentDescription = "Přiložit")
+            ChatInputBar(
+                value = draft,
+                onValueChange = viewModel::onDraftChange,
+                placeholder = "Zpráva",
+                leading = {
+                    Box {
+                        IconButton(onClick = { attachMenuOpen = true }) {
+                            Icon(Icons.Filled.AttachFile, contentDescription = "Přiložit")
+                        }
+                        DropdownMenu(expanded = attachMenuOpen, onDismissRequest = { attachMenuOpen = false }) {
+                            DropdownMenuItem(
+                                text = { Text("Obrázek") },
+                                onClick = { attachMenuOpen = false; pickImage.launch("image/*") },
+                            )
+                            DropdownMenuItem(
+                                text = { Text("Video") },
+                                leadingIcon = { Icon(Icons.Filled.VideoLibrary, contentDescription = null) },
+                                onClick = { attachMenuOpen = false; pickVideo.launch("video/*") },
+                            )
+                        }
                     }
-                    DropdownMenu(expanded = attachMenuOpen, onDismissRequest = { attachMenuOpen = false }) {
-                        DropdownMenuItem(
-                            text = { Text("Obrázek") },
-                            onClick = { attachMenuOpen = false; pickImage.launch("image/*") },
-                        )
-                        DropdownMenuItem(
-                            text = { Text("Video") },
-                            leadingIcon = { Icon(Icons.Filled.VideoLibrary, contentDescription = null) },
-                            onClick = { attachMenuOpen = false; pickVideo.launch("video/*") },
-                        )
-                    }
-                }
-                OutlinedTextField(
-                    value = draft,
-                    onValueChange = viewModel::onDraftChange,
-                    modifier = Modifier.weight(1f),
-                    placeholder = { Text("Zpráva") },
-                    shape = RoundedCornerShape(24.dp),
-                    colors = TextFieldDefaults.colors(
-                        unfocusedContainerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
-                        focusedContainerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
-                        unfocusedIndicatorColor = androidx.compose.ui.graphics.Color.Transparent,
-                        focusedIndicatorColor = androidx.compose.ui.graphics.Color.Transparent,
-                    ),
-                )
-                Box(modifier = Modifier.padding(start = 4.dp)) {
-                    IconButton(
+                },
+                trailingButton = {
+                    ChatInputAccentButton(
                         onClick = {
                             if (isRecording) {
                                 isRecording = false
@@ -166,23 +169,16 @@ fun ChatScreen(contactId: String, onBack: () -> Unit, viewModel: ChatViewModel =
                                 }
                             }
                         },
-                        modifier = Modifier
-                            .size(44.dp)
-                            .clip(CircleShape)
-                            .background(if (isRecording) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary),
-                    ) {
-                        Icon(
-                            when {
-                                isRecording -> Icons.Filled.Stop
-                                draft.isNotBlank() -> Icons.Filled.Send
-                                else -> Icons.Filled.Mic
-                            },
-                            contentDescription = if (isRecording) "Zastavit nahrávání" else if (draft.isNotBlank()) "Odeslat" else "Nahrát hlasovku",
-                            tint = MaterialTheme.colorScheme.onPrimary,
-                        )
-                    }
-                }
-            }
+                        icon = when {
+                            isRecording -> Icons.Filled.Stop
+                            draft.isNotBlank() -> Icons.Filled.Send
+                            else -> Icons.Filled.Mic
+                        },
+                        contentDescription = if (isRecording) "Zastavit nahrávání" else if (draft.isNotBlank()) "Odeslat" else "Nahrát hlasovku",
+                        containerColor = if (isRecording) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary,
+                    )
+                },
+            )
         },
     ) { padding ->
         LazyColumn(
@@ -207,6 +203,84 @@ fun ChatScreen(contactId: String, onBack: () -> Unit, viewModel: ChatViewModel =
                 editingImageUri = null
             },
         )
+    }
+
+    if (detailsOpen) {
+        ContactDetailsSheet(
+            nickname = nickname,
+            avatarPath = avatarPath,
+            hertzId = viewModel.contactId,
+            onDismiss = { detailsOpen = false },
+            onBlock = {
+                detailsOpen = false
+                viewModel.blockContact()
+                onBack()
+            },
+        )
+    }
+}
+
+@Composable
+private fun ContactDetailsSheet(
+    nickname: String,
+    avatarPath: String?,
+    hertzId: String,
+    onDismiss: () -> Unit,
+    onBlock: () -> Unit,
+) {
+    val clipboard = LocalClipboardManager.current
+    ModalBottomSheet(onDismissRequest = onDismiss) {
+        Column(
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 8.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(80.dp)
+                    .clip(CircleShape)
+                    .background(MaterialTheme.colorScheme.primaryContainer),
+                contentAlignment = Alignment.Center,
+            ) {
+                if (avatarPath != null) {
+                    AsyncImage(
+                        model = File(avatarPath),
+                        contentDescription = null,
+                        contentScale = ContentScale.Crop,
+                        modifier = Modifier.fillMaxWidth().size(80.dp).clip(CircleShape),
+                    )
+                } else {
+                    Text(
+                        nickname.take(1).uppercase(),
+                        color = MaterialTheme.colorScheme.onPrimaryContainer,
+                        style = MaterialTheme.typography.headlineMedium,
+                    )
+                }
+            }
+            Text(
+                nickname,
+                fontWeight = FontWeight.Bold,
+                style = MaterialTheme.typography.titleLarge,
+                modifier = Modifier.padding(top = 12.dp),
+            )
+            Text(
+                hertzId,
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(top = 4.dp),
+            )
+            TextButton(onClick = { clipboard.setText(AnnotatedString(hertzId)) }) {
+                Icon(Icons.Filled.ContentCopy, contentDescription = null, modifier = Modifier.size(18.dp))
+                Text("  Zkopírovat Hertz ID")
+            }
+            OutlinedButton(
+                onClick = onBlock,
+                colors = androidx.compose.material3.ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error),
+                modifier = Modifier.fillMaxWidth().padding(top = 12.dp, bottom = 24.dp),
+            ) {
+                Icon(Icons.Filled.Block, contentDescription = null, modifier = Modifier.size(18.dp))
+                Text("  Blokovat kontakt")
+            }
+        }
     }
 }
 
