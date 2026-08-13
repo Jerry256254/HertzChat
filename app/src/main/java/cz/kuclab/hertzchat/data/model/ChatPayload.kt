@@ -17,10 +17,15 @@ data class ChatPayload(
     val mediaFileName: String? = null,
     val mediaSizeBytes: Long? = null,
     val mediaDurationMs: Long? = null,
-    /** base64-encoded bytes for small media / chunks; large media is fragmented across several envelopes sharing mediaTransferId. */
-    val mediaChunkBase64: String? = null,
+    /**
+     * The attachment itself never travels through the Signal ratchet - only
+     * this per-attachment AES-256-GCM key does. The encrypted bytes are sent
+     * separately as raw chunks over the data channel, tagged with
+     * [mediaTransferId], and re-assembled/decrypted using this key.
+     */
     val mediaTransferId: String? = null,
-    val mediaChunkIndex: Int? = null,
+    val mediaKeyBase64: String? = null,
+    val mediaNonceSaltBase64: String? = null,
     val mediaChunkCount: Int? = null,
 )
 

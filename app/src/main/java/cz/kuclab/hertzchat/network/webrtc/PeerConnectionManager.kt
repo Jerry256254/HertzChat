@@ -127,6 +127,11 @@ class PeerConnection2(
         return channel.send(DataChannel.Buffer(ByteBuffer.wrap(bytes), true))
     }
 
+    /** Bytes queued locally waiting to go out - used to throttle large media transfers so we don't flood the channel faster than the network can drain it. */
+    fun bufferedAmount(): Long = dataChannel?.bufferedAmount() ?: 0L
+
+    fun isOpen(): Boolean = dataChannel?.state() == DataChannel.State.OPEN
+
     fun createOffer(onCreated: (SessionDescription) -> Unit) {
         connection.createOffer(
             sdpObserver(onCreateSuccess = { desc ->
