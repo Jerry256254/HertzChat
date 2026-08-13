@@ -1,0 +1,29 @@
+# --- Base (keep in every repo regardless of stack) ---
+.idea/
+*.iml
+.vscode/
+.DS_Store
+Thumbs.db
+*.log
+.claude/
+
+# --- Android / Gradle ---
+.gradle/
+local.properties
+build/
+captures/
+.externalNativeBuild/
+.cxx/
+*.apk
+*.aab
+*.ap_
+*.dex
+/app/release/
+/app/debug/
+
+# --- Node (signaling-relay) ---
+node_modules/
+
+# --- Kotlin/Gradle build cache ---
+.kotlin/
+

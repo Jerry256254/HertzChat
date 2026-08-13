@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="hertz_primary">#0B84FE</color>
+    <color name="hertz_primary_dark">#0662C7</color>
+    <color name="hertz_accent">#25D07A</color>
+    <color name="hertz_bg_light">#F7F8FA</color>
+    <color name="hertz_bg_dark">#0E1116</color>
+    <color name="hertz_surface_dark">#161A21</color>
+</resources>

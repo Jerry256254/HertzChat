@@ -1,0 +1,14 @@
+{
+  "name": "hertzchat-signaling-relay",
+  "version": "1.0.0",
+  "description": "Blind rendezvous relay for Hertz Chat: only forwards WebRTC SDP/ICE handshakes and online presence between clients so they can find each other and connect directly. Never sees, stores or logs message content, media, or contact lists.",
+  "main": "server.js",
+  "type": "commonjs",
+  "license": "MIT",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "ws": "^8.18.0"
+  }
+}
