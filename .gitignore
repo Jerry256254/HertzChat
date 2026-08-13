@@ -27,3 +27,9 @@ node_modules/
 # --- Kotlin/Gradle build cache ---
 .kotlin/
 
+# --- Signing keys - never commit ---
+keystore/
+*.jks
+*.keystore
+
+

@@ -32,10 +32,26 @@ android {
         }
     }
 
+    val releaseKeystorePath = file("../keystore/hertzchat-release.jks")
+    signingConfigs {
+        if (releaseKeystorePath.exists()) {
+            create("release") {
+                storeFile = releaseKeystorePath
+                storePassword = "hertzchat123"
+                keyAlias = "hertzchat"
+                keyPassword = "hertzchat123"
+            }
+        }
+    }
+
     buildTypes {
         release {
             isMinifyEnabled = true
+            isShrinkResources = true
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
+            if (releaseKeystorePath.exists()) {
+                signingConfig = signingConfigs.getByName("release")
+            }
         }
         debug {
             isMinifyEnabled = false
