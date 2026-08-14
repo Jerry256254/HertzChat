@@ -163,6 +163,28 @@ class P2pChatService @Inject constructor(
             lanTransport.incomingConnections.collect { socket -> handleIncomingSocket(socket, viaLan = true) }
         }
         scope.launch { retryPendingLoop() }
+        scope.launch {
+            // Loopback delivery needs real tunnels up (i2cp.disableLoopback routes it
+            // through them rather than short-circuiting locally), so this waits for
+            // CONNECTED instead of just a destination existing.
+            i2pTransport.state.first { it == I2pState.CONNECTED }
+            ensureSelfContact()
+        }
+    }
+
+    /**
+     * Everyone gets themselves as a contact automatically, the same way WhatsApp's
+     * "Message yourself" works - by running the exact same mutual friend-request/accept
+     * pipeline as any other contact, just addressed to our own Hertz ID. That's what
+     * actually establishes a real Signal session against our own identity key, so
+     * messages to yourself go through the identical encrypted path as messages to
+     * anyone else, not a shortcut that bypasses it.
+     */
+    private suspend fun ensureSelfContact() {
+        val myId = identityKeyManager.contactId()
+        if (contactDao.find(myId) != null) return
+        val me = myHertzId() ?: return
+        sendFriendRequest(me)
     }
 
     fun stop() {
@@ -891,7 +913,8 @@ class P2pChatService @Inject constructor(
         scope.launch {
             // Vouched for by mutual membership in a group we already joined ourselves - no need to bother the user with a manual prompt for it.
             val viaKnownGroup = request.viaGroupId?.let { groupDao.find(it) != null } == true
-            if (settingsRepository.settings.first().autoAcceptFriendRequests || viaKnownGroup) {
+            val isSelf = senderContactId == identityKeyManager.contactId()
+            if (isSelf || settingsRepository.settings.first().autoAcceptFriendRequests || viaKnownGroup) {
                 respondFriendRequest(incoming, true)
             } else {
                 _incomingRequests.value = _incomingRequests.value.filterNot { it.contactId == senderContactId } + incoming

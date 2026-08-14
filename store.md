@@ -2,8 +2,8 @@
 schema_version: 1
 app_name: Hertz Chat
 package_id: cz.kuclab.hertzchat
-version_name: "0.13.0"
-version_code: 20
+version_name: "0.14.0"
+version_code: 21
 last_updated: 2026-08-14
 license: MIT
 category: Komunikace
@@ -33,6 +33,13 @@ download_url: https://github.com/Jerry256254/HertzChat/releases/latest
 logo: store/logo.png
 screenshots: []
 changelog:
+  - version: "0.14.0"
+    date: 2026-08-14
+    notes:
+      - "Oprava: psaní sám sobě pořád hlásilo „local loopback denied“. Vlastnost, co to povoluje, se dřív nastavovala jen pro jednotlivé spojení, ale kontrolu dělá samotný router podle svého vlastního nastavení - teď se nastavuje i tam."
+      - Každý má teď sám sebe rovnou v kontaktech, bez nutnosti přidávat vlastní Hertz ID ručně - appka to na pozadí vyřídí stejným postupem jako přátelství se skutečnou osobou (opravdová Signal relace, ne zkratka)
+      - "Oprava: připojování k I2P se umělo zaseknout na jednom čísle (např. 35 %) a pak skočit dál - mezi jednotlivými kroky appka neměla co hlásit. Teď se ukazatel posouvá plynule po celou dobu, i když se zrovna nic nového nezjistilo."
+      - Mistral AI teď umí i tabulky - vykreslí se jako skutečná mřížka, ne jako řádky se svislítky
   - version: "0.13.0"
     date: 2026-08-14
     notes:

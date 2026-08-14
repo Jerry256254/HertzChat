@@ -87,18 +87,31 @@ class I2pTransport @Inject constructor(
     }
 
     /**
-     * Walks the displayed percentage toward whatever the current phase allows, instead of
-     * letting it sit on one number and then jump. Phases here are genuinely long (opening
-     * a destination waits on the router's I2CP listener), so without this the bar looked
-     * stuck at 10% and then leapt to done.
+     * Walks the displayed percentage toward [targetPercent], and - when it has already
+     * caught up and nothing concrete has moved it further - nudges the target itself
+     * forward. Every phase here can genuinely take a while (opening a destination waits
+     * on the router's own I2CP listener to come up; there's no finer-grained signal to
+     * report during that specific wait), so without a fallback nudge the bar sat dead on
+     * one number for that whole stretch and only jumped once real data arrived - which
+     * reads as frozen. Real progress (advanceTo calls backed by actual counters) always
+     * takes priority: it raises the target immediately, past wherever the nudge got to.
      */
     private fun startProgressTicker() {
         scope.launch {
             while (_state.value == I2pState.STARTING) {
                 val target = targetPercent.value
                 val shown = _bootstrapPercent.value
-                if (shown < target) _bootstrapPercent.value = shown + 1
-                kotlinx.coroutines.delay(if (target - shown > 10) 120 else 400)
+                when {
+                    shown < target -> {
+                        _bootstrapPercent.value = shown + 1
+                        kotlinx.coroutines.delay(120)
+                    }
+                    target < 95 -> {
+                        targetPercent.value = target + 1
+                        kotlinx.coroutines.delay(2_500)
+                    }
+                    else -> kotlinx.coroutines.delay(500)
+                }
             }
         }
     }
@@ -236,6 +249,12 @@ class I2pTransport @Inject constructor(
             // most of what makes the first connection feel slow.
             setProperty("router.maxParticipatingTunnels", "0")
             setProperty("router.enableLoadTesting", "false")
+            // Messaging yourself dials our own destination, which I2P refuses by default
+            // ("local loopback denied"). This check is enforced by the router itself
+            // against its own context properties - setting it only in the per-session
+            // options passed to createManager() (which is where it's documented as
+            // living) was not enough to satisfy it, so it's set here too.
+            setProperty("i2cp.disableLoopback", "true")
         }
 
         val r = Router(props)
@@ -347,9 +366,7 @@ class I2pTransport @Inject constructor(
         val reseedChecker = runCatching { netDb.reseedChecker() }.getOrNull()
 
         val deadline = System.currentTimeMillis() + READINESS_MONITOR_TIMEOUT_MS
-        var tick = 0
         while (router === r) {
-            tick++
             val peers = r.context.commSystem().countActivePeers()
             val knownRouters = runCatching { netDb.knownRouters }.getOrDefault(0)
             // The reseed status/error is blank whenever nothing is wrong, so it's only
@@ -382,11 +399,6 @@ class I2pTransport @Inject constructor(
                 _diagnostics.value = null
                 return
             }
-            // Nudge the ceiling up slowly while a phase is genuinely waiting, so the
-            // ticker always has somewhere to go. Capped below the next band so it can
-            // never claim more than has actually happened.
-            val ceiling = if (knownRouters < KNOWN_ROUTERS_TARGET) 74 else 95
-            if (tick % 8 == 0 && targetPercent.value < ceiling) targetPercent.value += 1
             kotlinx.coroutines.delay(500)
         }
     }
