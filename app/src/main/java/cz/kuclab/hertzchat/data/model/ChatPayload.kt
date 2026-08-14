@@ -34,6 +34,14 @@ data class ChatPayload(
     val groupName: String? = null,
     /** Only set for [PayloadKind.GROUP_INVITE] - every member of the new group (including the sender and the recipient), so the recipient can bootstrap sessions with members it doesn't already know. */
     val groupMembers: List<HertzId>? = null,
+    /** Set for [PayloadKind.GROUP_INVITE] and [PayloadKind.GROUP_ROSTER_UPDATE] - only this contactId may add or remove members; every recipient checks the sender against it rather than trusting the update on its own. */
+    val groupOwnerId: String? = null,
+    /**
+     * Only set for [PayloadKind.GROUP_ROSTER_UPDATE] - the *complete* membership after an
+     * add or remove, not a delta. A recipient replaces its whole local member list with
+     * this one; if its own contactId is missing, that's how it learns it was removed.
+     */
+    val groupRoster: List<HertzId>? = null,
     /** True when this is Mistral's reply, relayed into the thread by whoever invoked @Mistral - rendered with the assistant's identity, not the relayer's. */
     val fromAssistant: Boolean = false,
     /** Only set for [PayloadKind.PREFERENCE_UPDATE] - broadcast to every contact whenever the local "let others use @Mistral on my messages" toggle changes. */
@@ -41,4 +49,4 @@ data class ChatPayload(
 )
 
 @Serializable
-enum class PayloadKind { TEXT, IMAGE, VIDEO, VOICE, FILE, AVATAR, DELIVERED_ACK, READ_ACK, TYPING, GROUP_INVITE, PREFERENCE_UPDATE }
+enum class PayloadKind { TEXT, IMAGE, VIDEO, VOICE, FILE, AVATAR, DELIVERED_ACK, READ_ACK, TYPING, GROUP_INVITE, GROUP_ROSTER_UPDATE, PREFERENCE_UPDATE }

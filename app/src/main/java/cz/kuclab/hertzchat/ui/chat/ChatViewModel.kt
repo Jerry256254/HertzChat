@@ -14,6 +14,7 @@ import cz.kuclab.hertzchat.data.repository.DraftStore
 import cz.kuclab.hertzchat.data.repository.P2pChatService
 import cz.kuclab.hertzchat.data.repository.SettingsRepository
 import cz.kuclab.hertzchat.media.MediaStorage
+import cz.kuclab.hertzchat.p2p.ActiveChatTracker
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import java.io.File
@@ -38,11 +39,22 @@ class ChatViewModel @Inject constructor(
     private val draftStore: DraftStore,
     identityKeyManager: IdentityKeyManager,
     private val mediaStorage: MediaStorage,
+    private val activeChatTracker: ActiveChatTracker,
     @ApplicationContext private val context: Context,
 ) : ViewModel() {
 
     val contactId: String = checkNotNull(savedStateHandle["contactId"])
     val isSelf: Boolean = contactId == identityKeyManager.contactId()
+
+    init {
+        // Suppresses the notification MessageNotifier would otherwise fire for a message
+        // arriving in the exact thread already open on screen.
+        activeChatTracker.activeThreadId.value = contactId
+    }
+
+    override fun onCleared() {
+        if (activeChatTracker.activeThreadId.value == contactId) activeChatTracker.activeThreadId.value = null
+    }
 
     private val _draft = MutableStateFlow(draftStore.get(contactId))
     val draft: StateFlow<String> = _draft

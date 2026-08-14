@@ -22,6 +22,7 @@ import cz.kuclab.hertzchat.data.repository.AppSettings
 import cz.kuclab.hertzchat.data.repository.SettingsRepository
 import cz.kuclab.hertzchat.diagnostics.CrashReportDialog
 import cz.kuclab.hertzchat.locale.LocalePrefs
+import cz.kuclab.hertzchat.p2p.ActiveChatTracker
 import cz.kuclab.hertzchat.p2p.P2pForegroundService
 import cz.kuclab.hertzchat.ui.navigation.HertzNavHost
 import cz.kuclab.hertzchat.ui.theme.HertzChatTheme
@@ -33,6 +34,7 @@ class MainActivity : ComponentActivity() {
 
     @Inject lateinit var identityKeyManager: IdentityKeyManager
     @Inject lateinit var settingsRepository: SettingsRepository
+    @Inject lateinit var activeChatTracker: ActiveChatTracker
 
     private val notificationPermissionLauncher =
         registerForActivityResult(ActivityResultContracts.RequestPermission()) { /* no-op either way - notifications just won't show if denied */ }
@@ -66,6 +68,15 @@ class MainActivity : ComponentActivity() {
     override fun onResume() {
         super.onResume()
         startP2pServiceIfReady()
+        activeChatTracker.appInForeground.value = true
+    }
+
+    override fun onPause() {
+        super.onPause()
+        // The Compose tree (and whatever chat screen it holds) stays composed while
+        // paused - only this flag tells MessageNotifier the user actually isn't looking
+        // at it right now, e.g. after locking the screen or switching apps.
+        activeChatTracker.appInForeground.value = false
     }
 
     private fun startP2pServiceIfReady() {

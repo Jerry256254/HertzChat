@@ -284,6 +284,9 @@ class P2pChatService @Inject constructor(
                 nickname = me.nickname,
                 identityKeyBase64 = me.identityKeyBase64,
                 i2pDestination = me.i2pDestination,
+                // The other half of the symmetric handshake described above - lets the
+                // original requester establish their own side of the session too.
+                preKeyBundle = if (accept) identityKeyManager.currentPreKeyBundle().toWire() else null,
                 allowsMistralAccess = settingsRepository.settings.first().allowMistralOnMyMessages,
             )
             runCatching {
@@ -310,19 +313,23 @@ class P2pChatService @Inject constructor(
 
     // --- Groups ---
 
-    /** All members must already be trusted 1:1 contacts (their sessions are what makes fan-out delivery work). */
+    /** All members must already be trusted 1:1 contacts (their sessions are what makes fan-out delivery work). The creator becomes the group's owner - see [GroupEntity.ownerId]. */
     fun createGroup(name: String, memberContactIds: List<String>) {
         scope.launch {
             val groupId = UUID.randomUUID().toString()
             val now = System.currentTimeMillis()
-            groupDao.upsert(GroupEntity(groupId, name, createdAt = now))
-            val members = memberContactIds.mapNotNull { contactDao.find(it) }
+            val myId = identityKeyManager.contactId()
+            groupDao.upsert(GroupEntity(groupId, name, createdAt = now, ownerId = myId))
+            // Belt-and-suspenders against the same self-invite that could crash this: the
+            // self contact never has a Signal session, so trySendPayload to it below would
+            // throw NoSessionException. The picker already excludes it (ContactsViewModel).
+            val members = memberContactIds.filter { it != myId }.mapNotNull { contactDao.find(it) }
             members.forEach { groupMemberDao.upsert(GroupMemberEntity(groupId, it.contactId, it.nickname)) }
 
             val me = myHertzId() ?: return@launch
             // Every member's HertzId (including the creator) so recipients who don't know each other yet can auto-introduce themselves.
             val roster = listOf(me) + members.map { HertzId(it.contactId, it.nickname, Base64.encodeToString(it.identityKeyBytes, Base64.NO_WRAP), it.i2pDestination) }
-            val invite = ChatPayload(UUID.randomUUID().toString(), now, PayloadKind.GROUP_INVITE, groupId = groupId, groupName = name, groupMembers = roster)
+            val invite = ChatPayload(UUID.randomUUID().toString(), now, PayloadKind.GROUP_INVITE, groupId = groupId, groupName = name, groupMembers = roster, groupOwnerId = myId)
             members.forEach { trySendPayload(it.contactId, invite) }
         }
     }
@@ -335,13 +342,111 @@ class P2pChatService @Inject constructor(
         }
     }
 
+    /**
+     * Owner-only: adds already-trusted 1:1 contacts to an existing group. Broadcasting a
+     * fresh [PayloadKind.GROUP_INVITE] to *everyone* (existing members and new ones alike)
+     * rather than [PayloadKind.GROUP_ROSTER_UPDATE] is deliberate - a brand-new member has
+     * no local [GroupEntity] to update yet and needs the same bootstrap a founding member
+     * gets, while [handleGroupInvite] is already idempotent for members who do have one
+     * (it only ever upserts, never deletes), so one message shape correctly serves both.
+     */
+    fun addGroupMembers(groupId: String, newContactIds: List<String>) {
+        scope.launch {
+            val group = groupDao.find(groupId) ?: return@launch
+            val myId = identityKeyManager.contactId()
+            if (group.ownerId != myId) return@launch
+            val existing = groupMemberDao.findMembers(groupId)
+            val toAdd = newContactIds.filter { id -> id != myId && existing.none { it.contactId == id } }.mapNotNull { contactDao.find(it) }
+            if (toAdd.isEmpty()) return@launch
+            toAdd.forEach { groupMemberDao.upsert(GroupMemberEntity(groupId, it.contactId, it.nickname)) }
+
+            val me = myHertzId() ?: return@launch
+            val allMembers = groupMemberDao.findMembers(groupId)
+            val roster = listOf(me) + allMembers.mapNotNull { m -> contactDao.find(m.contactId)?.let { HertzId(it.contactId, it.nickname, Base64.encodeToString(it.identityKeyBytes, Base64.NO_WRAP), it.i2pDestination) } }
+            val invite = ChatPayload(
+                UUID.randomUUID().toString(), System.currentTimeMillis(), PayloadKind.GROUP_INVITE,
+                groupId = groupId, groupName = group.name, groupMembers = roster, groupOwnerId = myId,
+            )
+            allMembers.forEach { trySendPayload(it.contactId, invite) }
+        }
+    }
+
+    /** Owner-only: removes a member and tells every remaining member (and the removed one) the resulting roster - the removed member's own client is what turns "I'm not in this list" into actually leaving. */
+    fun removeGroupMember(groupId: String, contactId: String) {
+        scope.launch {
+            val group = groupDao.find(groupId) ?: return@launch
+            val myId = identityKeyManager.contactId()
+            if (group.ownerId != myId || contactId == myId) return@launch
+            contactDao.find(contactId) ?: return@launch
+            // Sent before deleting locally, so this device is still in its own roster send below.
+            trySendPayload(
+                contactId,
+                ChatPayload(
+                    UUID.randomUUID().toString(), System.currentTimeMillis(), PayloadKind.GROUP_ROSTER_UPDATE,
+                    groupId = groupId, groupName = group.name, groupOwnerId = myId,
+                    groupRoster = listOfNotNull(myHertzId()),
+                ),
+            )
+            groupMemberDao.deleteMember(groupId, contactId)
+            broadcastRoster(group)
+        }
+    }
+
+    private suspend fun broadcastRoster(group: GroupEntity) {
+        val myId = identityKeyManager.contactId()
+        val me = myHertzId() ?: return
+        val members = groupMemberDao.findMembers(group.groupId)
+        val roster = listOf(me) + members.mapNotNull { m -> contactDao.find(m.contactId)?.let { HertzId(it.contactId, it.nickname, Base64.encodeToString(it.identityKeyBytes, Base64.NO_WRAP), it.i2pDestination) } }
+        val payload = ChatPayload(
+            UUID.randomUUID().toString(), System.currentTimeMillis(), PayloadKind.GROUP_ROSTER_UPDATE,
+            groupId = group.groupId, groupName = group.name, groupOwnerId = myId, groupRoster = roster,
+        )
+        members.forEach { trySendPayload(it.contactId, payload) }
+    }
+
+    private suspend fun handleGroupRosterUpdate(fromContactId: String, payload: ChatPayload) {
+        val groupId = payload.groupId ?: return
+        val group = groupDao.find(groupId) ?: return
+        // Only the owner we already recorded for this group may change its membership -
+        // otherwise any group member could forge a roster update and remove or add people.
+        if (fromContactId != group.ownerId) return
+        val roster = payload.groupRoster ?: return
+        val myId = identityKeyManager.contactId()
+
+        if (roster.none { it.contactId == myId }) {
+            // We're not in the new roster: the owner removed us. Leave the same way
+            // leaveGroup() does - there's nothing left here to be a member of.
+            groupMemberDao.deleteAllForGroup(groupId)
+            groupDao.delete(groupId)
+            messageDao.deleteAllForContact(groupId)
+            return
+        }
+
+        payload.groupName?.let { name -> groupDao.upsert(group.copy(name = name)) }
+        groupMemberDao.deleteAllForGroup(groupId)
+        roster.filter { it.contactId != myId }.forEach { member ->
+            groupMemberDao.upsert(GroupMemberEntity(groupId, member.contactId, member.nickname))
+            if (member.contactId != fromContactId && contactDao.find(member.contactId) == null) {
+                // Same auto-introduction as a fresh invite: a newly-added member we don't
+                // already know, vouched for by both of us trusting the group's owner.
+                scope.launch { sendFriendRequest(member, viaGroupId = groupId) }
+            }
+        }
+    }
+
     private suspend fun handleGroupInvite(fromContactId: String, payload: ChatPayload) {
         val groupId = payload.groupId ?: return
         val name = payload.groupName ?: return
         val roster = payload.groupMembers ?: return
         val myContactId = identityKeyManager.contactId()
 
-        groupDao.upsert(GroupEntity(groupId, name, createdAt = System.currentTimeMillis()))
+        // Also arrives for a group we already have (addGroupMembers re-invites everyone) -
+        // an unconditional new GroupEntity here would reset pinned/createdAt every time.
+        val existingGroup = groupDao.find(groupId)
+        groupDao.upsert(
+            existingGroup?.copy(name = name, ownerId = payload.groupOwnerId ?: existingGroup.ownerId)
+                ?: GroupEntity(groupId, name, createdAt = System.currentTimeMillis(), ownerId = payload.groupOwnerId.orEmpty()),
+        )
         roster.filter { it.contactId != myContactId }.forEach { member ->
             groupMemberDao.upsert(GroupMemberEntity(groupId, member.contactId, member.nickname))
             if (member.contactId != fromContactId && contactDao.find(member.contactId) == null) {
@@ -497,12 +602,20 @@ class P2pChatService @Inject constructor(
     }
 
     /** Returns true if the envelope made it onto a connection successfully - not a delivery receipt, just "left this device". */
-    private suspend fun trySendPayload(contactId: String, payload: ChatPayload): Boolean {
+    /**
+     * encrypt() is what actually threw the NoSessionException that used to crash the app
+     * outright (see the FriendResponsePayload fix above for why a session could be
+     * missing in the first place) - wrapped now so any future encryption failure fails
+     * this one send instead of taking the whole app down. A message that can't be
+     * encrypted can't be sent either way, so "not delivered" is the correct outcome,
+     * not a crash.
+     */
+    private suspend fun trySendPayload(contactId: String, payload: ChatPayload): Boolean = runCatching {
         val contact = contactDao.find(contactId) ?: return false
         val envelope = cipherFor(contactId).encrypt(json.encodeToString(payload).encodeToByteArray())
         val frameType = if (envelope.isPreKeyMessage) FRAME_PREKEY else FRAME_MESSAGE
-        return sendFrameTo(contactId, contact.i2pDestination, frame(frameType, envelope.ciphertext))
-    }
+        sendFrameTo(contactId, contact.i2pDestination, frame(frameType, envelope.ciphertext))
+    }.getOrDefault(false)
 
     private suspend fun sendFrameTo(contactId: String, i2pDestination: String, bytes: ByteArray): Boolean = runCatching {
         val connection = connections[contactId]?.takeIf { runCatching { it.send(bytes) }.isSuccess }
@@ -924,6 +1037,7 @@ class P2pChatService @Inject constructor(
         when (payload.kind) {
             PayloadKind.IMAGE, PayloadKind.VIDEO, PayloadKind.VOICE, PayloadKind.FILE, PayloadKind.AVATAR -> beginIncomingTransfer(contactId, payload)
             PayloadKind.GROUP_INVITE -> scope.launch { handleGroupInvite(contactId, payload) }
+            PayloadKind.GROUP_ROSTER_UPDATE -> scope.launch { handleGroupRosterUpdate(contactId, payload) }
             PayloadKind.PREFERENCE_UPDATE -> scope.launch { contactDao.setAllowsMistralAccess(contactId, payload.allowsMistralAccess ?: true) }
             PayloadKind.TEXT -> {
                 val threadId = payload.groupId ?: contactId
@@ -977,6 +1091,12 @@ class P2pChatService @Inject constructor(
         val senderContactId = identityKeyManager.contactIdFor(Base64.decode(response.identityKeyBase64, Base64.NO_WRAP))
         scope.launch {
             addTrustedContact(senderContactId, response.nickname, response.identityKeyBase64, response.i2pDestination, response.allowsMistralAccess)
+            // Mirrors what the accepter did with our bundle in respondFriendRequest - without
+            // this, we (the original requester) would have no session and encrypt() to this
+            // contact would throw NoSessionException on the very first message we sent.
+            response.preKeyBundle?.let { bundle ->
+                runCatching { cipherFor(senderContactId).establishSessionFromBundle(bundle.toPreKeyBundle()) }
+            }
             mediaStorage.selfAvatarFile().takeIf { it.exists() }?.let { sendAvatarTo(senderContactId, it.readBytes()) }
         }
     }

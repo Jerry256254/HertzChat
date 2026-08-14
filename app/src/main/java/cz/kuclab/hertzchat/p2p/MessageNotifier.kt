@@ -35,6 +35,7 @@ class MessageNotifier @Inject constructor(
     private val groupDao: GroupDao,
     private val identityKeyManager: IdentityKeyManager,
     private val settingsRepository: SettingsRepository,
+    private val activeChatTracker: ActiveChatTracker,
 ) {
     fun start(scope: CoroutineScope, p2pChatService: P2pChatService) {
         createChannelIfNeeded()
@@ -51,6 +52,7 @@ class MessageNotifier @Inject constructor(
 
     private suspend fun notifyMessage(threadId: String, message: MessageEntity) {
         if (message.fromMe) return
+        if (activeChatTracker.isThreadVisible(threadId)) return
         val group = groupDao.find(threadId)
         val senderLabel = when {
             message.fromAssistant -> "Mistral AI"

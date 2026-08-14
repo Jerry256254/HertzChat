@@ -34,12 +34,24 @@ data class FriendRequestPayload(
     val allowsMistralAccess: Boolean = true,
 )
 
+/**
+ * [preKeyBundle] is what makes this symmetric with [FriendRequestPayload]. A Signal
+ * session is one-directional to set up: whoever *processes* a bundle becomes the
+ * initiator and can encrypt immediately, while the other side only gets their half
+ * of the session the moment they successfully decrypt that initiator's first message.
+ * Without a bundle here, only the person who *accepted* the request could ever send
+ * first - the person who *sent* the request had nothing to process, so calling
+ * encrypt() from that side threw NoSessionException the moment they tried, whether
+ * that was a direct message or (mentioned as its own crash) the first message in a
+ * group where the crasher was the one who'd sent the original request.
+ */
 @Serializable
 data class FriendResponsePayload(
     val accepted: Boolean,
     val nickname: String,
     val identityKeyBase64: String,
     val i2pDestination: String,
+    val preKeyBundle: PreKeyBundleWire? = null,
     val allowsMistralAccess: Boolean = true,
 )
 

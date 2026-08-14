@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -25,9 +26,12 @@ import androidx.compose.material.icons.filled.AttachFile
 import androidx.compose.material.icons.automirrored.filled.ExitToApp
 import androidx.compose.material.icons.filled.Groups
 import androidx.compose.material.icons.filled.Mic
+import androidx.compose.material.icons.filled.PersonAdd
+import androidx.compose.material.icons.filled.PersonRemove
 import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -51,6 +55,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.platform.LocalContext
 import androidx.core.content.ContextCompat
 import androidx.hilt.navigation.compose.hiltViewModel
+import coil.compose.AsyncImage
 import cz.kuclab.hertzchat.R
 import cz.kuclab.hertzchat.data.db.MessageEntity
 import cz.kuclab.hertzchat.data.db.MessageType
@@ -67,16 +72,21 @@ import cz.kuclab.hertzchat.ui.common.ChatInputAccentButton
 import cz.kuclab.hertzchat.ui.common.ChatInputBar
 import cz.kuclab.hertzchat.ui.common.ChatInputPillIcon
 import cz.kuclab.hertzchat.ui.common.MarkdownText
+import java.io.File
 
 @Composable
 fun GroupChatScreen(groupId: String, onBack: () -> Unit, onLeft: () -> Unit, viewModel: GroupChatViewModel = hiltViewModel()) {
     val groupName by viewModel.groupName.collectAsState()
     val members by viewModel.members.collectAsState()
+    val membersUi by viewModel.membersUi.collectAsState()
+    val isOwner by viewModel.isOwner.collectAsState()
+    val addableContacts by viewModel.addableContacts.collectAsState()
     val messages by viewModel.messages.collectAsState()
     val draft by viewModel.draft.collectAsState()
     val mentionQuery by viewModel.mentionQuery.collectAsState()
     var menuOpen by remember { mutableStateOf(false) }
     var membersDialogOpen by remember { mutableStateOf(false) }
+    var addMembersOpen by remember { mutableStateOf(false) }
     var confirmLeave by remember { mutableStateOf(false) }
     var attachMenuOpen by remember { mutableStateOf(false) }
     var isRecording by remember { mutableStateOf(false) }
@@ -101,6 +111,7 @@ fun GroupChatScreen(groupId: String, onBack: () -> Unit, onLeft: () -> Unit, vie
     }
 
     val nicknamesById = remember(members) { members.associate { it.contactId to it.nickname } }
+    val avatarsById = remember(membersUi) { membersUi.associate { it.contactId to it.avatarPath } }
 
     Scaffold(
         topBar = {
@@ -211,7 +222,11 @@ fun GroupChatScreen(groupId: String, onBack: () -> Unit, onLeft: () -> Unit, vie
             verticalArrangement = Arrangement.spacedBy(6.dp),
         ) {
             items(messages, key = { it.messageId }) { message ->
-                GroupMessageBubble(message, senderNickname = message.senderContactId?.let { nicknamesById[it] })
+                GroupMessageBubble(
+                    message,
+                    senderNickname = message.senderContactId?.let { nicknamesById[it] },
+                    senderAvatarPath = message.senderContactId?.let { avatarsById[it] },
+                )
             }
         }
     }
@@ -222,11 +237,83 @@ fun GroupChatScreen(groupId: String, onBack: () -> Unit, onLeft: () -> Unit, vie
             title = { Text("Členové skupiny") },
             text = {
                 Column {
-                    Text("Já", fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(vertical = 4.dp))
-                    members.forEach { Text(it.nickname, modifier = Modifier.padding(vertical = 4.dp)) }
+                    membersUi.forEach { member ->
+                        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp)) {
+                            Box(
+                                modifier = Modifier.size(36.dp).clip(CircleShape).background(MaterialTheme.colorScheme.primaryContainer),
+                                contentAlignment = Alignment.Center,
+                            ) {
+                                if (member.avatarPath != null) {
+                                    AsyncImage(
+                                        model = File(member.avatarPath),
+                                        contentDescription = null,
+                                        contentScale = ContentScale.Crop,
+                                        modifier = Modifier.fillMaxSize().clip(CircleShape),
+                                    )
+                                } else {
+                                    Text(member.nickname.take(1).uppercase(), color = MaterialTheme.colorScheme.onPrimaryContainer)
+                                }
+                            }
+                            Text(
+                                if (member.isSelf) "Já" else member.nickname,
+                                modifier = Modifier.padding(start = 10.dp).weight(1f),
+                            )
+                            if (isOwner && !member.isSelf) {
+                                IconButton(onClick = { viewModel.removeMember(member.contactId) }) {
+                                    Icon(Icons.Filled.PersonRemove, contentDescription = "Odebrat ${member.nickname}", tint = MaterialTheme.colorScheme.error)
+                                }
+                            }
+                        }
+                    }
+                    if (isOwner) {
+                        TextButton(onClick = { addMembersOpen = true }, modifier = Modifier.padding(top = 8.dp)) {
+                            Icon(Icons.Filled.PersonAdd, contentDescription = null, modifier = Modifier.size(18.dp))
+                            Text("  Přidat člena")
+                        }
+                    }
                 }
             },
             confirmButton = { TextButton(onClick = { membersDialogOpen = false }) { Text("Zavřít") } },
+        )
+    }
+
+    if (addMembersOpen) {
+        var selected by remember { mutableStateOf(setOf<String>()) }
+        AlertDialog(
+            onDismissRequest = { addMembersOpen = false },
+            title = { Text("Přidat člena") },
+            text = {
+                if (addableContacts.isEmpty()) {
+                    Text("Všechny tvoje kontakty jsou už ve skupině.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                } else {
+                    Column {
+                        Text(
+                            "Přidat lze jen vzájemné kontakty",
+                            style = MaterialTheme.typography.labelSmall,
+                            modifier = Modifier.padding(bottom = 4.dp),
+                        )
+                        addableContacts.forEach { contact ->
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable { selected = if (contact.contactId in selected) selected - contact.contactId else selected + contact.contactId }
+                                    .padding(vertical = 4.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                Checkbox(checked = contact.contactId in selected, onCheckedChange = null)
+                                Text(contact.nickname, modifier = Modifier.padding(start = 4.dp))
+                            }
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(
+                    enabled = selected.isNotEmpty(),
+                    onClick = { viewModel.addMembers(selected.toList()); addMembersOpen = false },
+                ) { Text("Přidat") }
+            },
+            dismissButton = { TextButton(onClick = { addMembersOpen = false }) { Text("Zrušit") } },
         )
     }
 
@@ -256,7 +343,7 @@ fun GroupChatScreen(groupId: String, onBack: () -> Unit, onLeft: () -> Unit, vie
 }
 
 @Composable
-private fun GroupMessageBubble(message: MessageEntity, senderNickname: String?) {
+private fun GroupMessageBubble(message: MessageEntity, senderNickname: String?, senderAvatarPath: String?) {
     val isAssistant = message.fromAssistant
     val bubbleColor = when {
         isAssistant -> MaterialTheme.colorScheme.tertiaryContainer
@@ -278,8 +365,32 @@ private fun GroupMessageBubble(message: MessageEntity, senderNickname: String?) 
                         painter = painterResource(R.drawable.mistral_avatar),
                         contentDescription = null,
                         contentScale = ContentScale.Crop,
-                        modifier = Modifier.size(20.dp).clip(CircleShape).padding(end = 4.dp),
+                        // padding must come before size/clip, not after: applied to an
+                        // already-20dp circle it shrinks and re-centres the drawn content
+                        // inside that same fixed circle instead of adding space around it -
+                        // the image reads as squeezed into one side of the circle.
+                        modifier = Modifier.padding(end = 4.dp).size(20.dp).clip(CircleShape),
                     )
+                } else if (!message.fromMe) {
+                    Box(
+                        modifier = Modifier.padding(end = 4.dp).size(20.dp).clip(CircleShape).background(MaterialTheme.colorScheme.primaryContainer),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        if (senderAvatarPath != null) {
+                            AsyncImage(
+                                model = File(senderAvatarPath),
+                                contentDescription = null,
+                                contentScale = ContentScale.Crop,
+                                modifier = Modifier.fillMaxSize().clip(CircleShape),
+                            )
+                        } else {
+                            Text(
+                                senderNickname.orEmpty().take(1).uppercase(),
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onPrimaryContainer,
+                            )
+                        }
+                    }
                 }
                 Column {
                     val label = if (isAssistant) "Mistral AI" else if (!message.fromMe) senderNickname else null

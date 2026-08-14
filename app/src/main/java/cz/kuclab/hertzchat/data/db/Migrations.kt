@@ -37,3 +37,16 @@ val MIGRATION_6_7 = object : Migration(6, 7) {
         db.execSQL("ALTER TABLE assistant_messages ADD COLUMN mediaPath TEXT")
     }
 }
+
+/**
+ * Lets a group's owner add or remove members. Existing local groups predate the concept
+ * of an owner, so they default to blank rather than guessing this device is the owner -
+ * an empty ownerId never matches anyone's contactId, so pre-existing groups simply show
+ * no management controls to anyone until they're recreated, rather than every member's
+ * device wrongly granting itself owner rights over a group it didn't create.
+ */
+val MIGRATION_7_8 = object : Migration(7, 8) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL("ALTER TABLE groups ADD COLUMN ownerId TEXT NOT NULL DEFAULT ''")
+    }
+}

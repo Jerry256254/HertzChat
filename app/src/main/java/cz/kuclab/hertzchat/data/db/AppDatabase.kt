@@ -39,7 +39,7 @@ class Converters {
         GroupEntity::class,
         GroupMemberEntity::class,
     ],
-    version = 7,
+    version = 8,
     exportSchema = false,
 )
 @TypeConverters(Converters::class)

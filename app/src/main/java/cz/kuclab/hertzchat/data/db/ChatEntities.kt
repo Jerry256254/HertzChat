@@ -33,6 +33,8 @@ data class GroupEntity(
     val name: String,
     val pinned: Boolean = false,
     val createdAt: Long,
+    /** Whoever created the group - the only member allowed to add or remove others (enforced by every recipient checking this before applying a roster update, not by any server). */
+    val ownerId: String = "",
 )
 
 /** One row per *other* member (the local user is implicitly a member of every group it has locally). */
@@ -117,6 +119,8 @@ interface GroupDao {
     suspend fun delete(id: String)
 }
 
+
+
 @Dao
 interface GroupMemberDao {
     @Query("SELECT * FROM group_members WHERE groupId = :groupId")
@@ -130,6 +134,9 @@ interface GroupMemberDao {
 
     @Query("DELETE FROM group_members WHERE groupId = :groupId")
     suspend fun deleteAllForGroup(groupId: String)
+
+    @Query("DELETE FROM group_members WHERE groupId = :groupId AND contactId = :contactId")
+    suspend fun deleteMember(groupId: String, contactId: String)
 }
 
 @Dao

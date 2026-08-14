@@ -2,6 +2,7 @@ package cz.kuclab.hertzchat.ui.contacts
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import cz.kuclab.hertzchat.crypto.IdentityKeyManager
 import cz.kuclab.hertzchat.data.db.ContactDao
 import cz.kuclab.hertzchat.data.repository.IncomingFriendRequest
 import cz.kuclab.hertzchat.data.repository.P2pChatService
@@ -23,13 +24,21 @@ class ContactsViewModel @Inject constructor(
     private val p2pChatService: P2pChatService,
     contactDao: ContactDao,
     mistralKeyStore: MistralKeyStore,
+    identityKeyManager: IdentityKeyManager,
 ) : ViewModel() {
 
     private val json = Json { ignoreUnknownKeys = true }
 
     val mistralEnabled = mistralKeyStore.enabled
     val showMistralContact = mistralKeyStore.showAssistantContact
-    val contacts = contactDao.observeContacts().stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    // Excludes the self contact: it exists so "message yourself" has a normal-looking
+    // chat row, but it never has a real Signal session (self-messages are delivered
+    // locally, see P2pChatService.isSelf) - picking it here would build a group that
+    // tries to send a peer-to-peer invite to yourself and crash with NoSessionException.
+    val contacts = contactDao.observeContacts()
+        .map { list -> list.filterNot { it.contactId == identityKeyManager.contactId() } }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     fun createGroup(name: String, memberContactIds: List<String>) {
         if (name.isBlank() || memberContactIds.isEmpty()) return

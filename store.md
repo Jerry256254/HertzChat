@@ -2,8 +2,8 @@
 schema_version: 1
 app_name: Hertz Chat
 package_id: cz.kuclab.hertzchat
-version_name: "0.24.0"
-version_code: 31
+version_name: "0.25.0"
+version_code: 32
 last_updated: 2026-08-14
 license: MIT
 category: Komunikace
@@ -33,6 +33,16 @@ download_url: https://github.com/Jerry256254/HertzChat/releases/latest
 logo: store/logo.png
 screenshots: []
 changelog:
+  - version: "0.25.0"
+    date: 2026-08-14
+    notes:
+      - "Oprava skutečné příčiny pádu při psaní ve skupině i při jejím vytváření. Kdo žádost o přátelství odeslal, nikdy nedostal zpátky materiál k navázání vlastní strany šifrované relace - dokázala psát jen strana, co žádost přijala. Ta druhá strana pak při první zprávě spadla na chybu "chybí relace". Odpověď na žádost teď nese potřebný materiál oběma směry."
+      - "Vytvoření skupiny už nenabízí sebe sama jako člena - výběr sebe způsoboval přesně tu samou chybu (appka si zkoušela poslat pozvánku sama sobě, s čím nemá navázanou relaci, protože zprávy sobě se doručují lokálně)."
+      - "Vlastník skupiny může přidávat a odebírat členy (tlačítka v seznamu členů). Odebraný člen se o tom dozví a skupina se mu sama odstraní."
+      - "V skupinovém chatu jsou u zpráv i v seznamu členů vidět skutečné profilovky, ne jen iniciály."
+      - "Notifikace se už neukazují pro chat, který máš zrovna otevřený a appka je na popředí."
+      - "Oprava zaseknutého loga Mistral AI u zpráv ve skupině - špatné pořadí úprav ho zmáčklo do rohu kolečka místo aby mělo volný okraj."
+      - "Šifrování zprávy, které selže, appku už nikdy neshodí - zpráva zůstane čekat na doručení a appka to zkusí znovu, místo pádu."
   - version: "0.24.0"
     date: 2026-08-14
     notes:
