@@ -307,12 +307,21 @@ class I2pTransport @Inject constructor(
         while (router === r) {
             val peers = r.context.commSystem().countActivePeers()
             val knownRouters = runCatching { netDb.knownRouters }.getOrDefault(0)
-            val reseedText = reseedChecker?.let { it.error ?: it.status } ?: "n/a"
-            _diagnostics.value = "Známé routery: $knownRouters, aktivní sousedé: $peers, reseed: $reseedText"
+            // The reseed status/error is blank whenever nothing is wrong, so it's only
+            // worth a line when it actually says something - otherwise it rendered as a
+            // dangling "reseed:" with nothing after it.
+            val reseedText = reseedChecker?.let { it.error ?: it.status }?.takeIf { it.isNotBlank() }
+            _diagnostics.value = buildString {
+                append("Známé routery: $knownRouters, aktivní sousedé: $peers")
+                reseedText?.let { append(", reseed: $it") }
+            }
             _bootstrapPercent.value = (peers * 100 / READY_PEER_COUNT).coerceAtMost(100)
             if (peers >= READY_PEER_COUNT || System.currentTimeMillis() >= deadline) {
                 _bootstrapPercent.value = 100
                 _state.value = I2pState.CONNECTED
+                // Once we're up this is just noise on the Contacts screen; it exists to
+                // explain a *failure to* connect, not to sit there permanently.
+                _diagnostics.value = null
                 return
             }
             kotlinx.coroutines.delay(500)

@@ -11,8 +11,8 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.RotateLeft
-import androidx.compose.material.icons.filled.RotateRight
+import androidx.compose.material.icons.automirrored.filled.RotateLeft
+import androidx.compose.material.icons.automirrored.filled.RotateRight
 import androidx.compose.material3.Button
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
@@ -95,10 +95,10 @@ fun ImageEditorDialog(uri: Uri, jpegQuality: Int = 95, onCancel: () -> Unit, onC
                 horizontalArrangement = Arrangement.Center,
             ) {
                 IconButton(onClick = { rotationDegrees -= 90f }) {
-                    Icon(Icons.Filled.RotateLeft, contentDescription = "Otočit doleva", tint = Color.White)
+                    Icon(Icons.AutoMirrored.Filled.RotateLeft, contentDescription = "Otočit doleva", tint = Color.White)
                 }
                 IconButton(onClick = { rotationDegrees += 90f }) {
-                    Icon(Icons.Filled.RotateRight, contentDescription = "Otočit doprava", tint = Color.White)
+                    Icon(Icons.AutoMirrored.Filled.RotateRight, contentDescription = "Otočit doprava", tint = Color.White)
                 }
             }
 

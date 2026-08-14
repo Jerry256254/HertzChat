@@ -2,8 +2,8 @@
 schema_version: 1
 app_name: Hertz Chat
 package_id: cz.kuclab.hertzchat
-version_name: "0.11.1"
-version_code: 17
+version_name: "0.11.2"
+version_code: 18
 last_updated: 2026-08-14
 license: MIT
 category: Komunikace
@@ -33,6 +33,12 @@ download_url: https://github.com/Jerry256254/HertzChat/releases/latest
 logo: store/logo.png
 screenshots: []
 changelog:
+  - version: "0.11.2"
+    date: 2026-08-14
+    notes:
+      - "Oprava: diagnostický řádek sítě zůstával na obrazovce Kontakty i po úspěšném připojení a končil prázdným „reseed:“ - existuje k vysvětlení, proč se připojení nepovedlo, takže se teď po připojení skryje"
+      - "Zabezpečení místní sítě: příchozí spojení z Wi-Fi se teď přijme jen tehdy, když se hlásí z adresy, na které daný kontakt skutečně inzeroval sám sebe. U I2P je totožnost odesílatele kryptograficky dokázaná samotnou adresou, u obyčejného spojení v místní síti ne - bez téhle kontroly by se kdokoliv na stejné Wi-Fi mohl vydávat za kontakt a pohlcovat zprávy určené jemu (přečíst by je nikdy nemohl, jsou šifrované klíči skutečného kontaktu)."
+      - Úklid kódu - odstraněna všechna varování překladače (zastaralé ikony, chybějící opt-in)
   - version: "0.11.1"
     date: 2026-08-14
     notes:

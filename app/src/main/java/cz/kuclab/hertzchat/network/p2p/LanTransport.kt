@@ -119,6 +119,11 @@ class LanTransport @Inject constructor(
         runCatching { nsdManager.discoverServices(SERVICE_TYPE, NsdManager.PROTOCOL_DNS_SD, listener) }
     }
 
+    // NsdServiceInfo.host and resolveService() are deprecated in favour of
+    // getHostAddresses()/registerServiceInfoCallback(), which only exist on API 34+.
+    // minSdk here is 26, so the deprecated pair is the only version that works on every
+    // device the app supports - revisit if minSdk ever reaches 34.
+    @Suppress("DEPRECATION")
     private fun resolve(info: NsdServiceInfo, myContactId: String) {
         val resolveListener = object : NsdManager.ResolveListener {
             override fun onResolveFailed(info: NsdServiceInfo?, errorCode: Int) = Unit
@@ -136,6 +141,21 @@ class LanTransport @Inject constructor(
 
     /** Non-null when this contact is reachable on the current local network. */
     fun addressFor(contactId: String): InetSocketAddress? = peers[contactId]
+
+    /**
+     * Whether [contactId] was actually announced at [address] on this network.
+     *
+     * An I2P destination is cryptographic proof of who dialled us; a plain LAN socket
+     * carries no such proof, so an inbound peer claiming to be a given contact has to at
+     * least be coming from the address mDNS advertised for them. Without this check
+     * anyone on the same Wi-Fi could claim a contact's identity and swallow the messages
+     * meant for them - they could never read any (everything is Signal-encrypted to the
+     * real contact's keys) but they could stop them arriving.
+     */
+    fun matchesDiscovered(contactId: String, address: java.net.InetAddress?): Boolean {
+        address ?: return false
+        return peers[contactId]?.address == address
+    }
 
     /** Opens a direct LAN socket, or throws if that contact isn't on this network right now. */
     fun connectTo(contactId: String): Socket {

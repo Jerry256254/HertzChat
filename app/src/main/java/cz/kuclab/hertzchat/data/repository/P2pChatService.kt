@@ -155,11 +155,11 @@ class P2pChatService @Inject constructor(
             i2pTransport.i2pDestination.collect { address -> if (address != null) identityKeyManager.i2pDestination = address }
         }
         scope.launch {
-            i2pTransport.incomingConnections.collect { socket -> handleIncomingSocket(socket) }
+            i2pTransport.incomingConnections.collect { socket -> handleIncomingSocket(socket, viaLan = false) }
         }
         lanTransport.start(identityKeyManager.contactId())
         scope.launch {
-            lanTransport.incomingConnections.collect { socket -> handleIncomingSocket(socket) }
+            lanTransport.incomingConnections.collect { socket -> handleIncomingSocket(socket, viaLan = true) }
         }
         scope.launch { retryPendingLoop() }
     }
@@ -790,7 +790,7 @@ class P2pChatService @Inject constructor(
 
     // --- Connection handling ---
 
-    private fun handleIncomingSocket(socket: Socket) {
+    private fun handleIncomingSocket(socket: Socket, viaLan: Boolean) {
         scope.launch {
             val connection = P2pConnection(socket)
             var fromContactId: String? = null
@@ -800,8 +800,14 @@ class P2pChatService @Inject constructor(
                     if (bytes.isEmpty()) continue
                     when (bytes[0]) {
                         FRAME_HELLO -> {
-                            fromContactId = bytes.copyOfRange(1, bytes.size).decodeToString()
-                            fromContactId.takeIf { it !in blockedContactIds }?.let { registerConnection(it, connection) }
+                            val claimed = bytes.copyOfRange(1, bytes.size).decodeToString()
+                            // Over I2P the destination that dialled us is itself proof of identity.
+                            // A LAN socket proves nothing, so only honour the claim if mDNS actually
+                            // announced that contact at this address - see LanTransport.matchesDiscovered.
+                            val identityPlausible = !viaLan || lanTransport.matchesDiscovered(claimed, socket.inetAddress)
+                            if (!identityPlausible || claimed in blockedContactIds) return@launch
+                            fromContactId = claimed
+                            registerConnection(claimed, connection)
                         }
                         FRAME_MEDIA_CHUNK -> onMediaChunkReceived(bytes)
                         FRAME_FRIEND_REQUEST -> handleFriendRequestFrame(bytes)

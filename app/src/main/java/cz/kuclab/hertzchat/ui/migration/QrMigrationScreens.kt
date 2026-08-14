@@ -14,7 +14,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.camera.view.PreviewView
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.Button
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -49,7 +49,7 @@ fun QrExportScreen(onDone: () -> Unit, viewModel: QrMigrationViewModel = hiltVie
         topBar = {
             TopAppBar(
                 title = { Text("Přenos identity") },
-                navigationIcon = { IconButton(onClick = onDone) { Icon(Icons.Filled.ArrowBack, contentDescription = "Zpět") } },
+                navigationIcon = { IconButton(onClick = onDone) { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Zpět") } },
             )
         },
     ) { padding ->
@@ -101,7 +101,7 @@ fun QrImportScreen(onDone: () -> Unit, viewModel: QrMigrationViewModel = hiltVie
         topBar = {
             TopAppBar(
                 title = { Text("Naskenovat identitu") },
-                navigationIcon = { IconButton(onClick = onDone) { Icon(Icons.Filled.ArrowBack, contentDescription = "Zpět") } },
+                navigationIcon = { IconButton(onClick = onDone) { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Zpět") } },
             )
         },
     ) { padding ->

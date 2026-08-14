@@ -19,13 +19,13 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.AttachFile
 import androidx.compose.material.icons.filled.Block
 import androidx.compose.material.icons.filled.ContentCopy
-import androidx.compose.material.icons.filled.InsertDriveFile
+import androidx.compose.material.icons.automirrored.filled.InsertDriveFile
 import androidx.compose.material.icons.filled.Mic
-import androidx.compose.material.icons.filled.Send
+import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material.icons.filled.VideoLibrary
 import androidx.compose.material3.DropdownMenu
@@ -102,7 +102,7 @@ fun ChatScreen(contactId: String, onBack: () -> Unit, viewModel: ChatViewModel =
     Scaffold(
         topBar = {
             TopAppBar(
-                navigationIcon = { IconButton(onClick = onBack) { Icon(Icons.Filled.ArrowBack, contentDescription = "Zpět") } },
+                navigationIcon = { IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Zpět") } },
                 title = {
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
@@ -155,7 +155,7 @@ fun ChatScreen(contactId: String, onBack: () -> Unit, viewModel: ChatViewModel =
                             )
                             DropdownMenuItem(
                                 text = { Text("Soubor") },
-                                leadingIcon = { Icon(Icons.Filled.InsertDriveFile, contentDescription = null) },
+                                leadingIcon = { Icon(Icons.AutoMirrored.Filled.InsertDriveFile, contentDescription = null) },
                                 onClick = { attachMenuOpen = false; pickFile.launch("*/*") },
                             )
                         }
@@ -183,7 +183,7 @@ fun ChatScreen(contactId: String, onBack: () -> Unit, viewModel: ChatViewModel =
                         },
                         icon = when {
                             isRecording -> Icons.Filled.Stop
-                            draft.isNotBlank() -> Icons.Filled.Send
+                            draft.isNotBlank() -> Icons.AutoMirrored.Filled.Send
                             else -> Icons.Filled.Mic
                         },
                         contentDescription = if (isRecording) "Zastavit nahrávání" else if (draft.isNotBlank()) "Odeslat" else "Nahrát hlasovku",

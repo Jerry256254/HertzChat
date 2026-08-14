@@ -22,12 +22,12 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ArrowBack
-import androidx.compose.material.icons.filled.Chat
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.Chat
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.History
-import androidx.compose.material.icons.filled.Send
+import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -83,7 +83,7 @@ fun AssistantChatScreen(onBack: () -> Unit, viewModel: AssistantChatViewModel = 
                 },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
-                        Icon(Icons.Filled.ArrowBack, contentDescription = "Zpět")
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Zpět")
                     }
                 },
                 actions = {
@@ -102,7 +102,7 @@ fun AssistantChatScreen(onBack: () -> Unit, viewModel: AssistantChatViewModel = 
                     trailingButton = {
                         ChatInputAccentButton(
                             onClick = viewModel::send,
-                            icon = Icons.Filled.Send,
+                            icon = Icons.AutoMirrored.Filled.Send,
                             contentDescription = "Odeslat",
                         )
                     },
@@ -203,7 +203,7 @@ private fun ConversationRow(
                     .background(MaterialTheme.colorScheme.primaryContainer),
                 contentAlignment = Alignment.Center,
             ) {
-                Icon(Icons.Filled.Chat, contentDescription = null, tint = MaterialTheme.colorScheme.onPrimaryContainer, modifier = Modifier.size(18.dp))
+                Icon(Icons.AutoMirrored.Filled.Chat, contentDescription = null, tint = MaterialTheme.colorScheme.onPrimaryContainer, modifier = Modifier.size(18.dp))
             }
             Column(modifier = Modifier.weight(1f).padding(horizontal = 12.dp)) {
                 Text(conversation.title, fontWeight = FontWeight.Medium, maxLines = 1)
