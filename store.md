@@ -2,8 +2,8 @@
 schema_version: 1
 app_name: Hertz Chat
 package_id: cz.kuclab.hertzchat
-version_name: "0.18.0"
-version_code: 25
+version_name: "0.19.0"
+version_code: 26
 last_updated: 2026-08-14
 license: MIT
 category: Komunikace
@@ -33,6 +33,12 @@ download_url: https://github.com/Jerry256254/HertzChat/releases/latest
 logo: store/logo.png
 screenshots: []
 changelog:
+  - version: "0.19.0"
+    date: 2026-08-14
+    notes:
+      - "Oprava: u vyskakovacích nabídek vykukovaly hranaté rohy. Zaoblení se dřív dávalo jen na obsah, ale samotnou plochu nabídky kreslí systémová komponenta pod ním - teď se zaobluje ta."
+      - "Oprava: zpráva sama sobě zůstávala na „Čeká se, až bude příjemce online...“. Příjemcem jsi ty sám, takže zpráva je doručená ve chvíli, kdy se uloží - už se neposílá přes I2P ven a zpátky."
+      - "Obsah bublin s přílohou je vycentrovaný. Tlačítko přehrání u hlasovky mělo kolem sebe povinnou dotykovou plochu, která bublinu zleva roztahovala víc než zprava."
   - version: "0.18.0"
     date: 2026-08-14
     notes:

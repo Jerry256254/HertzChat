@@ -89,30 +89,48 @@ fun VoiceBubble(message: MessageEntity, onSurface: Color, accent: Color) {
         onDispose { player.release() }
     }
 
-    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(4.dp)) {
-        IconButton(onClick = {
-            if (isPlaying) {
-                player.pause()
-                isPlaying = false
-            } else {
-                message.mediaPath?.let { path ->
-                    player.reset()
-                    player.setDataSource(path)
-                    player.setOnCompletionListener { isPlaying = false }
-                    player.prepare()
-                    player.start()
-                    isPlaying = true
-                }
-            }
-        }) {
+    // A plain clickable Box rather than IconButton: IconButton forces a 48dp touch
+    // target with its own internal padding, which inside a bubble shows up as a wide
+    // gap on the left that the right side has no equivalent of - the content ends up
+    // visibly off-centre. The row keeps the same padding as FileBubble so every
+    // attachment bubble is inset identically.
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
+    ) {
+        Box(
+            contentAlignment = Alignment.Center,
+            modifier = Modifier
+                .size(32.dp)
+                .clickable {
+                    if (isPlaying) {
+                        player.pause()
+                        isPlaying = false
+                    } else {
+                        message.mediaPath?.let { path ->
+                            player.reset()
+                            player.setDataSource(path)
+                            player.setOnCompletionListener { isPlaying = false }
+                            player.prepare()
+                            player.start()
+                            isPlaying = true
+                        }
+                    }
+                },
+        ) {
             Icon(
                 if (isPlaying) Icons.Filled.Pause else Icons.Filled.PlayArrow,
                 contentDescription = if (isPlaying) "Pozastavit" else "Přehrát",
                 tint = accent,
+                modifier = Modifier.size(28.dp),
             )
         }
         val seconds = ((message.mediaDurationMs ?: 0L) / 1000).toInt()
-        Text("Hlasová zpráva · ${seconds / 60}:${(seconds % 60).toString().padStart(2, '0')}", color = onSurface)
+        Text(
+            "Hlasová zpráva · ${seconds / 60}:${(seconds % 60).toString().padStart(2, '0')}",
+            color = onSurface,
+            modifier = Modifier.padding(start = 10.dp),
+        )
     }
 }
 

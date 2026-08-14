@@ -180,6 +180,14 @@ class P2pChatService @Inject constructor(
      * messages to yourself go through the identical encrypted path as messages to
      * anyone else, not a shortcut that bypasses it.
      */
+    /**
+     * A note to yourself has already arrived the moment it's written to the local
+     * database - the "recipient" is this very device. Routing it out through I2P and
+     * back would leave it sitting at "waiting for the recipient to come online" for
+     * as long as the loopback takes (and forever if it never completes).
+     */
+    private fun isSelf(contactId: String): Boolean = contactId == identityKeyManager.contactId()
+
     private suspend fun ensureSelfContact() {
         val myId = identityKeyManager.contactId()
         if (contactDao.find(myId) != null) return
@@ -358,8 +366,12 @@ class P2pChatService @Inject constructor(
                     deliveryState = DeliveryState.PENDING,
                 ),
             )
-            val delivered = trySendPayload(contactId, payload)
-            messageDao.updateState(payload.messageId, if (delivered) DeliveryState.SENT else DeliveryState.PENDING)
+            if (isSelf(contactId)) {
+                messageDao.updateState(payload.messageId, DeliveryState.DELIVERED)
+            } else {
+                val delivered = trySendPayload(contactId, payload)
+                messageDao.updateState(payload.messageId, if (delivered) DeliveryState.SENT else DeliveryState.PENDING)
+            }
             maybeInvokeMistral(threadId = contactId, isGroup = false, text = text)
         }
     }
@@ -530,6 +542,11 @@ class P2pChatService @Inject constructor(
                     deliveryState = DeliveryState.PENDING,
                 ),
             )
+
+            if (isSelf(contactId)) {
+                messageDao.updateState(messageId, DeliveryState.DELIVERED)
+                return@launch
+            }
 
             val contact = contactDao.find(contactId)
             val delivered = contact != null && runCatching {

@@ -27,10 +27,10 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import cz.kuclab.hertzchat.ui.theme.HertzGreen
 
@@ -41,6 +41,25 @@ import cz.kuclab.hertzchat.ui.theme.HertzGreen
  * like Telegram/WhatsApp use - a bare glyph-and-text [androidx.compose.material3.DropdownMenuItem]
  * row reads as flat and dated against this app's dark surfaces.
  */
+/**
+ * Rounds the popup surface itself, not just its contents.
+ *
+ * A menu's container is drawn by a `Surface` inside `DropdownMenu` whose shape comes
+ * from `shapes.extraSmall` (Material3 `MenuTokens.ContainerShape` -> `CornerExtraSmall`),
+ * and nothing on the menu's own `Modifier` can reach it - clipping there rounds only
+ * what's drawn on top, leaving the container's square corners poking out behind.
+ * Overriding that one shape for the duration of the popup is what actually rounds it.
+ */
+@Composable
+private fun RoundedMenuSurface(radius: Dp, content: @Composable () -> Unit) {
+    MaterialTheme(
+        colorScheme = MaterialTheme.colorScheme,
+        shapes = MaterialTheme.shapes.copy(extraSmall = RoundedCornerShape(radius)),
+        typography = MaterialTheme.typography,
+        content = content,
+    )
+}
+
 @Composable
 fun ActionMenu(
     expanded: Boolean,
@@ -48,17 +67,14 @@ fun ActionMenu(
     modifier: Modifier = Modifier,
     content: @Composable ColumnScope.() -> Unit,
 ) {
-    DropdownMenu(
-        expanded = expanded,
-        onDismissRequest = onDismissRequest,
-        modifier = modifier
-            .widthIn(min = 220.dp)
-            .shadow(elevation = 12.dp, shape = RoundedCornerShape(20.dp))
-            .clip(RoundedCornerShape(20.dp))
-            .background(MaterialTheme.colorScheme.surfaceContainerHigh)
-            .padding(vertical = 6.dp),
-    ) {
-        Column(content = content)
+    RoundedMenuSurface(radius = 20.dp) {
+        DropdownMenu(
+            expanded = expanded,
+            onDismissRequest = onDismissRequest,
+            modifier = modifier.widthIn(min = 220.dp).padding(vertical = 6.dp),
+        ) {
+            Column(content = content)
+        }
     }
 }
 
@@ -110,36 +126,31 @@ fun AttachmentMenu(
     onPickVideo: () -> Unit,
     onPickFile: () -> Unit,
 ) {
-    DropdownMenu(
-        expanded = expanded,
-        onDismissRequest = onDismissRequest,
-        modifier = Modifier
-            .shadow(elevation = 12.dp, shape = RoundedCornerShape(24.dp))
-            .clip(RoundedCornerShape(24.dp))
-            .background(MaterialTheme.colorScheme.surfaceContainerHigh),
-    ) {
-        Row(
-            modifier = Modifier.padding(horizontal = 16.dp, vertical = 14.dp),
-            horizontalArrangement = Arrangement.spacedBy(22.dp),
-        ) {
-            AttachmentOption(
-                icon = Icons.Filled.Image,
-                label = "Obrázek",
-                color = HertzGreen,
-                onClick = { onDismissRequest(); onPickImage() },
-            )
-            AttachmentOption(
-                icon = Icons.Filled.VideoLibrary,
-                label = "Video",
-                color = Color(0xFF7C4DFF),
-                onClick = { onDismissRequest(); onPickVideo() },
-            )
-            AttachmentOption(
-                icon = Icons.AutoMirrored.Filled.InsertDriveFile,
-                label = "Soubor",
-                color = Color(0xFFFF9800),
-                onClick = { onDismissRequest(); onPickFile() },
-            )
+    RoundedMenuSurface(radius = 24.dp) {
+        DropdownMenu(expanded = expanded, onDismissRequest = onDismissRequest) {
+            Row(
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 14.dp),
+                horizontalArrangement = Arrangement.spacedBy(22.dp),
+            ) {
+                AttachmentOption(
+                    icon = Icons.Filled.Image,
+                    label = "Obrázek",
+                    color = HertzGreen,
+                    onClick = { onDismissRequest(); onPickImage() },
+                )
+                AttachmentOption(
+                    icon = Icons.Filled.VideoLibrary,
+                    label = "Video",
+                    color = Color(0xFF7C4DFF),
+                    onClick = { onDismissRequest(); onPickVideo() },
+                )
+                AttachmentOption(
+                    icon = Icons.AutoMirrored.Filled.InsertDriveFile,
+                    label = "Soubor",
+                    color = Color(0xFFFF9800),
+                    onClick = { onDismissRequest(); onPickFile() },
+                )
+            }
         }
     }
 }
