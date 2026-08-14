@@ -40,6 +40,8 @@ private const val SOCKET_MANAGER_TIMEOUT_MS = 150_000L
 private const val I2CP_RETRY_DELAY_MS = 250L
 private const val READY_PEER_COUNT = 1
 private const val READINESS_MONITOR_TIMEOUT_MS = 60_000L
+/** Same threshold the router's own reseed check uses - below this the netDb is too small to build tunnels from. */
+private const val KNOWN_ROUTERS_TARGET = 50
 
 /**
  * Two Hertz Chat devices find and reach each other over the public I2P
@@ -71,6 +73,16 @@ class I2pTransport @Inject constructor(
     private val _bootstrapPercent = MutableStateFlow(0)
     val bootstrapPercent: StateFlow<Int> = _bootstrapPercent
 
+    private val _bootstrapLabel = MutableStateFlow<String?>(null)
+    /** What the router is actually doing right now, so a slow start reads as progress rather than a freeze. */
+    val bootstrapLabel: StateFlow<String?> = _bootstrapLabel
+
+    /** Progress only ever moves forward - a dip would read as something having gone wrong. */
+    private fun advanceTo(percent: Int, label: String) {
+        if (percent > _bootstrapPercent.value) _bootstrapPercent.value = percent
+        _bootstrapLabel.value = label
+    }
+
     private val _i2pDestination = MutableStateFlow<String?>(null)
     val i2pDestination: StateFlow<String?> = _i2pDestination
 
@@ -94,6 +106,7 @@ class I2pTransport @Inject constructor(
         if (router != null) return
         _error.value = null
         _state.value = I2pState.STARTING
+        advanceTo(2, "Spouští se router I2P")
 
         scope.launch {
             val result = runCatching {
@@ -106,6 +119,8 @@ class I2pTransport @Inject constructor(
                 cleanup()
                 return@launch
             }
+
+            advanceTo(10, "Otevírá se tvoje adresa v síti")
 
             // Reseeding and opening our destination don't depend on each other, so start
             // the (network-bound, potentially slow) reseed immediately and let it run while
@@ -122,6 +137,8 @@ class I2pTransport @Inject constructor(
                 cleanup()
                 return@launch
             }
+
+            advanceTo(20, "Hledají se routery v síti")
 
             // Best-effort progress/ready signal only - a failure here must never crash the
             // app or leave the destination we just opened unusable, so it's non-fatal.
@@ -304,7 +321,9 @@ class I2pTransport @Inject constructor(
         val reseedChecker = runCatching { netDb.reseedChecker() }.getOrNull()
 
         val deadline = System.currentTimeMillis() + READINESS_MONITOR_TIMEOUT_MS
+        var tick = 0
         while (router === r) {
+            tick++
             val peers = r.context.commSystem().countActivePeers()
             val knownRouters = runCatching { netDb.knownRouters }.getOrDefault(0)
             // The reseed status/error is blank whenever nothing is wrong, so it's only
@@ -315,15 +334,32 @@ class I2pTransport @Inject constructor(
                 append("Známé routery: $knownRouters, aktivní sousedé: $peers")
                 reseedText?.let { append(", reseed: $it") }
             }
-            _bootstrapPercent.value = (peers * 100 / READY_PEER_COUNT).coerceAtMost(100)
+            // Progress used to be peers/1, i.e. 0% until the first peer and then a jump
+            // straight to 100 - which reads as "frozen, then suddenly done". These are
+            // the two things that actually happen in order, each mapped to its own band:
+            // filling the netDb (routers we know of), then building tunnels through it.
+            if (knownRouters < KNOWN_ROUTERS_TARGET) {
+                val share = knownRouters * 50 / KNOWN_ROUTERS_TARGET
+                advanceTo(20 + share, "Stahuje se seznam routerů v síti ($knownRouters z $KNOWN_ROUTERS_TARGET)")
+            } else {
+                val share = peers * 25 / READY_PEER_COUNT
+                advanceTo(70 + share.coerceAtMost(25), "Staví se tunely (známých routerů: $knownRouters)")
+            }
+
             if (peers >= READY_PEER_COUNT || System.currentTimeMillis() >= deadline) {
                 _bootstrapPercent.value = 100
+                _bootstrapLabel.value = null
                 _state.value = I2pState.CONNECTED
                 // Once we're up this is just noise on the Contacts screen; it exists to
                 // explain a *failure to* connect, not to sit there permanently.
                 _diagnostics.value = null
                 return
             }
+            // Even when neither counter has moved, creep forward once every ~3s so a slow
+            // phase still looks alive rather than stalled. Capped below the next band so
+            // it can never overtake what has actually happened.
+            val ceiling = if (knownRouters < KNOWN_ROUTERS_TARGET) 69 else 95
+            if (tick % 6 == 0 && _bootstrapPercent.value < ceiling) _bootstrapPercent.value += 1
             kotlinx.coroutines.delay(500)
         }
     }

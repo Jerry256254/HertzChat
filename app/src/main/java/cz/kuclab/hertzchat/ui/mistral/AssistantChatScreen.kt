@@ -61,6 +61,7 @@ import cz.kuclab.hertzchat.data.db.AssistantRole
 import cz.kuclab.hertzchat.ui.common.AppCard
 import cz.kuclab.hertzchat.ui.common.ChatInputAccentButton
 import cz.kuclab.hertzchat.ui.common.ChatInputBar
+import cz.kuclab.hertzchat.ui.common.MarkdownText
 import java.text.DateFormat
 import java.util.Date
 
@@ -268,7 +269,7 @@ private fun AssistantMessageBubble(message: AssistantMessageEntity) {
                 if (message.text.isEmpty()) {
                     TypingIndicator()
                 } else {
-                    Text(message.text, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    MarkdownText(message.text, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             }
         }

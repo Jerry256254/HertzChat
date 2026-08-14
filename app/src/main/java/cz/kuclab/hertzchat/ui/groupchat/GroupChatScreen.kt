@@ -67,6 +67,7 @@ import cz.kuclab.hertzchat.ui.chat.VoiceBubble
 import cz.kuclab.hertzchat.ui.common.ChatInputAccentButton
 import cz.kuclab.hertzchat.ui.common.ChatInputBar
 import cz.kuclab.hertzchat.ui.common.ChatInputPillIcon
+import cz.kuclab.hertzchat.ui.common.MarkdownText
 
 @Composable
 fun GroupChatScreen(groupId: String, onBack: () -> Unit, onLeft: () -> Unit, viewModel: GroupChatViewModel = hiltViewModel()) {
@@ -312,7 +313,11 @@ private fun GroupMessageBubble(message: MessageEntity, senderNickname: String?) 
                                 .background(bubbleColor)
                                 .padding(horizontal = 14.dp, vertical = 8.dp),
                         ) {
-                            Text(message.text.orEmpty(), color = textColor)
+                            if (isAssistant) {
+                                MarkdownText(message.text.orEmpty(), color = textColor)
+                            } else {
+                                Text(message.text.orEmpty(), color = textColor)
+                            }
                         }
                     }
                 }

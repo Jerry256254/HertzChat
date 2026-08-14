@@ -63,6 +63,7 @@ import cz.kuclab.hertzchat.media.VoiceRecorder
 import cz.kuclab.hertzchat.ui.common.ChatInputAccentButton
 import cz.kuclab.hertzchat.ui.common.ChatInputBar
 import cz.kuclab.hertzchat.ui.common.ChatInputPillIcon
+import cz.kuclab.hertzchat.ui.common.MarkdownText
 import cz.kuclab.hertzchat.ui.theme.HertzGreen
 import java.io.File
 
@@ -330,7 +331,11 @@ private fun MessageBubble(message: MessageEntity) {
                         .background(bubbleColor)
                         .padding(horizontal = 14.dp, vertical = 10.dp),
                 ) {
-                    Text(message.text.orEmpty(), color = textColor)
+                    if (isAssistant) {
+                        MarkdownText(message.text.orEmpty(), color = textColor)
+                    } else {
+                        Text(message.text.orEmpty(), color = textColor)
+                    }
                 }
                 MessageType.IMAGE -> ImageBubble(message)
                 MessageType.VIDEO -> VideoBubble(message)

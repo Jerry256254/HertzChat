@@ -39,6 +39,7 @@ class ContactsViewModel @Inject constructor(
     val incomingRequests = p2pChatService.incomingRequests
     val i2pState = p2pChatService.i2pState.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
     val bootstrapPercent = p2pChatService.bootstrapPercent.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 0)
+    val bootstrapLabel = p2pChatService.bootstrapLabel.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
     val i2pError = p2pChatService.i2pError.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
     val i2pDiagnostics = p2pChatService.i2pDiagnostics.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
     val lanPeerCount = p2pChatService.lanPeerCount.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 0)

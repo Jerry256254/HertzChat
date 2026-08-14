@@ -2,8 +2,8 @@
 schema_version: 1
 app_name: Hertz Chat
 package_id: cz.kuclab.hertzchat
-version_name: "0.11.2"
-version_code: 18
+version_name: "0.12.0"
+version_code: 19
 last_updated: 2026-08-14
 license: MIT
 category: Komunikace
@@ -33,6 +33,11 @@ download_url: https://github.com/Jerry256254/HertzChat/releases/latest
 logo: store/logo.png
 screenshots: []
 changelog:
+  - version: "0.12.0"
+    date: 2026-08-14
+    notes:
+      - "Formátování odpovědí Mistral AI - tučné, kurzíva, kód, nadpisy a odrážky se teď vykreslí místo toho, aby se zobrazovaly doslovné hvězdičky. Zprávy od lidí zůstávají doslovné (kdo napíše 2 * 3 * 4, myslí hvězdičky)."
+      - "Načítání I2P ukazuje skutečný průběh. Dřív viselo na 0 % a pak skočilo na 100, což vypadalo jako zaseknuté - teď má dvě reálné fáze (stahování seznamu routerů, stavba tunelů) s vlastním pruhem a popiskem, co se zrovna děje."
   - version: "0.11.2"
     date: 2026-08-14
     notes:

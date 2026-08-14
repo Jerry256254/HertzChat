@@ -106,6 +106,7 @@ class P2pChatService @Inject constructor(
 
     val i2pState: StateFlow<I2pState> get() = i2pTransport.state
     val bootstrapPercent: StateFlow<Int> get() = i2pTransport.bootstrapPercent
+    val bootstrapLabel: StateFlow<String?> get() = i2pTransport.bootstrapLabel
     val i2pDestination: StateFlow<String?> get() = i2pTransport.i2pDestination
     val i2pError: StateFlow<String?> get() = i2pTransport.error
     val i2pDiagnostics: StateFlow<String?> get() = i2pTransport.diagnostics
