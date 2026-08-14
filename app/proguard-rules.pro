@@ -1,3 +1,12 @@
+# A crash report is only actionable if it names real files and line numbers, and
+# our own classes aren't renamed out of recognition - without this, the report
+# CrashReporter saves reads as a wall of a/b/c.d() with no line information.
+# Our own code is a small fraction of the APK (the bulk is I2P/libsignal/SQLCipher,
+# all of which are already kept whole below), so keeping it costs very little.
+-keepattributes SourceFile,LineNumberTable
+-renamesourcefileattribute SourceFile
+-keep class cz.kuclab.hertzchat.** { *; }
+
 # Signal protocol native bindings
 -keep class org.signal.libsignal.** { *; }
 -keepclassmembers class org.signal.libsignal.** { *; }

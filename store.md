@@ -2,8 +2,8 @@
 schema_version: 1
 app_name: Hertz Chat
 package_id: cz.kuclab.hertzchat
-version_name: "0.17.0"
-version_code: 24
+version_name: "0.18.0"
+version_code: 25
 last_updated: 2026-08-14
 license: MIT
 category: Komunikace
@@ -33,6 +33,12 @@ download_url: https://github.com/Jerry256254/HertzChat/releases/latest
 logo: store/logo.png
 screenshots: []
 changelog:
+  - version: "0.18.0"
+    date: 2026-08-14
+    notes:
+      - "Appka si teď sama zapamatuje záznam pádu a při dalším spuštění ho ukáže (i s tlačítkem Zkopírovat). Bez toho je jediná stopa po pádu jen v systémovém logu, ke kterému se bez připojení telefonu k počítači nedostaneš."
+      - "Sestaveno kompletně načisto - předchozí build 0.17.0 dojel na mezivýsledcích ze dvou běhů, které systém ukončil v půlce, což může vytvořit balíček, jenž se přeloží bez chyby, ale za běhu spadne."
+      - "Vlastní kód appky se už při sestavení nezkracuje ani nepřejmenovává - záznam pádu tak obsahuje skutečné názvy a čísla řádků místo nečitelných zkratek."
   - version: "0.17.0"
     date: 2026-08-14
     notes:

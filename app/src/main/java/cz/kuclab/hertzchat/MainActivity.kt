@@ -20,6 +20,7 @@ import androidx.core.content.ContextCompat
 import cz.kuclab.hertzchat.crypto.IdentityKeyManager
 import cz.kuclab.hertzchat.data.repository.AppSettings
 import cz.kuclab.hertzchat.data.repository.SettingsRepository
+import cz.kuclab.hertzchat.diagnostics.CrashReportDialog
 import cz.kuclab.hertzchat.locale.LocalePrefs
 import cz.kuclab.hertzchat.p2p.P2pForegroundService
 import cz.kuclab.hertzchat.ui.navigation.HertzNavHost
@@ -56,6 +57,7 @@ class MainActivity : ComponentActivity() {
             HertzChatTheme(darkTheme = darkTheme) {
                 Surface(modifier = Modifier.fillMaxSize()) {
                     HertzNavHost()
+                    CrashReportDialog()
                 }
             }
         }
