@@ -2,8 +2,8 @@
 schema_version: 1
 app_name: Hertz Chat
 package_id: cz.kuclab.hertzchat
-version_name: "0.20.0"
-version_code: 27
+version_name: "0.21.0"
+version_code: 28
 last_updated: 2026-08-14
 license: MIT
 category: Komunikace
@@ -33,6 +33,13 @@ download_url: https://github.com/Jerry256254/HertzChat/releases/latest
 logo: store/logo.png
 screenshots: []
 changelog:
+  - version: "0.21.0"
+    date: 2026-08-14
+    notes:
+      - "Oprava skenování QR kódu z druhého telefonu. Snímek z kamery má obvykle řádky delší, než je šířka obrazu (zarovnání v paměti) - appka to nebrala v potaz, takže se jí obraz postupně zešikmoval a kód často nešlo přečíst vůbec."
+      - "Oprava: QR kód se generoval v kódování ISO-8859-1, které neumí š, č, ř, ž, ě ani ů. Přezdívka s českou diakritikou se tím při naskenování rozbila na otazníky. Teď se do kódu zapisuje UTF-8."
+      - "Když se kód přečte, ale nedá se použít, appka teď řekne proč - jestli jde o kód pro přenos identity místo kontaktu, o kód ze starší verze, nebo o to, že se druhému telefonu ještě nedopojila síť I2P. Dřív u všech případů jen napsala „Neplatné Hertz ID“."
+      - "Poškozený nebo rozmazaný kód už nemůže shodit skenování - takové snímky vyvolávaly chybu, která ukončila celý rozpoznávací běh kamery."
   - version: "0.20.0"
     date: 2026-08-14
     notes:

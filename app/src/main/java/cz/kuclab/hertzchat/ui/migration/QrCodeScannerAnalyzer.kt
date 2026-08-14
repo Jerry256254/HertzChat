@@ -6,8 +6,8 @@ import androidx.camera.core.ImageAnalysis
 import androidx.camera.core.ImageProxy
 import com.google.zxing.BinaryBitmap
 import com.google.zxing.MultiFormatReader
-import com.google.zxing.NotFoundException
 import com.google.zxing.PlanarYUVLuminanceSource
+import com.google.zxing.ReaderException
 import com.google.zxing.common.HybridBinarizer
 import java.util.concurrent.atomic.AtomicBoolean
 
@@ -37,14 +37,25 @@ class QrCodeScannerAnalyzer(private val onDecoded: (String) -> Unit) : ImageAnal
         val data = ByteArray(plane.buffer.remaining())
         plane.buffer.get(data)
 
+        // Camera frames are usually padded: a row occupies rowStride bytes, of which only
+        // the first `width` are pixels. Treating the buffer as if rows were exactly `width`
+        // apart shears the image progressively down the frame, so the finder patterns no
+        // longer line up and nothing ever decodes on the devices that pad. rowStride is the
+        // buffer's real row width; the crop rectangle is what limits it to actual pixels.
+        val rowStride = plane.rowStride.takeIf { it >= image.width } ?: image.width
+        val rows = minOf(image.height, data.size / rowStride)
+        if (rows <= 0) {
+            image.close()
+            return
+        }
         val source = PlanarYUVLuminanceSource(
             data,
-            image.width,
-            image.height,
+            rowStride,
+            rows,
             0,
             0,
             image.width,
-            image.height,
+            rows,
             false,
         )
         try {
@@ -52,8 +63,11 @@ class QrCodeScannerAnalyzer(private val onDecoded: (String) -> Unit) : ImageAnal
             if (delivered.compareAndSet(false, true)) {
                 mainHandler.post { onDecoded(result.text) }
             }
-        } catch (_: NotFoundException) {
-            // no QR code in this frame - expected most of the time
+        } catch (_: ReaderException) {
+            // No readable code in this frame: NotFoundException most of the time (there
+            // simply isn't one), but a half-covered or motion-blurred code raises Checksum/
+            // FormatException just as routinely - and those escaping the analyzer would tear
+            // down the camera's analysis pipeline mid-scan.
         } finally {
             image.close()
         }
