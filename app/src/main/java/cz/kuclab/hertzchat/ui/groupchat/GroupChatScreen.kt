@@ -313,11 +313,7 @@ private fun GroupMessageBubble(message: MessageEntity, senderNickname: String?) 
                                 .background(bubbleColor)
                                 .padding(horizontal = 14.dp, vertical = 8.dp),
                         ) {
-                            if (isAssistant) {
-                                MarkdownText(message.text.orEmpty(), color = textColor)
-                            } else {
-                                Text(message.text.orEmpty(), color = textColor)
-                            }
+                            MarkdownText(message.text.orEmpty(), color = textColor)
                         }
                     }
                 }

@@ -2,8 +2,8 @@
 schema_version: 1
 app_name: Hertz Chat
 package_id: cz.kuclab.hertzchat
-version_name: "0.12.0"
-version_code: 19
+version_name: "0.13.0"
+version_code: 20
 last_updated: 2026-08-14
 license: MIT
 category: Komunikace
@@ -33,6 +33,13 @@ download_url: https://github.com/Jerry256254/HertzChat/releases/latest
 logo: store/logo.png
 screenshots: []
 changelog:
+  - version: "0.13.0"
+    date: 2026-08-14
+    notes:
+      - "Jde napsat sám sobě. I2P ve výchozím stavu odmítá spojení na vlastní adresu („local loopback denied“) - teď se povoluje, takže si můžeš přidat vlastní Hertz ID jako kontakt."
+      - "Rozšířené formátování: přeškrtnutí, citace, vodorovné oddělovače, číslované seznamy, odkazy (zobrazí se jejich text) a nadpisy s odstupňovanou velikostí. Formátování teď platí i pro tvoje vlastní zprávy, ne jen pro odpovědi AI - kdo napíše *takhle*, čeká kurzívu."
+      - "Nedokončená zpráva zůstane v poli jako koncept. Když odejdeš z chatu (nebo appku vypne systém), rozepsaný text tam po návratu pořád je - zvlášť pro každý chat, skupinu i asistenta."
+      - "Průběh připojování k I2P je teď plynulý. Dřív visel na 10 % a pak skočil - jednotlivé fáze (zvlášť otevírání vlastní adresy) trvají dlouho, takže se ukazatel posouvá průběžně místo skoků mezi milníky."
   - version: "0.12.0"
     date: 2026-08-14
     notes:

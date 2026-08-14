@@ -77,10 +77,30 @@ class I2pTransport @Inject constructor(
     /** What the router is actually doing right now, so a slow start reads as progress rather than a freeze. */
     val bootstrapLabel: StateFlow<String?> = _bootstrapLabel
 
+    /** Where the current phase is allowed to reach; the ticker walks the visible value here. */
+    private val targetPercent = MutableStateFlow(0)
+
     /** Progress only ever moves forward - a dip would read as something having gone wrong. */
     private fun advanceTo(percent: Int, label: String) {
-        if (percent > _bootstrapPercent.value) _bootstrapPercent.value = percent
+        if (percent > targetPercent.value) targetPercent.value = percent
         _bootstrapLabel.value = label
+    }
+
+    /**
+     * Walks the displayed percentage toward whatever the current phase allows, instead of
+     * letting it sit on one number and then jump. Phases here are genuinely long (opening
+     * a destination waits on the router's I2CP listener), so without this the bar looked
+     * stuck at 10% and then leapt to done.
+     */
+    private fun startProgressTicker() {
+        scope.launch {
+            while (_state.value == I2pState.STARTING) {
+                val target = targetPercent.value
+                val shown = _bootstrapPercent.value
+                if (shown < target) _bootstrapPercent.value = shown + 1
+                kotlinx.coroutines.delay(if (target - shown > 10) 120 else 400)
+            }
+        }
     }
 
     private val _i2pDestination = MutableStateFlow<String?>(null)
@@ -106,7 +126,8 @@ class I2pTransport @Inject constructor(
         if (router != null) return
         _error.value = null
         _state.value = I2pState.STARTING
-        advanceTo(2, "Spouští se router I2P")
+        advanceTo(15, "Spouští se router I2P")
+        startProgressTicker()
 
         scope.launch {
             val result = runCatching {
@@ -120,7 +141,7 @@ class I2pTransport @Inject constructor(
                 return@launch
             }
 
-            advanceTo(10, "Otevírá se tvoje adresa v síti")
+            advanceTo(35, "Otevírá se tvoje adresa v síti")
 
             // Reseeding and opening our destination don't depend on each other, so start
             // the (network-bound, potentially slow) reseed immediately and let it run while
@@ -138,7 +159,7 @@ class I2pTransport @Inject constructor(
                 return@launch
             }
 
-            advanceTo(20, "Hledají se routery v síti")
+            advanceTo(45, "Hledají se routery v síti")
 
             // Best-effort progress/ready signal only - a failure here must never crash the
             // app or leave the destination we just opened unusable, so it's non-fatal.
@@ -249,6 +270,11 @@ class I2pTransport @Inject constructor(
         setProperty("i2cp.reduceOnIdle", "false")
         setProperty("i2cp.closeOnIdle", "false")
         setProperty("i2cp.dontPublishLeaseSet", "false")
+        // Without this I2P refuses a connection whose destination is our own ("local
+        // loopback denied"), which is what adding yourself as a contact does. Routing
+        // it through real tunnels costs a little latency but keeps every layer above
+        // this one identical, instead of needing a special-case delivery path.
+        setProperty("i2cp.disableLoopback", "true")
     }
 
     private fun openDestination(persistedPrivateKeyBase64: String, onKeySaved: (String) -> Unit) {
@@ -339,14 +365,15 @@ class I2pTransport @Inject constructor(
             // the two things that actually happen in order, each mapped to its own band:
             // filling the netDb (routers we know of), then building tunnels through it.
             if (knownRouters < KNOWN_ROUTERS_TARGET) {
-                val share = knownRouters * 50 / KNOWN_ROUTERS_TARGET
-                advanceTo(20 + share, "Stahuje se seznam routerů v síti ($knownRouters z $KNOWN_ROUTERS_TARGET)")
+                val share = knownRouters * 30 / KNOWN_ROUTERS_TARGET
+                advanceTo(45 + share, "Stahuje se seznam routerů v síti ($knownRouters z $KNOWN_ROUTERS_TARGET)")
             } else {
-                val share = peers * 25 / READY_PEER_COUNT
-                advanceTo(70 + share.coerceAtMost(25), "Staví se tunely (známých routerů: $knownRouters)")
+                val share = (peers * 20 / READY_PEER_COUNT).coerceAtMost(20)
+                advanceTo(75 + share, "Staví se tunely (známých routerů: $knownRouters)")
             }
 
             if (peers >= READY_PEER_COUNT || System.currentTimeMillis() >= deadline) {
+                targetPercent.value = 100
                 _bootstrapPercent.value = 100
                 _bootstrapLabel.value = null
                 _state.value = I2pState.CONNECTED
@@ -355,11 +382,11 @@ class I2pTransport @Inject constructor(
                 _diagnostics.value = null
                 return
             }
-            // Even when neither counter has moved, creep forward once every ~3s so a slow
-            // phase still looks alive rather than stalled. Capped below the next band so
-            // it can never overtake what has actually happened.
-            val ceiling = if (knownRouters < KNOWN_ROUTERS_TARGET) 69 else 95
-            if (tick % 6 == 0 && _bootstrapPercent.value < ceiling) _bootstrapPercent.value += 1
+            // Nudge the ceiling up slowly while a phase is genuinely waiting, so the
+            // ticker always has somewhere to go. Capped below the next band so it can
+            // never claim more than has actually happened.
+            val ceiling = if (knownRouters < KNOWN_ROUTERS_TARGET) 74 else 95
+            if (tick % 8 == 0 && targetPercent.value < ceiling) targetPercent.value += 1
             kotlinx.coroutines.delay(500)
         }
     }

@@ -254,7 +254,7 @@ private fun AssistantMessageBubble(message: AssistantMessageEntity) {
                     .background(MaterialTheme.colorScheme.primary)
                     .padding(horizontal = 14.dp, vertical = 8.dp),
             ) {
-                Text(message.text, color = MaterialTheme.colorScheme.onPrimary)
+                MarkdownText(message.text, color = MaterialTheme.colorScheme.onPrimary)
             }
         }
         AssistantRole.ASSISTANT -> Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.Bottom) {

@@ -11,6 +11,7 @@ import cz.kuclab.hertzchat.data.db.GroupMemberDao
 import cz.kuclab.hertzchat.data.db.GroupMemberEntity
 import cz.kuclab.hertzchat.data.db.MessageDao
 import cz.kuclab.hertzchat.data.model.PayloadKind
+import cz.kuclab.hertzchat.data.repository.DraftStore
 import cz.kuclab.hertzchat.data.repository.P2pChatService
 import cz.kuclab.hertzchat.mistral.MISTRAL_ASSISTANT_CONTACT_ID
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -35,6 +36,7 @@ class GroupChatViewModel @Inject constructor(
     groupDao: GroupDao,
     groupMemberDao: GroupMemberDao,
     private val p2pChatService: P2pChatService,
+    private val draftStore: DraftStore,
     @ApplicationContext private val context: Context,
 ) : ViewModel() {
 
@@ -50,7 +52,7 @@ class GroupChatViewModel @Inject constructor(
     val messages = messageDao.observeMessages(groupId)
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
-    private val _draft = MutableStateFlow("")
+    private val _draft = MutableStateFlow(draftStore.get(groupId))
     val draft: StateFlow<String> = _draft
 
     /** The `@partial` token currently being typed at the end of the draft, if any - drives the mention suggestion popup. */
@@ -73,6 +75,7 @@ class GroupChatViewModel @Inject constructor(
 
     fun onDraftChange(value: String) {
         _draft.value = value
+        draftStore.set(groupId, value)
     }
 
     fun selectMention(suggestion: MentionSuggestion) {
@@ -87,6 +90,7 @@ class GroupChatViewModel @Inject constructor(
         if (text.isEmpty()) return
         p2pChatService.sendGroupText(groupId, text)
         _draft.value = ""
+        draftStore.clear(groupId)
     }
 
     fun sendVideo(uri: Uri) = sendPickedMedia(uri, PayloadKind.VIDEO)

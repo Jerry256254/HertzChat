@@ -331,11 +331,7 @@ private fun MessageBubble(message: MessageEntity) {
                         .background(bubbleColor)
                         .padding(horizontal = 14.dp, vertical = 10.dp),
                 ) {
-                    if (isAssistant) {
-                        MarkdownText(message.text.orEmpty(), color = textColor)
-                    } else {
-                        Text(message.text.orEmpty(), color = textColor)
-                    }
+                    MarkdownText(message.text.orEmpty(), color = textColor)
                 }
                 MessageType.IMAGE -> ImageBubble(message)
                 MessageType.VIDEO -> VideoBubble(message)

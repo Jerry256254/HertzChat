@@ -9,6 +9,7 @@ import androidx.lifecycle.viewModelScope
 import cz.kuclab.hertzchat.data.db.ContactDao
 import cz.kuclab.hertzchat.data.db.MessageDao
 import cz.kuclab.hertzchat.data.model.PayloadKind
+import cz.kuclab.hertzchat.data.repository.DraftStore
 import cz.kuclab.hertzchat.data.repository.P2pChatService
 import cz.kuclab.hertzchat.data.repository.SettingsRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -32,12 +33,13 @@ class ChatViewModel @Inject constructor(
     private val contactDao: ContactDao,
     private val p2pChatService: P2pChatService,
     private val settingsRepository: SettingsRepository,
+    private val draftStore: DraftStore,
     @ApplicationContext private val context: Context,
 ) : ViewModel() {
 
     val contactId: String = checkNotNull(savedStateHandle["contactId"])
 
-    private val _draft = MutableStateFlow("")
+    private val _draft = MutableStateFlow(draftStore.get(contactId))
     val draft: StateFlow<String> = _draft
 
     private val _contactNickname = MutableStateFlow("")
@@ -70,6 +72,7 @@ class ChatViewModel @Inject constructor(
 
     fun onDraftChange(value: String) {
         _draft.value = value
+        draftStore.set(contactId, value)
     }
 
     fun send() {
@@ -77,6 +80,7 @@ class ChatViewModel @Inject constructor(
         if (text.isEmpty()) return
         p2pChatService.sendText(contactId, text)
         _draft.value = ""
+        draftStore.clear(contactId)
     }
 
     fun sendVideo(uri: Uri) = sendPickedMedia(uri, PayloadKind.VIDEO)

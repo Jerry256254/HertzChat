@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import cz.kuclab.hertzchat.data.db.AssistantConversationDao
 import cz.kuclab.hertzchat.data.db.AssistantMessageDao
+import cz.kuclab.hertzchat.data.repository.DraftStore
 import cz.kuclab.hertzchat.mistral.AssistantRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
@@ -19,13 +20,14 @@ import kotlinx.coroutines.launch
 @HiltViewModel
 class AssistantChatViewModel @Inject constructor(
     private val repository: AssistantRepository,
+    private val draftStore: DraftStore,
     conversationDao: AssistantConversationDao,
     messageDao: AssistantMessageDao,
 ) : ViewModel() {
 
     val sending = repository.sending
 
-    private val _draft = MutableStateFlow("")
+    private val _draft = MutableStateFlow(draftStore.get(DRAFT_KEY))
     val draft: StateFlow<String> = _draft
 
     private val _chatsSheetOpen = MutableStateFlow(false)
@@ -46,12 +48,14 @@ class AssistantChatViewModel @Inject constructor(
 
     fun onDraftChange(value: String) {
         _draft.value = value
+        draftStore.set(DRAFT_KEY, value)
     }
 
     fun send() {
         val text = _draft.value.trim()
         if (text.isEmpty()) return
         _draft.value = ""
+        draftStore.clear(DRAFT_KEY)
         when {
             text.equals("/new", ignoreCase = true) -> repository.newConversation()
             text.equals("/chats", ignoreCase = true) -> _chatsSheetOpen.value = true
@@ -83,5 +87,10 @@ class AssistantChatViewModel @Inject constructor(
 
     fun renameConversation(conversationId: String, title: String) {
         repository.renameConversation(conversationId, title)
+    }
+
+    private companion object {
+        /** One shared draft for the assistant: switching between its conversations shouldn't lose what you typed. */
+        const val DRAFT_KEY = "assistant"
     }
 }
