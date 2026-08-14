@@ -2,8 +2,8 @@
 schema_version: 1
 app_name: Hertz Chat
 package_id: cz.kuclab.hertzchat
-version_name: "0.11.0"
-version_code: 16
+version_name: "0.11.1"
+version_code: 17
 last_updated: 2026-08-14
 license: MIT
 category: Komunikace
@@ -33,6 +33,13 @@ download_url: https://github.com/Jerry256254/HertzChat/releases/latest
 logo: store/logo.png
 screenshots: []
 changelog:
+  - version: "0.11.1"
+    date: 2026-08-14
+    notes:
+      - "Zrychlení připojení k I2P. Tunely mají 2 přeskoky místo výchozích 3 - vlastnost, na které u chatu záleží, zůstává (ani protistrana, ani žádný jednotlivý mezilehlý router nezná tvoji IP), ale ubráním jednoho přeskoku se zkrátí jak stavba tunelu, tak zpoždění každé zprávy."
+      - Tunely se už neruší při nečinnosti - jejich znovustavění při další zprávě bylo přesně to několikasekundové zaseknutí, kterému se chceme vyhnout
+      - "Appka už nepřeposílá tunely cizích uživatelů (telefon je klient, ne infrastruktura) - šetří to baterii, data i výkon pro vlastní provoz"
+      - Reseed se teď spouští paralelně s otevíráním vlastní adresy místo až po něm
   - version: "0.11.0"
     date: 2026-08-14
     notes:

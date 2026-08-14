@@ -37,7 +37,7 @@ private const val I2CP_PORT = 7654
 // as "still doesn't work" to a user who then just retries into the same wall.
 private const val ROUTER_START_TIMEOUT_MS = 150_000L
 private const val SOCKET_MANAGER_TIMEOUT_MS = 150_000L
-private const val I2CP_RETRY_DELAY_MS = 1_000L
+private const val I2CP_RETRY_DELAY_MS = 250L
 private const val READY_PEER_COUNT = 1
 private const val READINESS_MONITOR_TIMEOUT_MS = 60_000L
 
@@ -106,6 +106,11 @@ class I2pTransport @Inject constructor(
                 cleanup()
                 return@launch
             }
+
+            // Reseeding and opening our destination don't depend on each other, so start
+            // the (network-bound, potentially slow) reseed immediately and let it run while
+            // the destination is being opened, rather than serialising the two.
+            scope.launch { runCatching { requestReseedIfNeeded() } }
 
             val openResult = runCatching {
                 withTimeout(SOCKET_MANAGER_TIMEOUT_MS) {
@@ -188,11 +193,45 @@ class I2pTransport @Inject constructor(
             setProperty("i2np.udp.autoip", "true")
             setProperty("i2np.udp.autoport", "true")
             setProperty("router.floodfillParticipant", "false")
+            // A phone is a client, not infrastructure: refusing to relay other people's
+            // tunnels keeps the CPU, battery and uplink for our own traffic, which is
+            // most of what makes the first connection feel slow.
+            setProperty("router.maxParticipatingTunnels", "0")
+            setProperty("router.enableLoadTesting", "false")
         }
 
         val r = Router(props)
         router = r
         r.runRouter()
+    }
+
+    /**
+     * Tunnel settings for our own destination, tuned for how this app is actually used:
+     * a chat client that has to be reachable within seconds of opening, on a phone.
+     *
+     * Two hops each way instead of I2P's default three. The property that matters for a
+     * messenger is preserved at two - neither the person you're talking to nor any single
+     * relay learns your IP - while dropping a hop cuts both the time to build a working
+     * tunnel and the latency of every message through it. Going to one hop would be
+     * faster still but lets a single relay see your IP and your destination at once,
+     * which is too much to give up here.
+     *
+     * Tunnels are also kept alive rather than torn down when idle: rebuilding them on the
+     * next message is exactly the multi-second stall this is meant to avoid.
+     */
+    private fun tunnelOptions(): Properties = Properties().apply {
+        setProperty("inbound.length", "2")
+        setProperty("outbound.length", "2")
+        setProperty("inbound.lengthVariance", "0")
+        setProperty("outbound.lengthVariance", "0")
+        setProperty("inbound.quantity", "3")
+        setProperty("outbound.quantity", "3")
+        setProperty("inbound.backupQuantity", "0")
+        setProperty("outbound.backupQuantity", "0")
+        setProperty("inbound.nickname", "Hertz Chat")
+        setProperty("i2cp.reduceOnIdle", "false")
+        setProperty("i2cp.closeOnIdle", "false")
+        setProperty("i2cp.dontPublishLeaseSet", "false")
     }
 
     private fun openDestination(persistedPrivateKeyBase64: String, onKeySaved: (String) -> Unit) {
@@ -223,7 +262,7 @@ class I2pTransport @Inject constructor(
         // this has to be retried instead of assumed to work on the first try.
         var manager: I2PSocketManager? = null
         while (manager == null) {
-            manager = I2PSocketManagerFactory.createManager(ByteArrayInputStream(keyBytes), I2CP_HOST, I2CP_PORT, Properties())
+            manager = I2PSocketManagerFactory.createManager(ByteArrayInputStream(keyBytes), I2CP_HOST, I2CP_PORT, tunnelOptions())
             if (manager == null) Thread.sleep(I2CP_RETRY_DELAY_MS)
         }
         socketManager = manager
@@ -246,15 +285,23 @@ class I2pTransport @Inject constructor(
     // It's capped to a hard timeout so a slow/stuck reseed can't leave the UI
     // spinning at "0%" forever with no way out, the same class of bug already
     // fixed for Tor's "Navazuje se spojení..." hang.
+    /**
+     * A normal full I2P install has a console webapp that offers a "reseed now" button
+     * and triggers this on first boot - our headless embedded router has no such webapp,
+     * so it's fired explicitly rather than assuming the router core's own auto-trigger
+     * covers this setup. No-op once the netDb already knows enough routers, which is why
+     * warm starts skip straight past it.
+     */
+    private fun requestReseedIfNeeded() {
+        val r = router ?: return
+        val netDb = r.context.netDb()
+        netDb.reseedChecker().checkReseed(net.i2p.router.networkdb.reseed.ReseedChecker.MINIMUM)
+    }
+
     private suspend fun monitorReadiness() {
         val r = router ?: return
         val netDb = r.context.netDb()
         val reseedChecker = runCatching { netDb.reseedChecker() }.getOrNull()
-        // A normal full I2P install has a console webapp that offers a "reseed now"
-        // button and triggers this automatically on first boot - our headless embedded
-        // router has no such webapp, so this is fired explicitly rather than assuming
-        // whatever internal auto-trigger the router core has covers our setup too.
-        runCatching { reseedChecker?.checkReseed(net.i2p.router.networkdb.reseed.ReseedChecker.MINIMUM) }
 
         val deadline = System.currentTimeMillis() + READINESS_MONITOR_TIMEOUT_MS
         while (router === r) {
@@ -268,7 +315,7 @@ class I2pTransport @Inject constructor(
                 _state.value = I2pState.CONNECTED
                 return
             }
-            kotlinx.coroutines.delay(2_000)
+            kotlinx.coroutines.delay(500)
         }
     }
 
