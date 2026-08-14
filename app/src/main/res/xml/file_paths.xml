@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<paths>
+    <!-- Received attachments live in the app's private files dir; this grants a
+         temporary read URI to whichever app the user opens one with, without
+         making the directory world-readable. -->
+    <files-path name="hertz_media" path="." />
+    <cache-path name="hertz_cache" path="." />
+</paths>

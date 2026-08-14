@@ -133,10 +133,39 @@ class I2pTransport @Inject constructor(
             e.message ?: e.javaClass.simpleName
         }
 
+    /**
+     * Copies I2P's own signing certificates out of our assets into the router's base
+     * directory. This is not optional: reseeding (fetching the initial list of routers,
+     * without which the router can never find a single peer) only accepts su3-signed
+     * bundles - `Reseeder.ENABLE_SU3=true`, `ENABLE_NON_SU3=false` - and su3
+     * verification resolves signing keys through `DirKeyRing` over
+     * `<base>/certificates/reseed`. A normal I2P install ships that directory; none of
+     * the Maven artifacts we depend on contain a single .crt, so without this the
+     * download succeeds, the signature fails to verify, zero routers get imported, and
+     * the router sits at zero peers forever - exactly the symptom seen on device.
+     */
+    private fun installCertificates(i2pDir: File) {
+        val certRoot = File(i2pDir, "certificates")
+        listOf("reseed", "ssl").forEach { kind ->
+            val targetDir = File(certRoot, kind).apply { mkdirs() }
+            val names = runCatching { app.assets.list("i2p-certificates/$kind") }.getOrNull() ?: return@forEach
+            names.forEach { name ->
+                val target = File(targetDir, name)
+                if (target.exists()) return@forEach
+                runCatching {
+                    app.assets.open("i2p-certificates/$kind/$name").use { input ->
+                        target.outputStream().use { output -> input.copyTo(output) }
+                    }
+                }
+            }
+        }
+    }
+
     private fun startRouter() {
         val i2pDir = File(app.filesDir, "i2p")
         i2pDir.mkdirs()
         val logDir = File(i2pDir, "logs").apply { mkdirs() }
+        installCertificates(i2pDir)
 
         val props = Properties().apply {
             setProperty("i2p.dir.base", i2pDir.absolutePath)
@@ -176,7 +205,16 @@ class I2pTransport @Inject constructor(
             onKeySaved(Base64.encodeToString(bytes, Base64.NO_WRAP))
             bytes
         } else {
-            Base64.decode(persistedPrivateKeyBase64, Base64.NO_WRAP)
+            Base64.decode(persistedPrivateKeyBase64, Base64.NO_WRAP).also { bytes ->
+                // The private-key blob starts with the Destination itself, so our own
+                // address is known the moment we have the stored key - no need to make
+                // the QR code wait for the router's I2CP listener to come up, which is
+                // what left returning users staring at a spinner while the network
+                // bootstrapped (and forever, if bootstrapping never finished).
+                runCatching {
+                    _i2pDestination.value = Destination().apply { readBytes(ByteArrayInputStream(bytes)) }.toBase64()
+                }
+            }
         }
 
         // createManager() connects to the router's local I2CP port and returns null

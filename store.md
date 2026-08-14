@@ -2,8 +2,8 @@
 schema_version: 1
 app_name: Hertz Chat
 package_id: cz.kuclab.hertzchat
-version_name: "0.10.0"
-version_code: 15
+version_name: "0.11.0"
+version_code: 16
 last_updated: 2026-08-14
 license: MIT
 category: Komunikace
@@ -33,6 +33,14 @@ download_url: https://github.com/Jerry256254/HertzChat/releases/latest
 logo: store/logo.png
 screenshots: []
 changelog:
+  - version: "0.11.0"
+    date: 2026-08-14
+    notes:
+      - "Nalezena a opravena skutečná příčina, proč se I2P nikdy nepřipojilo. Reseed (stažení prvního seznamu routerů, bez kterého router nenajde ani jednoho souseda) přijímá výhradně balíčky podepsané formátem su3 a ověřuje je proti certifikátům v adresáři certificates/reseed. Žádná z knihoven, které appka používá, ani jeden takový certifikát neobsahuje - stažení tedy proběhlo, podpis se neověřil, naimportovalo se nula routerů a router zůstal navždy na nule sousedů. Appka teď těch 20 oficiálních certifikátů I2P přibaluje a rozbalí je routeru při startu."
+      - "Oprava: QR kód se u vracejících se uživatelů načítal donekonečna - vlastní adresa se publikovala až po připojení k routeru, přestože je odvoditelná z uloženého klíče okamžitě"
+      - "Oprava (důležité): Mistral AI o sobě tvrdil, že je lokální model běžící v zařízení a že konverzace s ním je bez serverů a end-to-end šifrovaná. Není - běží v cloudu Mistral AI a je jediné místo v appce, kde obsah zprávy opouští zařízení. Systémový prompt to teď říká výslovně a modelu zakazuje tvrdit opak."
+      - "Nová funkce: posílání libovolných souborů (nejen obrázků/videí/hlasovek), v 1:1 i ve skupinách - s původním názvem souboru a otevřením v jiné appce klepnutím"
+      - Mistral AI je teď na ploše chatů vidět od začátku (dokud není nastavený, klepnutí vede rovnou do Nastavení)
   - version: "0.10.0"
     date: 2026-08-14
     notes:

@@ -91,6 +91,8 @@ class GroupChatViewModel @Inject constructor(
 
     fun sendVideo(uri: Uri) = sendPickedMedia(uri, PayloadKind.VIDEO)
 
+    fun sendFile(uri: Uri) = sendPickedMedia(uri, PayloadKind.FILE)
+
     fun sendImageBytes(bytes: ByteArray) {
         p2pChatService.sendGroupMedia(groupId, bytes, "image/jpeg", PayloadKind.IMAGE, fileName = null)
     }
@@ -112,9 +114,17 @@ class GroupChatViewModel @Inject constructor(
             val bytes = withContext(Dispatchers.IO) {
                 resolver.openInputStream(uri)?.use { it.readBytes() }
             } ?: return@launch
-            p2pChatService.sendGroupMedia(groupId, bytes, mimeType, kind, fileName = null)
+            p2pChatService.sendGroupMedia(groupId, bytes, mimeType, kind, fileName = displayNameOf(uri).takeIf { kind == PayloadKind.FILE })
         }
     }
+
+    /** The user-facing filename behind a content:// uri, so a received file arrives named as it was sent. */
+    private fun displayNameOf(uri: Uri): String? = runCatching {
+        context.contentResolver.query(uri, null, null, null, null)?.use { cursor ->
+            val index = cursor.getColumnIndex(android.provider.OpenableColumns.DISPLAY_NAME)
+            if (index >= 0 && cursor.moveToFirst()) cursor.getString(index) else null
+        }
+    }.getOrNull()
 
     fun leaveGroup() {
         p2pChatService.leaveGroup(groupId)

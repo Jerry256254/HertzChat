@@ -23,6 +23,7 @@ import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.AttachFile
 import androidx.compose.material.icons.filled.Block
 import androidx.compose.material.icons.filled.ContentCopy
+import androidx.compose.material.icons.filled.InsertDriveFile
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.Send
 import androidx.compose.material.icons.filled.Stop
@@ -88,6 +89,9 @@ fun ChatScreen(contactId: String, onBack: () -> Unit, viewModel: ChatViewModel =
     val pickVideo = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
         uri?.let(viewModel::sendVideo)
     }
+    val pickFile = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
+        uri?.let(viewModel::sendFile)
+    }
     val micPermissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
         if (granted) {
             isRecording = true
@@ -148,6 +152,11 @@ fun ChatScreen(contactId: String, onBack: () -> Unit, viewModel: ChatViewModel =
                                 text = { Text("Video") },
                                 leadingIcon = { Icon(Icons.Filled.VideoLibrary, contentDescription = null) },
                                 onClick = { attachMenuOpen = false; pickVideo.launch("video/*") },
+                            )
+                            DropdownMenuItem(
+                                text = { Text("Soubor") },
+                                leadingIcon = { Icon(Icons.Filled.InsertDriveFile, contentDescription = null) },
+                                onClick = { attachMenuOpen = false; pickFile.launch("*/*") },
                             )
                         }
                     }
@@ -335,10 +344,9 @@ private fun MessageBubble(message: MessageEntity) {
                 MessageType.FILE -> Box(
                     modifier = Modifier
                         .clip(bubbleShape)
-                        .background(bubbleColor)
-                        .padding(horizontal = 14.dp, vertical = 10.dp),
+                        .background(bubbleColor),
                 ) {
-                    Text("Soubor", color = textColor)
+                    FileBubble(message, onSurface = textColor)
                 }
             }
         }

@@ -93,7 +93,10 @@ fun ChatListScreen(
             )
         },
     ) { padding ->
-        if (items.isEmpty()) {
+        // The assistant row is always present now, so "no chats yet" has to mean
+        // "no real conversations yet" rather than "nothing in the list".
+        val hasRealChats = items.any { it.kind != ChatListItemKind.ASSISTANT }
+        if (!hasRealChats && items.isEmpty()) {
             Column(
                 modifier = Modifier.fillMaxSize().padding(padding).padding(32.dp),
                 horizontalAlignment = Alignment.CenterHorizontally,
@@ -132,6 +135,17 @@ fun ChatListScreen(
                 contentPadding = PaddingValues(start = 12.dp, end = 12.dp, top = padding.calculateTopPadding() + 8.dp, bottom = 96.dp),
                 verticalArrangement = Arrangement.spacedBy(4.dp),
             ) {
+                if (!hasRealChats) {
+                    item {
+                        Text(
+                            "Zatím tu nemáš žádné chaty - přidej si přátele tlačítkem dole (sdílej nebo naskenuj Hertz ID).",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            textAlign = TextAlign.Center,
+                            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 20.dp),
+                        )
+                    }
+                }
                 items(items, key = { it.contactId }) { item ->
                     ChatListRow(
                         item = item,

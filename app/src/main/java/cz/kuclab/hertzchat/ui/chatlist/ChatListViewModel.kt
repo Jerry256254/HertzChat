@@ -71,7 +71,11 @@ class ChatListViewModel @Inject constructor(
             )
         }
 
-        val assistantItem = if (showAssistant && conversations.isNotEmpty()) {
+        // Shown from a fresh install onward, not only once a conversation exists -
+        // otherwise the assistant is invisible to exactly the people who haven't set
+        // it up yet, which is who the entry point is for. Tapping it before it's
+        // configured routes to Settings (see ChatListScreen).
+        val assistantItem = if (showAssistant) {
             val latest = conversations.maxByOrNull { it.lastMessageAt }
             val lastText = latest?.let { assistantMessageDao.recentForConversation(it.conversationId, 1).firstOrNull()?.text }
             ChatListItem(
@@ -79,7 +83,7 @@ class ChatListViewModel @Inject constructor(
                 nickname = "Mistral AI",
                 avatarPath = null,
                 pinned = false,
-                lastMessagePreview = lastText,
+                lastMessagePreview = lastText ?: "Asistent appky - klepnutím nastavíš přístup",
                 lastMessageAt = latest?.lastMessageAt,
                 kind = ChatListItemKind.ASSISTANT,
             )

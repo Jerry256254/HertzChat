@@ -24,6 +24,7 @@ import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.AttachFile
 import androidx.compose.material.icons.filled.ExitToApp
 import androidx.compose.material.icons.filled.Groups
+import androidx.compose.material.icons.filled.InsertDriveFile
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.Send
 import androidx.compose.material.icons.filled.Stop
@@ -58,6 +59,7 @@ import cz.kuclab.hertzchat.R
 import cz.kuclab.hertzchat.data.db.MessageEntity
 import cz.kuclab.hertzchat.data.db.MessageType
 import cz.kuclab.hertzchat.media.VoiceRecorder
+import cz.kuclab.hertzchat.ui.chat.FileBubble
 import cz.kuclab.hertzchat.ui.chat.ImageBubble
 import cz.kuclab.hertzchat.ui.chat.ImageEditorDialog
 import cz.kuclab.hertzchat.ui.chat.VideoBubble
@@ -87,6 +89,9 @@ fun GroupChatScreen(groupId: String, onBack: () -> Unit, onLeft: () -> Unit, vie
     }
     val pickVideo = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
         uri?.let(viewModel::sendVideo)
+    }
+    val pickFile = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
+        uri?.let(viewModel::sendFile)
     }
     val micPermissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
         if (granted) {
@@ -165,6 +170,11 @@ fun GroupChatScreen(groupId: String, onBack: () -> Unit, onLeft: () -> Unit, vie
                                     text = { Text("Video") },
                                     leadingIcon = { Icon(Icons.Filled.VideoLibrary, contentDescription = null) },
                                     onClick = { attachMenuOpen = false; pickVideo.launch("video/*") },
+                                )
+                                DropdownMenuItem(
+                                    text = { Text("Soubor") },
+                                    leadingIcon = { Icon(Icons.Filled.InsertDriveFile, contentDescription = null) },
+                                    onClick = { attachMenuOpen = false; pickFile.launch("*/*") },
                                 )
                             }
                         }
@@ -290,6 +300,11 @@ private fun GroupMessageBubble(message: MessageEntity, senderNickname: String?) 
                             modifier = Modifier.clip(RoundedCornerShape(16.dp)).background(bubbleColor),
                         ) {
                             VoiceBubble(message, onSurface = textColor, accent = textColor)
+                        }
+                        MessageType.FILE -> Box(
+                            modifier = Modifier.clip(RoundedCornerShape(16.dp)).background(bubbleColor),
+                        ) {
+                            FileBubble(message, onSurface = textColor)
                         }
                         else -> Box(
                             modifier = Modifier

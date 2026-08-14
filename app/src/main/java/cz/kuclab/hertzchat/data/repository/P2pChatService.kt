@@ -137,6 +137,7 @@ class P2pChatService @Inject constructor(
         val nonceSalt: ByteArray,
         val chunkCount: Int,
         val mimeType: String,
+        val fileName: String?,
         val durationMs: Long?,
         val outputFile: File,
         val out: BufferedOutputStream,
@@ -500,6 +501,7 @@ class P2pChatService @Inject constructor(
                     type = kind.toMessageType(),
                     mediaPath = localCopy.absolutePath,
                     mediaMimeType = mimeType,
+                    mediaFileName = fileName,
                     mediaDurationMs = durationMs,
                     timestamp = control.sentAt,
                     deliveryState = DeliveryState.PENDING,
@@ -563,6 +565,7 @@ class P2pChatService @Inject constructor(
                     type = kind.toMessageType(),
                     mediaPath = localCopy.absolutePath,
                     mediaMimeType = mimeType,
+                    mediaFileName = fileName,
                     mediaDurationMs = durationMs,
                     timestamp = control.sentAt,
                     deliveryState = DeliveryState.PENDING,
@@ -663,6 +666,7 @@ class P2pChatService @Inject constructor(
             nonceSalt = nonceSalt,
             chunkCount = chunkCount,
             mimeType = mimeType,
+            fileName = payload.mediaFileName,
             durationMs = payload.mediaDurationMs,
             outputFile = outputFile,
             out = BufferedOutputStream(FileOutputStream(outputFile)),
@@ -701,6 +705,7 @@ class P2pChatService @Inject constructor(
                 type = transfer.kind.toMessageType(),
                 mediaPath = transfer.outputFile.absolutePath,
                 mediaMimeType = transfer.mimeType,
+                mediaFileName = transfer.fileName,
                 mediaDurationMs = transfer.durationMs,
                 timestamp = System.currentTimeMillis(),
                 deliveryState = DeliveryState.DELIVERED,
@@ -842,7 +847,7 @@ class P2pChatService @Inject constructor(
         val payload = runCatching { json.decodeFromString(ChatPayload.serializer(), plaintext.decodeToString()) }.getOrNull() ?: return
 
         when (payload.kind) {
-            PayloadKind.IMAGE, PayloadKind.VIDEO, PayloadKind.VOICE, PayloadKind.AVATAR -> beginIncomingTransfer(contactId, payload)
+            PayloadKind.IMAGE, PayloadKind.VIDEO, PayloadKind.VOICE, PayloadKind.FILE, PayloadKind.AVATAR -> beginIncomingTransfer(contactId, payload)
             PayloadKind.GROUP_INVITE -> scope.launch { handleGroupInvite(contactId, payload) }
             PayloadKind.PREFERENCE_UPDATE -> scope.launch { contactDao.setAllowsMistralAccess(contactId, payload.allowsMistralAccess ?: true) }
             PayloadKind.TEXT -> {

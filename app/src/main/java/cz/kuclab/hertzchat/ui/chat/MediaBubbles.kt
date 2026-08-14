@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.InsertDriveFile
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.PlayCircle
@@ -173,4 +174,60 @@ private fun FullScreenVideoPlayer(path: String?, onDismiss: () -> Unit) {
             }
         }
     }
+}
+
+/**
+ * A received/sent arbitrary file: name, size, and a tap to hand it to whatever app
+ * the user has for that type, via a temporary FileProvider read grant.
+ */
+@Composable
+fun FileBubble(message: MessageEntity, onSurface: Color) {
+    val context = LocalContext.current
+    val file = message.mediaPath?.let { File(it) }
+    val name = message.mediaFileName ?: file?.name ?: "Soubor"
+
+    Row(
+        modifier = Modifier
+            .clickable {
+                file ?: return@clickable
+                runCatching {
+                    val uri = androidx.core.content.FileProvider.getUriForFile(
+                        context,
+                        context.packageName + ".fileprovider",
+                        file,
+                    )
+                    val intent = android.content.Intent(android.content.Intent.ACTION_VIEW).apply {
+                        setDataAndType(uri, message.mediaMimeType ?: "*/*")
+                        addFlags(android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                    }
+                    context.startActivity(android.content.Intent.createChooser(intent, name))
+                }
+            }
+            .padding(horizontal = 14.dp, vertical = 10.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Icon(
+            Icons.Filled.InsertDriveFile,
+            contentDescription = null,
+            tint = onSurface,
+            modifier = Modifier.size(28.dp),
+        )
+        androidx.compose.foundation.layout.Column(modifier = Modifier.padding(start = 10.dp)) {
+            Text(name, color = onSurface, maxLines = 1)
+            file?.takeIf { it.exists() }?.let {
+                Text(
+                    formatFileSize(it.length()),
+                    color = onSurface.copy(alpha = 0.7f),
+                    style = androidx.compose.material3.MaterialTheme.typography.labelSmall,
+                )
+            }
+        }
+    }
+}
+
+private fun formatFileSize(bytes: Long): String = when {
+    bytes >= 1024L * 1024 * 1024 -> String.format("%.1f GB", bytes / (1024.0 * 1024 * 1024))
+    bytes >= 1024L * 1024 -> String.format("%.1f MB", bytes / (1024.0 * 1024))
+    bytes >= 1024L -> String.format("%.0f kB", bytes / 1024.0)
+    else -> "$bytes B"
 }

@@ -53,6 +53,8 @@ data class MessageEntity(
     val text: String? = null,
     val mediaPath: String? = null,
     val mediaMimeType: String? = null,
+    /** Original filename, kept for arbitrary file attachments so they can be shown and opened by name. */
+    val mediaFileName: String? = null,
     val mediaDurationMs: Long? = null,
     val timestamp: Long,
     val deliveryState: DeliveryState,

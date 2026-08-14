@@ -51,6 +51,18 @@
         <!-- WorkManager is initialized on-demand (see HertzChatApp/RetryWakeWorker)
              instead of via this default androidx-startup provider, because the
              default one runs before Hilt has injected our WorkerFactory. -->
+        <!-- Lets the user open a received file attachment in another app via a
+             temporary, per-URI read grant (no broad storage permission involved). -->
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.fileprovider"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/file_paths" />
+        </provider>
+
         <provider
             android:name="androidx.startup.InitializationProvider"
             android:authorities="${applicationId}.androidx-startup"
