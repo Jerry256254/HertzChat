@@ -164,22 +164,17 @@ class P2pChatService @Inject constructor(
         }
         scope.launch { retryPendingLoop() }
         scope.launch {
-            // Loopback delivery needs real tunnels up (i2cp.disableLoopback routes it
-            // through them rather than short-circuiting locally), so this waits for
-            // CONNECTED instead of just a destination existing.
-            i2pTransport.state.first { it == I2pState.CONNECTED }
             ensureSelfContact()
+            // Backfill our own destination once I2P opens it, so the self entry isn't
+            // left permanently address-less on the very first run.
+            val destination = i2pTransport.i2pDestination.first { !it.isNullOrBlank() } ?: return@launch
+            val myId = identityKeyManager.contactId()
+            contactDao.find(myId)?.takeIf { it.i2pDestination.isBlank() }?.let {
+                contactDao.update(it.copy(i2pDestination = destination))
+            }
         }
     }
 
-    /**
-     * Everyone gets themselves as a contact automatically, the same way WhatsApp's
-     * "Message yourself" works - by running the exact same mutual friend-request/accept
-     * pipeline as any other contact, just addressed to our own Hertz ID. That's what
-     * actually establishes a real Signal session against our own identity key, so
-     * messages to yourself go through the identical encrypted path as messages to
-     * anyone else, not a shortcut that bypasses it.
-     */
     /**
      * A note to yourself has already arrived the moment it's written to the local
      * database - the "recipient" is this very device. Routing it out through I2P and
@@ -188,11 +183,31 @@ class P2pChatService @Inject constructor(
      */
     private fun isSelf(contactId: String): Boolean = contactId == identityKeyManager.contactId()
 
+    /**
+     * Everyone has themselves in their contacts, the way "Message yourself" works
+     * elsewhere - and unconditionally, from the first launch onward.
+     *
+     * This used to run the full friend-request pipeline against our own Hertz ID once
+     * I2P reached CONNECTED, to establish a genuine Signal session rather than a
+     * shortcut. That session buys nothing now that notes to self are delivered locally
+     * (see [isSelf]) and it cost the entry outright whenever the network never got
+     * there: no I2P, no self contact. Writing the row directly needs neither the
+     * network nor a destination, so the contact is simply always present.
+     */
     private suspend fun ensureSelfContact() {
         val myId = identityKeyManager.contactId()
         if (contactDao.find(myId) != null) return
-        val me = myHertzId() ?: return
-        sendFriendRequest(me)
+        contactDao.upsert(
+            ContactEntity(
+                contactId = myId,
+                nickname = identityKeyManager.nickname,
+                identityKeyBytes = identityKeyManager.identityKeyPair().publicKey.serialize(),
+                // Filled in once I2P opens our destination; nothing is ever dialled for
+                // a note to self, so an empty address here changes nothing.
+                i2pDestination = i2pTransport.i2pDestination.value.orEmpty(),
+                addedAt = System.currentTimeMillis(),
+            ),
+        )
     }
 
     fun stop() {

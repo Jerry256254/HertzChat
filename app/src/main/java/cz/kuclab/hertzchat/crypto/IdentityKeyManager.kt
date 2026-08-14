@@ -152,9 +152,18 @@ class IdentityKeyManager @Inject constructor(
 
     /** Builds the bundle that gets published over the signaling channel while we're online so a new contact can start a session with us. */
     fun currentPreKeyBundle(deviceId: Int = 1): PreKeyBundle {
+        // Provisioned once during onboarding - but the identity itself lives in encrypted
+        // preferences while the prekeys live in the database, so a destructive schema
+        // migration (or clearing app data) empties these tables while leaving the identity
+        // intact. Onboarding is then skipped, nothing ever regenerates them, and reading
+        // .first() off an empty table threw NoSuchElementException("List is empty.") -
+        // surfacing as a crash the moment I2P connected and we built our first bundle.
+        // Provisioning on demand makes that state self-correcting instead of permanent.
+        ensureIdentityAndPreKeys(null)
+
         val preKeyDao = database.preKeyDao()
         val signedPreKey = database.signedPreKeyDao().findAll().first()
-        val kyberPreKey = database.kyberPreKeyDao().findAll().first { true }
+        val kyberPreKey = database.kyberPreKeyDao().findAll().first()
         val oneTime = preKeyDao.maxId()?.let { preKeyDao.find(it) }
         val signedRecord = SignedPreKeyRecord(signedPreKey.record)
         val kyberRecord = KyberPreKeyRecord(kyberPreKey.record)

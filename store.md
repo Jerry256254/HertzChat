@@ -2,8 +2,8 @@
 schema_version: 1
 app_name: Hertz Chat
 package_id: cz.kuclab.hertzchat
-version_name: "0.21.0"
-version_code: 28
+version_name: "0.22.0"
+version_code: 29
 last_updated: 2026-08-14
 license: MIT
 category: Komunikace
@@ -33,6 +33,11 @@ download_url: https://github.com/Jerry256254/HertzChat/releases/latest
 logo: store/logo.png
 screenshots: []
 changelog:
+  - version: "0.22.0"
+    date: 2026-08-14
+    notes:
+      - "Oprava pádu ve chvíli, kdy se I2P dopojilo, i chybové hlášky „List is empty“ místo kontaktů. Šifrovací klíče pro navazování spojení se vytvářely jen jednou při prvním spuštění a byly uložené v databázi, kterou ale některá dřívější aktualizace smazala. Identita zůstala, takže se úvodní nastavení přeskočilo a klíče už nikdy nevznikly - jakmile se appka pokusila sestavit balíček klíčů, sáhla do prázdné tabulky a spadla. Klíče se teď v takovém případě dovytvoří samy."
+      - "Sám sebe máš v kontaktech vždy, hned od prvního spuštění. Dřív se vlastní kontakt zakládal až po úspěšném připojení k I2P, takže bez sítě nevznikl vůbec - a když se to nepovedlo, chyběl natrvalo."
   - version: "0.21.0"
     date: 2026-08-14
     notes:
