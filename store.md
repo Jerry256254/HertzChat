@@ -2,8 +2,8 @@
 schema_version: 1
 app_name: Hertz Chat
 package_id: cz.kuclab.hertzchat
-version_name: "0.19.0"
-version_code: 26
+version_name: "0.20.0"
+version_code: 27
 last_updated: 2026-08-14
 license: MIT
 category: Komunikace
@@ -33,6 +33,11 @@ download_url: https://github.com/Jerry256254/HertzChat/releases/latest
 logo: store/logo.png
 screenshots: []
 changelog:
+  - version: "0.20.0"
+    date: 2026-08-14
+    notes:
+      - "Oprava pádu po chvíli běhu na pozadí. Příčinu ukázal záznam pádu z předchozí verze: knihovna UPnP uvnitř I2P routeru na Androidu nemá XML parser a z vlastního vlákna vyhodila výjimku („No XML parser defined - Try to invoke UPnP.setXMLParser before“), která shodila celou aplikaci. UPnP je teď vypnuté - jen říká domácímu routeru, ať přesměruje příchozí port, což na mobilních datech nefunguje a pro nás nemá smysl, protože stejně nepřeposíláme cizí tunely."
+      - "Chyba v jednom vlákně I2P routeru už neshodí celou aplikaci. Router si drží spoustu vlastních vláken a neodchycená výjimka v kterémkoli z nich normálně ukončí celý proces - teď zanikne jen to jedno vlákno, chyba se uloží k pozdější diagnostice a chat běží dál."
   - version: "0.19.0"
     date: 2026-08-14
     notes:

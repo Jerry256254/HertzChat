@@ -249,6 +249,16 @@ class I2pTransport @Inject constructor(
             // most of what makes the first connection feel slow.
             setProperty("router.maxParticipatingTunnels", "0")
             setProperty("router.enableLoadTesting", "false")
+            // UPnP is on by default (i2np.upnp.enable, read with getBooleanPropertyDefaultTrue)
+            // and crashes the whole app on Android: the router's bundled cybergarage UPnP
+            // stack throws "No XML parser defined - Try to invoke UPnP.setXMLParser before"
+            // from its own SSDP listener thread once a search response arrives, which took
+            // the process down minutes after startup. Nothing is lost by turning it off -
+            // it only asks a home router to forward an inbound port, which is useless on
+            // mobile data and pointless for us anyway now that we relay no tunnels for
+            // anyone else; our own outbound tunnels don't need a forwarded port.
+            setProperty("i2np.upnp.enable", "false")
+            setProperty("i2np.upnp.ipv6.enable", "false")
             // Messaging yourself dials our own destination, which I2P refuses by default
             // ("local loopback denied"). This check is enforced by the router itself
             // against its own context properties - setting it only in the per-session

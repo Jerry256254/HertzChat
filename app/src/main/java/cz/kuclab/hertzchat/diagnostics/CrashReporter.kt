@@ -2,6 +2,7 @@ package cz.kuclab.hertzchat.diagnostics
 
 import android.content.Context
 import android.os.Build
+import android.os.Looper
 import cz.kuclab.hertzchat.BuildConfig
 import java.io.File
 import java.io.PrintWriter
@@ -23,18 +24,41 @@ object CrashReporter {
 
     private const val FILE_NAME = "last_crash.txt"
 
+    /** Errors the app survived (see install) - kept for diagnosis, never shown as a crash. */
+    private const val ROUTER_FILE_NAME = "last_router_error.txt"
+
     fun install(context: Context) {
         val appContext = context.applicationContext ?: context
         val previous = Thread.getDefaultUncaughtExceptionHandler()
         Thread.setDefaultUncaughtExceptionHandler { thread, error ->
+            // The embedded I2P router runs a crowd of its own background threads, and an
+            // uncaught exception on any thread normally takes the entire process with it -
+            // so one misbehaving corner of the router (its bundled UPnP/SSDP stack, for
+            // one) would kill a chat app that is otherwise working fine. Losing that one
+            // thread is survivable; losing the app isn't.
+            val survivable = thread !== Looper.getMainLooper().thread && isFromEmbeddedRouter(error)
+
             // Best-effort: a failure while recording the crash must never replace
-            // the original one, or the real cause is lost for good.
-            runCatching { write(appContext, thread, error) }
+            // the original one, or the real cause is lost for good. Survived errors go
+            // to a separate file so the "app crashed" dialog only ever means it really did,
+            // while the evidence is still on disk if the router starts misbehaving.
+            runCatching { write(appContext, thread, error, if (survivable) ROUTER_FILE_NAME else FILE_NAME) }
+
+            if (survivable) return@setDefaultUncaughtExceptionHandler
             previous?.uncaughtException(thread, error)
         }
     }
 
-    private fun write(context: Context, thread: Thread, error: Throwable) {
+    private fun isFromEmbeddedRouter(error: Throwable): Boolean {
+        var cause: Throwable? = error
+        while (cause != null) {
+            if (cause.stackTrace.any { it.className.startsWith("net.i2p.") || it.className.startsWith("org.cybergarage.") }) return true
+            cause = cause.cause.takeIf { it !== cause }
+        }
+        return false
+    }
+
+    private fun write(context: Context, thread: Thread, error: Throwable, fileName: String) {
         val stack = StringWriter().also { error.printStackTrace(PrintWriter(it)) }.toString()
         val when_ = SimpleDateFormat("d. M. yyyy HH:mm:ss", Locale.getDefault()).format(Date())
         val report = buildString {
@@ -45,7 +69,7 @@ object CrashReporter {
             appendLine()
             append(stack)
         }
-        File(context.filesDir, FILE_NAME).writeText(report)
+        File(context.filesDir, fileName).writeText(report)
     }
 
     fun lastCrash(context: Context): String? =
