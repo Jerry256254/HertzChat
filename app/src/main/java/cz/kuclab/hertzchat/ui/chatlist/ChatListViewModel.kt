@@ -8,6 +8,7 @@ import cz.kuclab.hertzchat.data.db.AssistantMessageDao
 import cz.kuclab.hertzchat.data.db.ContactDao
 import cz.kuclab.hertzchat.data.db.GroupDao
 import cz.kuclab.hertzchat.data.db.MessageDao
+import cz.kuclab.hertzchat.media.MediaStorage
 import cz.kuclab.hertzchat.mistral.MISTRAL_ASSISTANT_CONTACT_ID
 import cz.kuclab.hertzchat.mistral.MistralKeyStore
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -40,6 +41,7 @@ class ChatListViewModel @Inject constructor(
     private val assistantMessageDao: AssistantMessageDao,
     private val mistralKeyStore: MistralKeyStore,
     private val identityKeyManager: IdentityKeyManager,
+    private val mediaStorage: MediaStorage,
 ) : ViewModel() {
 
     val mistralEnabled = mistralKeyStore.enabled
@@ -52,16 +54,20 @@ class ChatListViewModel @Inject constructor(
         mistralKeyStore.assistantPinned,
     ) { contacts, groups, conversations, showAssistant, assistantPinned ->
         val myContactId = identityKeyManager.contactId()
+        val selfAvatarPath = mediaStorage.selfAvatarFile().takeIf { it.exists() }?.absolutePath
         val contactItems = contacts.map { contact ->
             val last = messageDao.lastMessage(contact.contactId)
+            val isSelf = contact.contactId == myContactId
             ChatListItem(
                 contactId = contact.contactId,
                 nickname = contact.nickname,
-                avatarPath = contact.avatarPath,
+                // Own photo is already on this device - showing it never depends on I2P
+                // round-tripping an AVATAR transfer to yourself.
+                avatarPath = if (isSelf) selfAvatarPath else contact.avatarPath,
                 pinned = contact.pinned,
                 lastMessagePreview = last?.text,
                 lastMessageAt = last?.timestamp,
-                isSelf = contact.contactId == myContactId,
+                isSelf = isSelf,
             )
         }
 

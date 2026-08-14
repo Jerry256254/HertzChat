@@ -24,14 +24,10 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.AttachFile
 import androidx.compose.material.icons.automirrored.filled.ExitToApp
 import androidx.compose.material.icons.filled.Groups
-import androidx.compose.material.icons.automirrored.filled.InsertDriveFile
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.Stop
-import androidx.compose.material.icons.filled.VideoLibrary
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -64,7 +60,9 @@ import cz.kuclab.hertzchat.ui.chat.ImageBubble
 import cz.kuclab.hertzchat.ui.chat.ImageEditorDialog
 import cz.kuclab.hertzchat.ui.chat.VideoBubble
 import cz.kuclab.hertzchat.ui.chat.VoiceBubble
-import cz.kuclab.hertzchat.ui.common.AppDropdownMenu
+import cz.kuclab.hertzchat.ui.common.ActionMenu
+import cz.kuclab.hertzchat.ui.common.ActionMenuItem
+import cz.kuclab.hertzchat.ui.common.AttachmentMenu
 import cz.kuclab.hertzchat.ui.common.ChatInputAccentButton
 import cz.kuclab.hertzchat.ui.common.ChatInputBar
 import cz.kuclab.hertzchat.ui.common.ChatInputPillIcon
@@ -117,9 +115,11 @@ fun GroupChatScreen(groupId: String, onBack: () -> Unit, onLeft: () -> Unit, vie
                 actions = {
                     IconButton(onClick = { membersDialogOpen = true }) { Icon(Icons.Filled.Groups, contentDescription = "Členové") }
                     IconButton(onClick = { menuOpen = true }) { Icon(Icons.AutoMirrored.Filled.ExitToApp, contentDescription = "Možnosti") }
-                    AppDropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
-                        DropdownMenuItem(
-                            text = { Text("Opustit skupinu") },
+                    ActionMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
+                        ActionMenuItem(
+                            text = "Opustit skupinu",
+                            icon = Icons.AutoMirrored.Filled.ExitToApp,
+                            destructive = true,
                             onClick = { menuOpen = false; confirmLeave = true },
                         )
                     }
@@ -163,22 +163,13 @@ fun GroupChatScreen(groupId: String, onBack: () -> Unit, onLeft: () -> Unit, vie
                                 icon = Icons.Filled.AttachFile,
                                 contentDescription = "Přiložit",
                             )
-                            AppDropdownMenu(expanded = attachMenuOpen, onDismissRequest = { attachMenuOpen = false }) {
-                                DropdownMenuItem(
-                                    text = { Text("Obrázek") },
-                                    onClick = { attachMenuOpen = false; pickImage.launch("image/*") },
-                                )
-                                DropdownMenuItem(
-                                    text = { Text("Video") },
-                                    leadingIcon = { Icon(Icons.Filled.VideoLibrary, contentDescription = null) },
-                                    onClick = { attachMenuOpen = false; pickVideo.launch("video/*") },
-                                )
-                                DropdownMenuItem(
-                                    text = { Text("Soubor") },
-                                    leadingIcon = { Icon(Icons.AutoMirrored.Filled.InsertDriveFile, contentDescription = null) },
-                                    onClick = { attachMenuOpen = false; pickFile.launch("*/*") },
-                                )
-                            }
+                            AttachmentMenu(
+                                expanded = attachMenuOpen,
+                                onDismissRequest = { attachMenuOpen = false },
+                                onPickImage = { pickImage.launch("image/*") },
+                                onPickVideo = { pickVideo.launch("video/*") },
+                                onPickFile = { pickFile.launch("*/*") },
+                            )
                         }
                     },
                     trailingButton = {

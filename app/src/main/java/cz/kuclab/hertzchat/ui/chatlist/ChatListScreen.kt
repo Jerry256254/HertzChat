@@ -20,13 +20,14 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Block
 import androidx.compose.material.icons.filled.ChatBubbleOutline
 import androidx.compose.material.icons.filled.Groups
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.PushPin
+import androidx.compose.material.icons.outlined.PushPin
 import androidx.compose.material.icons.filled.Settings
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -53,7 +54,8 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import coil.compose.AsyncImage
 import cz.kuclab.hertzchat.R
-import cz.kuclab.hertzchat.ui.common.AppDropdownMenu
+import cz.kuclab.hertzchat.ui.common.ActionMenu
+import cz.kuclab.hertzchat.ui.common.ActionMenuItem
 import cz.kuclab.hertzchat.ui.common.AppCard
 
 @Composable
@@ -191,19 +193,23 @@ private fun ChatListRow(
                 .padding(horizontal = 16.dp, vertical = 14.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            AppDropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
-                DropdownMenuItem(
-                    text = { Text(if (item.pinned) "Odepnout" else "Připnout") },
+            ActionMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
+                ActionMenuItem(
+                    text = if (item.pinned) "Odepnout" else "Připnout",
+                    icon = if (item.pinned) Icons.Filled.PushPin else Icons.Outlined.PushPin,
                     onClick = { menuOpen = false; onTogglePin() },
                 )
                 if (isAssistant) {
-                    DropdownMenuItem(
-                        text = { Text("Skrýt asistenta") },
+                    ActionMenuItem(
+                        text = "Skrýt asistenta",
+                        icon = Icons.Filled.VisibilityOff,
                         onClick = { menuOpen = false; onHideAssistant() },
                     )
                 } else if (!item.isSelf) {
-                    DropdownMenuItem(
-                        text = { Text("Blokovat") },
+                    ActionMenuItem(
+                        text = "Blokovat",
+                        icon = Icons.Filled.Block,
+                        destructive = true,
                         onClick = { menuOpen = false; onBlock() },
                     )
                 }

@@ -23,13 +23,9 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.AttachFile
 import androidx.compose.material.icons.filled.Block
 import androidx.compose.material.icons.filled.ContentCopy
-import androidx.compose.material.icons.automirrored.filled.InsertDriveFile
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.Stop
-import androidx.compose.material.icons.filled.VideoLibrary
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -60,7 +56,7 @@ import coil.compose.AsyncImage
 import cz.kuclab.hertzchat.data.db.MessageEntity
 import cz.kuclab.hertzchat.data.db.MessageType
 import cz.kuclab.hertzchat.media.VoiceRecorder
-import cz.kuclab.hertzchat.ui.common.AppDropdownMenu
+import cz.kuclab.hertzchat.ui.common.AttachmentMenu
 import cz.kuclab.hertzchat.ui.common.ChatInputAccentButton
 import cz.kuclab.hertzchat.ui.common.ChatInputBar
 import cz.kuclab.hertzchat.ui.common.ChatInputPillIcon
@@ -149,22 +145,13 @@ fun ChatScreen(contactId: String, onBack: () -> Unit, viewModel: ChatViewModel =
                             icon = Icons.Filled.AttachFile,
                             contentDescription = "Přiložit",
                         )
-                        AppDropdownMenu(expanded = attachMenuOpen, onDismissRequest = { attachMenuOpen = false }) {
-                            DropdownMenuItem(
-                                text = { Text("Obrázek") },
-                                onClick = { attachMenuOpen = false; pickImage.launch("image/*") },
-                            )
-                            DropdownMenuItem(
-                                text = { Text("Video") },
-                                leadingIcon = { Icon(Icons.Filled.VideoLibrary, contentDescription = null) },
-                                onClick = { attachMenuOpen = false; pickVideo.launch("video/*") },
-                            )
-                            DropdownMenuItem(
-                                text = { Text("Soubor") },
-                                leadingIcon = { Icon(Icons.AutoMirrored.Filled.InsertDriveFile, contentDescription = null) },
-                                onClick = { attachMenuOpen = false; pickFile.launch("*/*") },
-                            )
-                        }
+                        AttachmentMenu(
+                            expanded = attachMenuOpen,
+                            onDismissRequest = { attachMenuOpen = false },
+                            onPickImage = { pickImage.launch("image/*") },
+                            onPickVideo = { pickVideo.launch("video/*") },
+                            onPickFile = { pickFile.launch("*/*") },
+                        )
                     }
                 },
                 trailingButton = {

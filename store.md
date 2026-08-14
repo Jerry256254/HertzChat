@@ -2,8 +2,8 @@
 schema_version: 1
 app_name: Hertz Chat
 package_id: cz.kuclab.hertzchat
-version_name: "0.16.0"
-version_code: 23
+version_name: "0.17.0"
+version_code: 24
 last_updated: 2026-08-14
 license: MIT
 category: Komunikace
@@ -33,6 +33,11 @@ download_url: https://github.com/Jerry256254/HertzChat/releases/latest
 logo: store/logo.png
 screenshots: []
 changelog:
+  - version: "0.17.0"
+    date: 2026-08-14
+    notes:
+      - "Úplný redesign menu při dlouhém podržení a menu příloh - položky teď mají ikonu ve zvýrazněném kolečku vedle popisku (styl jako u Telegramu/WhatsAppu) místo prostého seznamu textu, destruktivní akce (Blokovat, Opustit skupinu) jsou červené. Menu příloh je teď řada ikon s popiskem místo svislého seznamu."
+      - "Oprava: vlastní profilová fotka se v chatu se sebou samým (a v seznamu chatů) nezobrazovala, protože appka čekala, až se fotka doručí sama sobě přes I2P. Fotka je ale už na zařízení - teď se pro vlastní avatar použije rovnou, bez čekání na síť."
   - version: "0.16.0"
     date: 2026-08-14
     notes:

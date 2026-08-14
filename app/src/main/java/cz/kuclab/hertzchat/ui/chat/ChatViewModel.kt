@@ -13,6 +13,7 @@ import cz.kuclab.hertzchat.data.model.PayloadKind
 import cz.kuclab.hertzchat.data.repository.DraftStore
 import cz.kuclab.hertzchat.data.repository.P2pChatService
 import cz.kuclab.hertzchat.data.repository.SettingsRepository
+import cz.kuclab.hertzchat.media.MediaStorage
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import java.io.File
@@ -36,6 +37,7 @@ class ChatViewModel @Inject constructor(
     private val settingsRepository: SettingsRepository,
     private val draftStore: DraftStore,
     identityKeyManager: IdentityKeyManager,
+    private val mediaStorage: MediaStorage,
     @ApplicationContext private val context: Context,
 ) : ViewModel() {
 
@@ -58,7 +60,13 @@ class ChatViewModel @Inject constructor(
         viewModelScope.launch {
             val contact = contactDao.find(contactId)
             _contactNickname.value = contact?.nickname.orEmpty()
-            _contactAvatarPath.value = contact?.avatarPath
+            // Own photo is already on this device - showing it never depends on I2P
+            // round-tripping an AVATAR transfer to yourself.
+            _contactAvatarPath.value = if (isSelf) {
+                mediaStorage.selfAvatarFile().takeIf { it.exists() }?.absolutePath
+            } else {
+                contact?.avatarPath
+            }
         }
         viewModelScope.launch {
             _imageJpegQuality.value = when (settingsRepository.settings.first().mediaQuality) {
