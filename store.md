@@ -2,8 +2,8 @@
 schema_version: 1
 app_name: Hertz Chat
 package_id: cz.kuclab.hertzchat
-version_name: "0.22.0"
-version_code: 29
+version_name: "0.23.0"
+version_code: 30
 last_updated: 2026-08-14
 license: MIT
 category: Komunikace
@@ -33,6 +33,12 @@ download_url: https://github.com/Jerry256254/HertzChat/releases/latest
 logo: store/logo.png
 screenshots: []
 changelog:
+  - version: "0.23.0"
+    date: 2026-08-14
+    notes:
+      - "Oprava pádu při přijetí žádosti o přátelství. Navázání šifrované relace se spouštělo přímo z obrazovky, tedy na hlavním vlákně, a uvnitř sahá do databáze - Android takový přístup zakazuje a aplikaci rovnou ukončí. Celé přijetí žádosti teď běží na pozadí."
+      - "Kontakt se navíc uloží dřív, než se proti němu staví relace. Dřív obojí startovalo současně, takže na pořadí nebylo spolehnutí."
+      - "Uložení profilové fotky už neblokuje vykreslování - zápis souboru se přesunul na pozadí."
   - version: "0.22.0"
     date: 2026-08-14
     notes:

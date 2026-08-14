@@ -252,20 +252,32 @@ class P2pChatService @Inject constructor(
         }
     }
 
+    /**
+     * Called straight from the UI when the user taps Accept, so everything it does has to
+     * get off the main thread first: establishing the Signal session runs libsignal's
+     * SessionBuilder, which reads and writes our identity/prekey tables through
+     * [cz.kuclab.hertzchat.crypto.RoomSignalProtocolStore] synchronously. Room refuses
+     * main-thread access outright ("Cannot access database on the main thread"), so
+     * accepting a request crashed the app on the spot. Ordering matters too - the contact
+     * row must exist before the session is built against it, which a fire-and-forget
+     * insert alongside it never guaranteed.
+     */
     fun respondFriendRequest(request: IncomingFriendRequest, accept: Boolean) {
         _incomingRequests.value = _incomingRequests.value.filterNot { it.contactId == request.contactId }
-        if (accept) {
-            addTrustedContact(
-                request.contactId,
-                request.nickname,
-                request.request.identityKeyBase64,
-                request.request.i2pDestination,
-                request.request.allowsMistralAccess,
-            )
-            cipherFor(request.contactId).establishSessionFromBundle(request.request.preKeyBundle.toPreKeyBundle())
-            mediaStorage.selfAvatarFile().takeIf { it.exists() }?.let { sendAvatarTo(request.contactId, it.readBytes()) }
-        }
         scope.launch {
+            if (accept) {
+                addTrustedContact(
+                    request.contactId,
+                    request.nickname,
+                    request.request.identityKeyBase64,
+                    request.request.i2pDestination,
+                    request.request.allowsMistralAccess,
+                )
+                runCatching {
+                    cipherFor(request.contactId).establishSessionFromBundle(request.request.preKeyBundle.toPreKeyBundle())
+                }
+                mediaStorage.selfAvatarFile().takeIf { it.exists() }?.let { sendAvatarTo(request.contactId, it.readBytes()) }
+            }
             val me = myHertzId() ?: return@launch
             val response = FriendResponsePayload(
                 accepted = accept,
@@ -281,8 +293,8 @@ class P2pChatService @Inject constructor(
         }
     }
 
-    private fun addTrustedContact(contactId: String, nickname: String, identityKeyBase64: String, i2pDestination: String, allowsMistralAccess: Boolean = true) {
-        scope.launch {
+    private suspend fun addTrustedContact(contactId: String, nickname: String, identityKeyBase64: String, i2pDestination: String, allowsMistralAccess: Boolean = true) {
+        run {
             contactDao.upsert(
                 ContactEntity(
                     contactId = contactId,
@@ -651,8 +663,10 @@ class P2pChatService @Inject constructor(
 
     /** Saves the new avatar locally and pushes it to every existing contact. */
     fun updateMyAvatar(jpegBytes: ByteArray) {
-        mediaStorage.selfAvatarFile().writeBytes(jpegBytes)
+        // Called from the profile screen: writing a full-size JPEG is disk I/O and
+        // belongs off the main thread, same as everything else in here.
         scope.launch {
+            mediaStorage.selfAvatarFile().writeBytes(jpegBytes)
             contactDao.observeContacts().first().forEach { contact -> sendAvatarTo(contact.contactId, jpegBytes) }
         }
     }
@@ -961,8 +975,10 @@ class P2pChatService @Inject constructor(
         }.getOrNull() ?: return
         if (!response.accepted) return
         val senderContactId = identityKeyManager.contactIdFor(Base64.decode(response.identityKeyBase64, Base64.NO_WRAP))
-        addTrustedContact(senderContactId, response.nickname, response.identityKeyBase64, response.i2pDestination, response.allowsMistralAccess)
-        mediaStorage.selfAvatarFile().takeIf { it.exists() }?.let { sendAvatarTo(senderContactId, it.readBytes()) }
+        scope.launch {
+            addTrustedContact(senderContactId, response.nickname, response.identityKeyBase64, response.i2pDestination, response.allowsMistralAccess)
+            mediaStorage.selfAvatarFile().takeIf { it.exists() }?.let { sendAvatarTo(senderContactId, it.readBytes()) }
+        }
     }
 
     private fun frame(type: Byte, payload: ByteArray): ByteArray = byteArrayOf(type) + payload
