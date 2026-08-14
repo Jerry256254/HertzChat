@@ -6,6 +6,7 @@ import android.webkit.MimeTypeMap
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import cz.kuclab.hertzchat.crypto.IdentityKeyManager
 import cz.kuclab.hertzchat.data.db.ContactDao
 import cz.kuclab.hertzchat.data.db.MessageDao
 import cz.kuclab.hertzchat.data.model.PayloadKind
@@ -34,10 +35,12 @@ class ChatViewModel @Inject constructor(
     private val p2pChatService: P2pChatService,
     private val settingsRepository: SettingsRepository,
     private val draftStore: DraftStore,
+    identityKeyManager: IdentityKeyManager,
     @ApplicationContext private val context: Context,
 ) : ViewModel() {
 
     val contactId: String = checkNotNull(savedStateHandle["contactId"])
+    val isSelf: Boolean = contactId == identityKeyManager.contactId()
 
     private val _draft = MutableStateFlow(draftStore.get(contactId))
     val draft: StateFlow<String> = _draft

@@ -1,5 +1,6 @@
 package cz.kuclab.hertzchat.ui.common
 
+
 import android.app.Activity
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -47,7 +48,7 @@ fun LanguagePickerRow(label: String, currentCode: String, onChange: (String) -> 
         }
         Box {
             TextButton(onClick = { expanded = true }) { Text(currentLabel) }
-            DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+            AppDropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
                 SUPPORTED_LANGUAGES.forEach { language ->
                     DropdownMenuItem(
                         text = { Text(language.nativeName) },

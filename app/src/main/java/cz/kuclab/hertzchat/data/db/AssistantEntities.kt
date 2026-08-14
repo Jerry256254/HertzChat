@@ -25,6 +25,8 @@ data class AssistantMessageEntity(
     val role: AssistantRole,
     val text: String,
     val timestamp: Long,
+    /** Local path to an attached image, if this USER message included one. */
+    val mediaPath: String? = null,
 )
 
 @Dao

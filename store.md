@@ -2,8 +2,8 @@
 schema_version: 1
 app_name: Hertz Chat
 package_id: cz.kuclab.hertzchat
-version_name: "0.14.0"
-version_code: 21
+version_name: "0.15.0"
+version_code: 22
 last_updated: 2026-08-14
 license: MIT
 category: Komunikace
@@ -33,6 +33,13 @@ download_url: https://github.com/Jerry256254/HertzChat/releases/latest
 logo: store/logo.png
 screenshots: []
 changelog:
+  - version: "0.15.0"
+    date: 2026-08-14
+    notes:
+      - "Nová funkce: přílohy (obrázky) i u Mistral AI - přiložený obrázek se pošle jako součást dotazu (podporováno u modelů se schopností vidět obrázky, záleží na vybraném modelu v Nastavení)"
+      - Modernizované vyskakovací menu (dlouhé podržení, přílohy) - zaoblená karta se stínem místo ploché obdélníkové plochy, která splývala s pozadím
+      - "Kontakt, který jsi ty sám/sama, je teď označený „(Ty)" v seznamu chatů, v otevřeném chatu i v jeho detailu - a nejde ho (ani nedává smysl) blokovat"
+      - Jde připnout i Mistral AI v seznamu chatů, ne jen skrýt
   - version: "0.14.0"
     date: 2026-08-14
     notes:

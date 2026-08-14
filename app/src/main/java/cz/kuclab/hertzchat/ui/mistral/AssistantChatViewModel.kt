@@ -63,6 +63,14 @@ class AssistantChatViewModel @Inject constructor(
         }
     }
 
+    /** Whatever's currently in the draft is used as the image's caption, same as attaching in any other chat. */
+    fun sendImage(bytes: ByteArray) {
+        val text = _draft.value.trim()
+        _draft.value = ""
+        draftStore.clear(DRAFT_KEY)
+        repository.send(text, imageBytes = bytes)
+    }
+
     fun openChatsSheet() {
         _chatsSheetOpen.value = true
     }

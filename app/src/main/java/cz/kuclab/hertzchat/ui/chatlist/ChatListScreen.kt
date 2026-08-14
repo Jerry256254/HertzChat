@@ -53,6 +53,7 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import coil.compose.AsyncImage
 import cz.kuclab.hertzchat.R
+import cz.kuclab.hertzchat.ui.common.AppDropdownMenu
 import cz.kuclab.hertzchat.ui.common.AppCard
 
 @Composable
@@ -190,17 +191,17 @@ private fun ChatListRow(
                 .padding(horizontal = 16.dp, vertical = 14.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
+            AppDropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
+                DropdownMenuItem(
+                    text = { Text(if (item.pinned) "Odepnout" else "Připnout") },
+                    onClick = { menuOpen = false; onTogglePin() },
+                )
                 if (isAssistant) {
                     DropdownMenuItem(
                         text = { Text("Skrýt asistenta") },
                         onClick = { menuOpen = false; onHideAssistant() },
                     )
-                } else {
-                    DropdownMenuItem(
-                        text = { Text(if (item.pinned) "Odepnout" else "Připnout") },
-                        onClick = { menuOpen = false; onTogglePin() },
-                    )
+                } else if (!item.isSelf) {
                     DropdownMenuItem(
                         text = { Text("Blokovat") },
                         onClick = { menuOpen = false; onBlock() },
@@ -243,6 +244,13 @@ private fun ChatListRow(
             Column(modifier = Modifier.weight(1f)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(item.nickname, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleSmall)
+                    if (item.isSelf) {
+                        Text(
+                            "  (Ty)",
+                            style = MaterialTheme.typography.titleSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
                     if (item.pinned) {
                         Spacer(modifier = Modifier.width(4.dp))
                         Icon(Icons.Filled.PushPin, contentDescription = "Připnuto", modifier = Modifier.size(14.dp))

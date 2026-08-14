@@ -67,6 +67,7 @@ import cz.kuclab.hertzchat.R
 import cz.kuclab.hertzchat.mistral.MISTRAL_MODEL_LARGE
 import cz.kuclab.hertzchat.mistral.MISTRAL_MODEL_MEDIUM
 import cz.kuclab.hertzchat.mistral.MISTRAL_MODEL_SMALL
+import cz.kuclab.hertzchat.ui.common.AppDropdownMenu
 import cz.kuclab.hertzchat.ui.common.AppCard
 import cz.kuclab.hertzchat.ui.common.LanguagePickerRow
 import cz.kuclab.hertzchat.ui.onboarding.MISTRAL_CONSENT_TEXT
@@ -465,7 +466,7 @@ private fun MediaQualityRow(current: String, onChange: (String) -> Unit) {
         TextButton(onClick = { expanded = true }) {
             Text(options.firstOrNull { it.first == current }?.second ?: current)
         }
-        DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+        AppDropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
             options.forEach { (value, label) ->
                 DropdownMenuItem(text = { Text(label) }, onClick = { onChange(value); expanded = false })
             }

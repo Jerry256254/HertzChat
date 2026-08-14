@@ -64,6 +64,7 @@ import cz.kuclab.hertzchat.ui.chat.ImageBubble
 import cz.kuclab.hertzchat.ui.chat.ImageEditorDialog
 import cz.kuclab.hertzchat.ui.chat.VideoBubble
 import cz.kuclab.hertzchat.ui.chat.VoiceBubble
+import cz.kuclab.hertzchat.ui.common.AppDropdownMenu
 import cz.kuclab.hertzchat.ui.common.ChatInputAccentButton
 import cz.kuclab.hertzchat.ui.common.ChatInputBar
 import cz.kuclab.hertzchat.ui.common.ChatInputPillIcon
@@ -116,7 +117,7 @@ fun GroupChatScreen(groupId: String, onBack: () -> Unit, onLeft: () -> Unit, vie
                 actions = {
                     IconButton(onClick = { membersDialogOpen = true }) { Icon(Icons.Filled.Groups, contentDescription = "Členové") }
                     IconButton(onClick = { menuOpen = true }) { Icon(Icons.AutoMirrored.Filled.ExitToApp, contentDescription = "Možnosti") }
-                    DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
+                    AppDropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
                         DropdownMenuItem(
                             text = { Text("Opustit skupinu") },
                             onClick = { menuOpen = false; confirmLeave = true },
@@ -162,7 +163,7 @@ fun GroupChatScreen(groupId: String, onBack: () -> Unit, onLeft: () -> Unit, vie
                                 icon = Icons.Filled.AttachFile,
                                 contentDescription = "Přiložit",
                             )
-                            DropdownMenu(expanded = attachMenuOpen, onDismissRequest = { attachMenuOpen = false }) {
+                            AppDropdownMenu(expanded = attachMenuOpen, onDismissRequest = { attachMenuOpen = false }) {
                                 DropdownMenuItem(
                                     text = { Text("Obrázek") },
                                     onClick = { attachMenuOpen = false; pickImage.launch("image/*") },

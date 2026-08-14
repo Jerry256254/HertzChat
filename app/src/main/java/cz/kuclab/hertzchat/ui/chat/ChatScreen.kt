@@ -60,6 +60,7 @@ import coil.compose.AsyncImage
 import cz.kuclab.hertzchat.data.db.MessageEntity
 import cz.kuclab.hertzchat.data.db.MessageType
 import cz.kuclab.hertzchat.media.VoiceRecorder
+import cz.kuclab.hertzchat.ui.common.AppDropdownMenu
 import cz.kuclab.hertzchat.ui.common.ChatInputAccentButton
 import cz.kuclab.hertzchat.ui.common.ChatInputBar
 import cz.kuclab.hertzchat.ui.common.ChatInputPillIcon
@@ -127,7 +128,11 @@ fun ChatScreen(contactId: String, onBack: () -> Unit, viewModel: ChatViewModel =
                                 Text(nickname.take(1).uppercase(), color = MaterialTheme.colorScheme.onPrimaryContainer)
                             }
                         }
-                        Text(nickname, modifier = Modifier.padding(start = 12.dp), style = MaterialTheme.typography.titleMedium)
+                        Text(
+                            if (viewModel.isSelf) "$nickname (Ty)" else nickname,
+                            modifier = Modifier.padding(start = 12.dp),
+                            style = MaterialTheme.typography.titleMedium,
+                        )
                     }
                 },
             )
@@ -144,7 +149,7 @@ fun ChatScreen(contactId: String, onBack: () -> Unit, viewModel: ChatViewModel =
                             icon = Icons.Filled.AttachFile,
                             contentDescription = "Přiložit",
                         )
-                        DropdownMenu(expanded = attachMenuOpen, onDismissRequest = { attachMenuOpen = false }) {
+                        AppDropdownMenu(expanded = attachMenuOpen, onDismissRequest = { attachMenuOpen = false }) {
                             DropdownMenuItem(
                                 text = { Text("Obrázek") },
                                 onClick = { attachMenuOpen = false; pickImage.launch("image/*") },
@@ -220,9 +225,10 @@ fun ChatScreen(contactId: String, onBack: () -> Unit, viewModel: ChatViewModel =
 
     if (detailsOpen) {
         ContactDetailsSheet(
-            nickname = nickname,
+            nickname = if (viewModel.isSelf) "$nickname (Ty)" else nickname,
             avatarPath = avatarPath,
             hertzId = viewModel.contactId,
+            isSelf = viewModel.isSelf,
             onDismiss = { detailsOpen = false },
             onBlock = {
                 detailsOpen = false
@@ -238,6 +244,7 @@ private fun ContactDetailsSheet(
     nickname: String,
     avatarPath: String?,
     hertzId: String,
+    isSelf: Boolean,
     onDismiss: () -> Unit,
     onBlock: () -> Unit,
 ) {
@@ -285,13 +292,17 @@ private fun ContactDetailsSheet(
                 Icon(Icons.Filled.ContentCopy, contentDescription = null, modifier = Modifier.size(18.dp))
                 Text("  Zkopírovat Hertz ID")
             }
-            OutlinedButton(
-                onClick = onBlock,
-                colors = androidx.compose.material3.ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error),
-                modifier = Modifier.fillMaxWidth().padding(top = 12.dp, bottom = 24.dp),
-            ) {
-                Icon(Icons.Filled.Block, contentDescription = null, modifier = Modifier.size(18.dp))
-                Text("  Blokovat kontakt")
+            if (!isSelf) {
+                OutlinedButton(
+                    onClick = onBlock,
+                    colors = androidx.compose.material3.ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error),
+                    modifier = Modifier.fillMaxWidth().padding(top = 12.dp, bottom = 24.dp),
+                ) {
+                    Icon(Icons.Filled.Block, contentDescription = null, modifier = Modifier.size(18.dp))
+                    Text("  Blokovat kontakt")
+                }
+            } else {
+                androidx.compose.foundation.layout.Spacer(modifier = Modifier.padding(bottom = 24.dp))
             }
         }
     }

@@ -1,10 +1,12 @@
 package cz.kuclab.hertzchat.mistral
 
+import android.util.Base64
 import cz.kuclab.hertzchat.data.db.AssistantConversationDao
 import cz.kuclab.hertzchat.data.db.AssistantConversationEntity
 import cz.kuclab.hertzchat.data.db.AssistantMessageDao
 import cz.kuclab.hertzchat.data.db.AssistantMessageEntity
 import cz.kuclab.hertzchat.data.db.AssistantRole
+import cz.kuclab.hertzchat.media.MediaStorage
 import java.util.UUID
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -28,6 +30,7 @@ class AssistantRepository @Inject constructor(
     private val conversationDao: AssistantConversationDao,
     private val messageDao: AssistantMessageDao,
     private val apiClient: MistralApiClient,
+    private val mediaStorage: MediaStorage,
 ) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
@@ -78,17 +81,30 @@ class AssistantRepository @Inject constructor(
         return id
     }
 
-    fun send(text: String) {
+    /**
+     * [imageBytes], if present, is stored locally (so it shows in the conversation like
+     * any other attachment) and sent to Mistral as a base64 data URI on this one turn
+     * only - re-encoding and re-uploading it on every later message in the same
+     * conversation would balloon the request size for no benefit, since the model
+     * already "saw" it once. Vision support itself depends on the selected model.
+     */
+    fun send(text: String, imageBytes: ByteArray? = null) {
         scope.launch {
             val conversationId = ensureActiveConversation()
             val now = System.currentTimeMillis()
-            messageDao.upsert(AssistantMessageEntity(UUID.randomUUID().toString(), conversationId, AssistantRole.USER, text, now))
+            val mediaPath = imageBytes?.let { mediaStorage.newOutgoingCopy(it, "jpg").absolutePath }
+            messageDao.upsert(AssistantMessageEntity(UUID.randomUUID().toString(), conversationId, AssistantRole.USER, text, now, mediaPath = mediaPath))
             conversationDao.touch(conversationId, now)
 
+            val imageDataUri = imageBytes?.let { "data:image/jpeg;base64," + Base64.encodeToString(it, Base64.NO_WRAP) }
             val history = messageDao.recentForConversation(conversationId, HISTORY_WINDOW).reversed()
             val messages = buildList {
                 add(MistralMessage("system", MISTRAL_SYSTEM_PROMPT))
-                history.forEach { add(MistralMessage(if (it.role == AssistantRole.USER) "user" else "assistant", it.text)) }
+                history.forEachIndexed { index, entry ->
+                    val role = if (entry.role == AssistantRole.USER) "user" else "assistant"
+                    val isCurrentTurn = index == history.lastIndex
+                    add(MistralMessage(role, entry.text, imageDataUri = if (isCurrentTurn) imageDataUri else null))
+                }
             }
 
             // The reply bubble is inserted empty and up front, then filled in as tokens

@@ -7,6 +7,7 @@ import javax.inject.Inject
 import javax.inject.Singleton
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
@@ -29,13 +30,36 @@ konverzaci, pokud ti není výslovně poskytnut)."""
 
 private const val CHAT_COMPLETIONS_URL = "https://api.mistral.ai/v1/chat/completions"
 
-data class MistralMessage(val role: String, val content: String)
+/** [imageDataUri] is a `data:image/...;base64,...` URI - only meaningful on a "user" message, and only sent to vision-capable models. */
+data class MistralMessage(val role: String, val content: String, val imageDataUri: String? = null)
 
 @Serializable
 private data class ChatRequest(val model: String, val messages: List<ChatRequestMessage>, val stream: Boolean = false)
 
+// Content is always the array form (even for plain text) rather than a bare string,
+// which OpenAI-compatible APIs including Mistral's accept either way - using one shape
+// uniformly avoids needing a polymorphic serializer to handle "sometimes string,
+// sometimes array" depending on whether a given message has an image attached.
 @Serializable
-private data class ChatRequestMessage(val role: String, val content: String)
+private data class ChatRequestMessage(val role: String, val content: List<ChatContentPart>)
+
+@Serializable
+private data class ChatContentPart(
+    val type: String,
+    val text: String? = null,
+    @SerialName("image_url") val imageUrl: ChatImageUrl? = null,
+)
+
+@Serializable
+private data class ChatImageUrl(val url: String)
+
+private fun MistralMessage.toRequestMessage(): ChatRequestMessage = ChatRequestMessage(
+    role = role,
+    content = buildList {
+        add(ChatContentPart(type = "text", text = content))
+        imageDataUri?.let { add(ChatContentPart(type = "image_url", imageUrl = ChatImageUrl(it))) }
+    },
+)
 
 @Serializable
 private data class ChatResponse(val choices: List<ChatChoice> = emptyList())
@@ -76,7 +100,7 @@ class MistralApiClient @Inject constructor(private val keyStore: MistralKeyStore
         if (keys.isEmpty()) return@withContext Result.failure(IllegalStateException("Nemáš přidaný žádný Mistral API klíč - přidej ho v Nastavení."))
 
         val model = keyStore.currentModel
-        val body = json.encodeToString(ChatRequest(model, messages.map { ChatRequestMessage(it.role, it.content) }))
+        val body = json.encodeToString(ChatRequest(model, messages.map { it.toRequestMessage() }))
 
         var lastError: String? = null
         for (key in keys) {
@@ -100,7 +124,7 @@ class MistralApiClient @Inject constructor(private val keyStore: MistralKeyStore
         if (keys.isEmpty()) return@withContext Result.failure(IllegalStateException("Nemáš přidaný žádný Mistral API klíč - přidej ho v Nastavení."))
 
         val model = keyStore.currentModel
-        val body = json.encodeToString(ChatRequest(model, messages.map { ChatRequestMessage(it.role, it.content) }, stream = true))
+        val body = json.encodeToString(ChatRequest(model, messages.map { it.toRequestMessage() }, stream = true))
 
         var lastError: String? = null
         for (key in keys) {

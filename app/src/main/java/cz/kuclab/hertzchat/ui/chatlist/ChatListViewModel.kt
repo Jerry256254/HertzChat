@@ -2,6 +2,7 @@ package cz.kuclab.hertzchat.ui.chatlist
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import cz.kuclab.hertzchat.crypto.IdentityKeyManager
 import cz.kuclab.hertzchat.data.db.AssistantConversationDao
 import cz.kuclab.hertzchat.data.db.AssistantMessageDao
 import cz.kuclab.hertzchat.data.db.ContactDao
@@ -26,6 +27,8 @@ data class ChatListItem(
     val lastMessagePreview: String?,
     val lastMessageAt: Long?,
     val kind: ChatListItemKind = ChatListItemKind.CONTACT,
+    /** True for the auto-added contact that is this device's own identity - see P2pChatService.ensureSelfContact(). */
+    val isSelf: Boolean = false,
 )
 
 @HiltViewModel
@@ -36,6 +39,7 @@ class ChatListViewModel @Inject constructor(
     private val assistantConversationDao: AssistantConversationDao,
     private val assistantMessageDao: AssistantMessageDao,
     private val mistralKeyStore: MistralKeyStore,
+    private val identityKeyManager: IdentityKeyManager,
 ) : ViewModel() {
 
     val mistralEnabled = mistralKeyStore.enabled
@@ -45,7 +49,9 @@ class ChatListViewModel @Inject constructor(
         groupDao.observeGroups(),
         assistantConversationDao.observeConversations(),
         mistralKeyStore.showAssistantContact,
-    ) { contacts, groups, conversations, showAssistant ->
+        mistralKeyStore.assistantPinned,
+    ) { contacts, groups, conversations, showAssistant, assistantPinned ->
+        val myContactId = identityKeyManager.contactId()
         val contactItems = contacts.map { contact ->
             val last = messageDao.lastMessage(contact.contactId)
             ChatListItem(
@@ -55,6 +61,7 @@ class ChatListViewModel @Inject constructor(
                 pinned = contact.pinned,
                 lastMessagePreview = last?.text,
                 lastMessageAt = last?.timestamp,
+                isSelf = contact.contactId == myContactId,
             )
         }
 
@@ -82,7 +89,7 @@ class ChatListViewModel @Inject constructor(
                 contactId = MISTRAL_ASSISTANT_CONTACT_ID,
                 nickname = "Mistral AI",
                 avatarPath = null,
-                pinned = false,
+                pinned = assistantPinned,
                 lastMessagePreview = lastText ?: "Asistent appky - klepnutím nastavíš přístup",
                 lastMessageAt = latest?.lastMessageAt,
                 kind = ChatListItemKind.ASSISTANT,
@@ -99,7 +106,8 @@ class ChatListViewModel @Inject constructor(
         viewModelScope.launch {
             when (item.kind) {
                 ChatListItemKind.GROUP -> groupDao.setPinned(item.contactId, !item.pinned)
-                else -> contactDao.setPinned(item.contactId, !item.pinned)
+                ChatListItemKind.ASSISTANT -> mistralKeyStore.setAssistantPinned(!item.pinned)
+                ChatListItemKind.CONTACT -> contactDao.setPinned(item.contactId, !item.pinned)
             }
         }
     }

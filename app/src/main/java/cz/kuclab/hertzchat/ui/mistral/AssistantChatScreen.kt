@@ -21,9 +21,12 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.Chat
+import androidx.compose.material.icons.filled.AttachFile
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.History
@@ -54,14 +57,18 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
+import coil.compose.AsyncImage
 import cz.kuclab.hertzchat.R
 import cz.kuclab.hertzchat.data.db.AssistantConversationEntity
 import cz.kuclab.hertzchat.data.db.AssistantMessageEntity
 import cz.kuclab.hertzchat.data.db.AssistantRole
+import cz.kuclab.hertzchat.ui.chat.ImageEditorDialog
 import cz.kuclab.hertzchat.ui.common.AppCard
 import cz.kuclab.hertzchat.ui.common.ChatInputAccentButton
 import cz.kuclab.hertzchat.ui.common.ChatInputBar
+import cz.kuclab.hertzchat.ui.common.ChatInputPillIcon
 import cz.kuclab.hertzchat.ui.common.MarkdownText
+import java.io.File
 import java.text.DateFormat
 import java.util.Date
 
@@ -72,6 +79,11 @@ fun AssistantChatScreen(onBack: () -> Unit, viewModel: AssistantChatViewModel = 
     val chatsSheetOpen by viewModel.chatsSheetOpen.collectAsState()
     val conversations by viewModel.conversations.collectAsState()
     val activeConversationId by viewModel.activeConversationId.collectAsState()
+
+    var editingImageUri by remember { mutableStateOf<android.net.Uri?>(null) }
+    val pickImage = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
+        editingImageUri = uri
+    }
 
     Scaffold(
         topBar = {
@@ -100,6 +112,13 @@ fun AssistantChatScreen(onBack: () -> Unit, viewModel: AssistantChatViewModel = 
                     value = draft,
                     onValueChange = viewModel::onDraftChange,
                     placeholder = "Zpráva, nebo /new a /chats",
+                    leading = {
+                        ChatInputPillIcon(
+                            onClick = { pickImage.launch("image/*") },
+                            icon = Icons.Filled.AttachFile,
+                            contentDescription = "Přiložit obrázek",
+                        )
+                    },
                     trailingButton = {
                         ChatInputAccentButton(
                             onClick = viewModel::send,
@@ -176,6 +195,18 @@ fun AssistantChatScreen(onBack: () -> Unit, viewModel: AssistantChatViewModel = 
             )
         }
     }
+
+    editingImageUri?.let { uri ->
+        ImageEditorDialog(
+            uri = uri,
+            jpegQuality = 85,
+            onCancel = { editingImageUri = null },
+            onConfirm = { bytes ->
+                viewModel.sendImage(bytes)
+                editingImageUri = null
+            },
+        )
+    }
 }
 
 @Composable
@@ -248,13 +279,28 @@ private fun AssistantMessageBubble(message: AssistantMessageEntity) {
             )
         }
         AssistantRole.USER -> Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.CenterEnd) {
-            Box(
+            Column(
+                horizontalAlignment = Alignment.End,
                 modifier = Modifier
                     .clip(RoundedCornerShape(16.dp))
                     .background(MaterialTheme.colorScheme.primary)
-                    .padding(horizontal = 14.dp, vertical = 8.dp),
+                    .padding(if (message.mediaPath != null) 6.dp else 0.dp),
             ) {
-                MarkdownText(message.text, color = MaterialTheme.colorScheme.onPrimary)
+                message.mediaPath?.let { path ->
+                    AsyncImage(
+                        model = File(path),
+                        contentDescription = null,
+                        contentScale = ContentScale.Crop,
+                        modifier = Modifier
+                            .size(180.dp)
+                            .clip(RoundedCornerShape(10.dp)),
+                    )
+                }
+                if (message.text.isNotBlank()) {
+                    Box(modifier = Modifier.padding(horizontal = if (message.mediaPath != null) 6.dp else 14.dp, vertical = if (message.mediaPath != null) 6.dp else 8.dp)) {
+                        MarkdownText(message.text, color = MaterialTheme.colorScheme.onPrimary)
+                    }
+                }
             }
         }
         AssistantRole.ASSISTANT -> Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.Bottom) {
