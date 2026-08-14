@@ -1,5 +1,8 @@
 package cz.kuclab.hertzchat.ui.groupchat
 
+import android.content.Context
+import android.net.Uri
+import android.webkit.MimeTypeMap
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -7,15 +10,21 @@ import cz.kuclab.hertzchat.data.db.GroupDao
 import cz.kuclab.hertzchat.data.db.GroupMemberDao
 import cz.kuclab.hertzchat.data.db.GroupMemberEntity
 import cz.kuclab.hertzchat.data.db.MessageDao
+import cz.kuclab.hertzchat.data.model.PayloadKind
 import cz.kuclab.hertzchat.data.repository.P2pChatService
 import cz.kuclab.hertzchat.mistral.MISTRAL_ASSISTANT_CONTACT_ID
 import dagger.hilt.android.lifecycle.HiltViewModel
+import dagger.hilt.android.qualifiers.ApplicationContext
+import java.io.File
 import javax.inject.Inject
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 data class MentionSuggestion(val id: String, val label: String)
 
@@ -26,6 +35,7 @@ class GroupChatViewModel @Inject constructor(
     groupDao: GroupDao,
     groupMemberDao: GroupMemberDao,
     private val p2pChatService: P2pChatService,
+    @ApplicationContext private val context: Context,
 ) : ViewModel() {
 
     val groupId: String = checkNotNull(savedStateHandle["groupId"])
@@ -77,6 +87,33 @@ class GroupChatViewModel @Inject constructor(
         if (text.isEmpty()) return
         p2pChatService.sendGroupText(groupId, text)
         _draft.value = ""
+    }
+
+    fun sendVideo(uri: Uri) = sendPickedMedia(uri, PayloadKind.VIDEO)
+
+    fun sendImageBytes(bytes: ByteArray) {
+        p2pChatService.sendGroupMedia(groupId, bytes, "image/jpeg", PayloadKind.IMAGE, fileName = null)
+    }
+
+    fun sendVoice(file: File, durationMs: Long) {
+        viewModelScope.launch(Dispatchers.IO) {
+            val bytes = file.readBytes()
+            p2pChatService.sendGroupMedia(groupId, bytes, "audio/mp4", PayloadKind.VOICE, file.name, durationMs)
+            file.delete()
+        }
+    }
+
+    private fun sendPickedMedia(uri: Uri, kind: PayloadKind) {
+        viewModelScope.launch {
+            val resolver = context.contentResolver
+            val mimeType = resolver.getType(uri) ?: MimeTypeMap.getSingleton()
+                .getMimeTypeFromExtension(uri.toString().substringAfterLast('.', ""))
+                ?: "application/octet-stream"
+            val bytes = withContext(Dispatchers.IO) {
+                resolver.openInputStream(uri)?.use { it.readBytes() }
+            } ?: return@launch
+            p2pChatService.sendGroupMedia(groupId, bytes, mimeType, kind, fileName = null)
+        }
     }
 
     fun leaveGroup() {

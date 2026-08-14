@@ -86,6 +86,7 @@ fun ContactsScreen(
     val bootstrapPercent by viewModel.bootstrapPercent.collectAsState()
     val i2pError by viewModel.i2pError.collectAsState()
     val i2pDiagnostics by viewModel.i2pDiagnostics.collectAsState()
+    val lanPeerCount by viewModel.lanPeerCount.collectAsState()
     val addError by viewModel.addError.collectAsState()
     val addSuccess by viewModel.addSuccess.collectAsState()
     val myQrText by viewModel.myHertzIdQrText.collectAsState()
@@ -119,7 +120,7 @@ fun ContactsScreen(
                     )
                 }
             }
-            item { I2pStatusRow(i2pState, bootstrapPercent, i2pError, i2pDiagnostics, onRetry = viewModel::retryI2p) }
+            item { I2pStatusRow(i2pState, bootstrapPercent, i2pError, i2pDiagnostics, lanPeerCount, onRetry = viewModel::retryI2p) }
 
             item {
                 AppCard {
@@ -290,7 +291,7 @@ private fun MistralAssistantCard(configured: Boolean, onClick: () -> Unit) {
 }
 
 @Composable
-private fun I2pStatusRow(state: I2pState?, bootstrapPercent: Int, error: String?, diagnostics: String?, onRetry: () -> Unit) {
+private fun I2pStatusRow(state: I2pState?, bootstrapPercent: Int, error: String?, diagnostics: String?, lanPeerCount: Int, onRetry: () -> Unit) {
     val label = when {
         error != null -> "Nepodařilo se připojit k síti I2P"
         state == I2pState.CONNECTED -> "Připojeno k síti I2P"
@@ -310,6 +311,14 @@ private fun I2pStatusRow(state: I2pState?, bootstrapPercent: Int, error: String?
             Text(error, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.error)
         } else if (state != I2pState.CONNECTED) {
             LinearProgressIndicator(modifier = Modifier.fillMaxWidth().padding(top = 4.dp).clip(RoundedCornerShape(4.dp)))
+        }
+        if (lanPeerCount > 0) {
+            Text(
+                "V místní síti: $lanPeerCount - spojení přímo, bez internetu a bez serverů",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.secondary,
+                modifier = Modifier.padding(top = 2.dp),
+            )
         }
         if (error == null && diagnostics != null) {
             Text(

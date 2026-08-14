@@ -12,6 +12,11 @@ appka není z Play Store.
 
 ## Funkce
 
+- **Místní síť úplně bez serverů** — když jsou obě zařízení na stejné Wi-Fi
+  nebo hotspotu, najdou se přes mDNS (stejný mechanismus, jakým se hlásí
+  tiskárny) a spojí se přímo podle IP adresy. Žádný I2P, žádný bootstrap,
+  žádná infrastruktura - funguje i úplně bez internetu. Appka tuhle cestu
+  použije automaticky, kdykoliv je dostupná.
 - **Skutečně bez serveru** — dvě zařízení se najdou a spojí přímo přes
   veřejnou síť [I2P](https://geti2p.net/) (každé zařízení si otevře vlastní
   "destinaci" - I2P obdobu adresy). I2P je zdarma, decentralizovaná,

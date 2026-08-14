@@ -30,6 +30,7 @@ import cz.kuclab.hertzchat.network.p2p.FriendResponsePayload
 import cz.kuclab.hertzchat.network.p2p.HertzId
 import cz.kuclab.hertzchat.network.p2p.I2pState
 import cz.kuclab.hertzchat.network.p2p.I2pTransport
+import cz.kuclab.hertzchat.network.p2p.LanTransport
 import cz.kuclab.hertzchat.network.p2p.P2pConnection
 import java.io.BufferedOutputStream
 import java.io.File
@@ -92,6 +93,7 @@ class P2pChatService @Inject constructor(
     private val groupMemberDao: GroupMemberDao,
     private val mediaStorage: MediaStorage,
     private val i2pTransport: I2pTransport,
+    private val lanTransport: LanTransport,
     private val settingsRepository: SettingsRepository,
     private val mistralKeyStore: MistralKeyStore,
     private val mistralApiClient: MistralApiClient,
@@ -107,6 +109,7 @@ class P2pChatService @Inject constructor(
     val i2pDestination: StateFlow<String?> get() = i2pTransport.i2pDestination
     val i2pError: StateFlow<String?> get() = i2pTransport.error
     val i2pDiagnostics: StateFlow<String?> get() = i2pTransport.diagnostics
+    val lanPeerCount: StateFlow<Int> get() = lanTransport.peerCount
 
     /** Retries starting the I2P router after a previous failure (e.g. no internet at the time). */
     fun retryI2p() {
@@ -124,6 +127,10 @@ class P2pChatService @Inject constructor(
 
     private data class IncomingTransfer(
         val contactId: String,
+        /** Where the finished message belongs - the group for group media, otherwise the sender's 1:1 thread. */
+        val threadId: String,
+        /** Non-null only for group media, so the bubble can be attributed to the member who sent it. */
+        val senderContactId: String?,
         val messageId: String,
         val kind: PayloadKind,
         val key: ByteArray,
@@ -149,11 +156,16 @@ class P2pChatService @Inject constructor(
         scope.launch {
             i2pTransport.incomingConnections.collect { socket -> handleIncomingSocket(socket) }
         }
+        lanTransport.start(identityKeyManager.contactId())
+        scope.launch {
+            lanTransport.incomingConnections.collect { socket -> handleIncomingSocket(socket) }
+        }
         scope.launch { retryPendingLoop() }
     }
 
     fun stop() {
         i2pTransport.stop()
+        lanTransport.stop()
         connections.values.forEach { it.close() }
         connections.clear()
         started = false
@@ -436,7 +448,13 @@ class P2pChatService @Inject constructor(
     }.isSuccess
 
     private suspend fun dialAndRegister(contactId: String, i2pDestination: String): P2pConnection = withContext(Dispatchers.IO) {
-        val socket: Socket = i2pTransport.connectTo(i2pDestination)
+        // Same local network wins: it's direct, near-instant, works with no internet at
+        // all, and needs no bootstrap of any kind. I2P is the fallback for everyone else.
+        val socket: Socket = if (lanTransport.addressFor(contactId) != null) {
+            runCatching { lanTransport.connectTo(contactId) }.getOrElse { i2pTransport.connectTo(i2pDestination) }
+        } else {
+            i2pTransport.connectTo(i2pDestination)
+        }
         val connection = P2pConnection(socket)
         connection.send(frame(FRAME_HELLO, identityKeyManager.contactId().encodeToByteArray()))
         registerConnection(contactId, connection)
@@ -501,6 +519,72 @@ class P2pChatService @Inject constructor(
                     index++
                 }
             }.isSuccess
+            messageDao.updateState(messageId, if (delivered) DeliveryState.SENT else DeliveryState.PENDING)
+        }
+    }
+
+    /**
+     * Group media, fanned out per member like [sendGroupText] is. The media itself is
+     * encrypted once with one symmetric key (the bytes on the wire are identical for
+     * every member), but that key travels inside the per-member Signal-encrypted control
+     * payload - so each member unwraps it through their own ratchet and there's still no
+     * shared group key anywhere.
+     */
+    fun sendGroupMedia(groupId: String, sourceBytes: ByteArray, mimeType: String, kind: PayloadKind, fileName: String?, durationMs: Long? = null) {
+        val transferId = UUID.randomUUID()
+        val key = MediaCrypto.generateKey()
+        val nonceSalt = MediaCrypto.generateNonceSalt()
+        val extension = mediaStorage.extensionFor(mimeType)
+        val localCopy = mediaStorage.newOutgoingCopy(sourceBytes, extension)
+        val messageId = UUID.randomUUID().toString()
+        val chunkCount = (sourceBytes.size + MediaCrypto.CHUNK_SIZE - 1) / MediaCrypto.CHUNK_SIZE
+
+        val control = ChatPayload(
+            messageId = messageId,
+            sentAt = System.currentTimeMillis(),
+            kind = kind,
+            mediaMimeType = mimeType,
+            mediaFileName = fileName,
+            mediaSizeBytes = sourceBytes.size.toLong(),
+            mediaDurationMs = durationMs,
+            mediaTransferId = transferId.toString(),
+            mediaKeyBase64 = Base64.encodeToString(key, Base64.NO_WRAP),
+            mediaNonceSaltBase64 = Base64.encodeToString(nonceSalt, Base64.NO_WRAP),
+            mediaChunkCount = chunkCount,
+            groupId = groupId,
+        )
+
+        scope.launch {
+            messageDao.upsert(
+                MessageEntity(
+                    messageId = messageId,
+                    contactId = groupId,
+                    fromMe = true,
+                    type = kind.toMessageType(),
+                    mediaPath = localCopy.absolutePath,
+                    mediaMimeType = mimeType,
+                    mediaDurationMs = durationMs,
+                    timestamp = control.sentAt,
+                    deliveryState = DeliveryState.PENDING,
+                ),
+            )
+
+            val members = groupMemberDao.findMembers(groupId)
+            val delivered = members.map { member ->
+                val contact = contactDao.find(member.contactId)
+                contact != null && runCatching {
+                    check(trySendPayload(member.contactId, control))
+                    var offset = 0
+                    var index = 0
+                    while (offset < sourceBytes.size) {
+                        val end = minOf(offset + MediaCrypto.CHUNK_SIZE, sourceBytes.size)
+                        val cipherChunk = MediaCrypto.encryptChunk(key, nonceSalt, index, sourceBytes.copyOfRange(offset, end))
+                        check(sendFrameTo(member.contactId, contact.i2pDestination, frameMediaChunk(transferId, index, cipherChunk)))
+                        offset = end
+                        index++
+                    }
+                }.isSuccess
+            }.any { it }
             messageDao.updateState(messageId, if (delivered) DeliveryState.SENT else DeliveryState.PENDING)
         }
     }
@@ -571,6 +655,8 @@ class P2pChatService @Inject constructor(
 
         incomingTransfers[transferId] = IncomingTransfer(
             contactId = contactId,
+            threadId = payload.groupId ?: contactId,
+            senderContactId = payload.groupId?.let { contactId },
             messageId = payload.messageId,
             kind = payload.kind,
             key = key,
@@ -610,7 +696,7 @@ class P2pChatService @Inject constructor(
 
             val entity = MessageEntity(
                 messageId = transfer.messageId,
-                contactId = transfer.contactId,
+                contactId = transfer.threadId,
                 fromMe = false,
                 type = transfer.kind.toMessageType(),
                 mediaPath = transfer.outputFile.absolutePath,
@@ -618,10 +704,11 @@ class P2pChatService @Inject constructor(
                 mediaDurationMs = transfer.durationMs,
                 timestamp = System.currentTimeMillis(),
                 deliveryState = DeliveryState.DELIVERED,
+                senderContactId = transfer.senderContactId,
             )
             scope.launch {
                 messageDao.upsert(entity)
-                _events.tryEmit(ChatServiceEvent.MessageReceived(transfer.contactId, entity))
+                _events.tryEmit(ChatServiceEvent.MessageReceived(transfer.threadId, entity))
             }
         }
     }

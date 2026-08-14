@@ -1,5 +1,9 @@
 package cz.kuclab.hertzchat.ui.groupchat
 
+import android.Manifest
+import android.content.pm.PackageManager
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -17,9 +21,13 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.filled.AttachFile
 import androidx.compose.material.icons.filled.ExitToApp
 import androidx.compose.material.icons.filled.Groups
+import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.Send
+import androidx.compose.material.icons.filled.Stop
+import androidx.compose.material.icons.filled.VideoLibrary
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -43,11 +51,20 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.platform.LocalContext
+import androidx.core.content.ContextCompat
 import androidx.hilt.navigation.compose.hiltViewModel
 import cz.kuclab.hertzchat.R
 import cz.kuclab.hertzchat.data.db.MessageEntity
+import cz.kuclab.hertzchat.data.db.MessageType
+import cz.kuclab.hertzchat.media.VoiceRecorder
+import cz.kuclab.hertzchat.ui.chat.ImageBubble
+import cz.kuclab.hertzchat.ui.chat.ImageEditorDialog
+import cz.kuclab.hertzchat.ui.chat.VideoBubble
+import cz.kuclab.hertzchat.ui.chat.VoiceBubble
 import cz.kuclab.hertzchat.ui.common.ChatInputAccentButton
 import cz.kuclab.hertzchat.ui.common.ChatInputBar
+import cz.kuclab.hertzchat.ui.common.ChatInputPillIcon
 
 @Composable
 fun GroupChatScreen(groupId: String, onBack: () -> Unit, onLeft: () -> Unit, viewModel: GroupChatViewModel = hiltViewModel()) {
@@ -59,6 +76,24 @@ fun GroupChatScreen(groupId: String, onBack: () -> Unit, onLeft: () -> Unit, vie
     var menuOpen by remember { mutableStateOf(false) }
     var membersDialogOpen by remember { mutableStateOf(false) }
     var confirmLeave by remember { mutableStateOf(false) }
+    var attachMenuOpen by remember { mutableStateOf(false) }
+    var isRecording by remember { mutableStateOf(false) }
+
+    val context = LocalContext.current
+    val voiceRecorder = remember { VoiceRecorder(context) }
+    var editingImageUri by remember { mutableStateOf<android.net.Uri?>(null) }
+    val pickImage = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
+        editingImageUri = uri
+    }
+    val pickVideo = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
+        uri?.let(viewModel::sendVideo)
+    }
+    val micPermissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+        if (granted) {
+            isRecording = true
+            voiceRecorder.start()
+        }
+    }
 
     val nicknamesById = remember(members) { members.associate { it.contactId to it.nickname } }
 
@@ -114,11 +149,53 @@ fun GroupChatScreen(groupId: String, onBack: () -> Unit, onLeft: () -> Unit, vie
                     value = draft,
                     onValueChange = viewModel::onDraftChange,
                     placeholder = "Zpráva, nebo @jméno / @Mistral N dotaz",
+                    leading = {
+                        Box {
+                            ChatInputPillIcon(
+                                onClick = { attachMenuOpen = true },
+                                icon = Icons.Filled.AttachFile,
+                                contentDescription = "Přiložit",
+                            )
+                            DropdownMenu(expanded = attachMenuOpen, onDismissRequest = { attachMenuOpen = false }) {
+                                DropdownMenuItem(
+                                    text = { Text("Obrázek") },
+                                    onClick = { attachMenuOpen = false; pickImage.launch("image/*") },
+                                )
+                                DropdownMenuItem(
+                                    text = { Text("Video") },
+                                    leadingIcon = { Icon(Icons.Filled.VideoLibrary, contentDescription = null) },
+                                    onClick = { attachMenuOpen = false; pickVideo.launch("video/*") },
+                                )
+                            }
+                        }
+                    },
                     trailingButton = {
                         ChatInputAccentButton(
-                            onClick = viewModel::send,
-                            icon = Icons.Filled.Send,
-                            contentDescription = "Odeslat",
+                            onClick = {
+                                if (isRecording) {
+                                    isRecording = false
+                                    voiceRecorder.stop()?.let { (file, durationMs) ->
+                                        if (durationMs > 400) viewModel.sendVoice(file, durationMs) else file.delete()
+                                    }
+                                } else if (draft.isNotBlank()) {
+                                    viewModel.send()
+                                } else {
+                                    val hasPermission = ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED
+                                    if (hasPermission) {
+                                        isRecording = true
+                                        voiceRecorder.start()
+                                    } else {
+                                        micPermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
+                                    }
+                                }
+                            },
+                            icon = when {
+                                isRecording -> Icons.Filled.Stop
+                                draft.isNotBlank() -> Icons.Filled.Send
+                                else -> Icons.Filled.Mic
+                            },
+                            contentDescription = if (isRecording) "Zastavit nahrávání" else if (draft.isNotBlank()) "Odeslat" else "Nahrát hlasovku",
+                            containerColor = if (isRecording) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary,
                         )
                     },
                 )
@@ -147,6 +224,18 @@ fun GroupChatScreen(groupId: String, onBack: () -> Unit, onLeft: () -> Unit, vie
                 }
             },
             confirmButton = { TextButton(onClick = { membersDialogOpen = false }) { Text("Zavřít") } },
+        )
+    }
+
+    editingImageUri?.let { uri ->
+        ImageEditorDialog(
+            uri = uri,
+            jpegQuality = 85,
+            onCancel = { editingImageUri = null },
+            onConfirm = { bytes ->
+                viewModel.sendImageBytes(bytes)
+                editingImageUri = null
+            },
         )
     }
 
@@ -194,13 +283,22 @@ private fun GroupMessageBubble(message: MessageEntity, senderNickname: String?) 
                     label?.let {
                         Text(it, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(start = 4.dp, bottom = 2.dp))
                     }
-                    Box(
-                        modifier = Modifier
-                            .clip(RoundedCornerShape(16.dp))
-                            .background(bubbleColor)
-                            .padding(horizontal = 14.dp, vertical = 8.dp),
-                    ) {
-                        Text(message.text.orEmpty(), color = textColor)
+                    when (message.type) {
+                        MessageType.IMAGE -> ImageBubble(message)
+                        MessageType.VIDEO -> VideoBubble(message)
+                        MessageType.VOICE -> Box(
+                            modifier = Modifier.clip(RoundedCornerShape(16.dp)).background(bubbleColor),
+                        ) {
+                            VoiceBubble(message, onSurface = textColor, accent = textColor)
+                        }
+                        else -> Box(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(16.dp))
+                                .background(bubbleColor)
+                                .padding(horizontal = 14.dp, vertical = 8.dp),
+                        ) {
+                            Text(message.text.orEmpty(), color = textColor)
+                        }
                     }
                 }
             }

@@ -61,6 +61,7 @@ import cz.kuclab.hertzchat.data.db.MessageType
 import cz.kuclab.hertzchat.media.VoiceRecorder
 import cz.kuclab.hertzchat.ui.common.ChatInputAccentButton
 import cz.kuclab.hertzchat.ui.common.ChatInputBar
+import cz.kuclab.hertzchat.ui.common.ChatInputPillIcon
 import cz.kuclab.hertzchat.ui.theme.HertzGreen
 import java.io.File
 
@@ -133,9 +134,11 @@ fun ChatScreen(contactId: String, onBack: () -> Unit, viewModel: ChatViewModel =
                 placeholder = "Zpráva",
                 leading = {
                     Box {
-                        IconButton(onClick = { attachMenuOpen = true }) {
-                            Icon(Icons.Filled.AttachFile, contentDescription = "Přiložit")
-                        }
+                        ChatInputPillIcon(
+                            onClick = { attachMenuOpen = true },
+                            icon = Icons.Filled.AttachFile,
+                            contentDescription = "Přiložit",
+                        )
                         DropdownMenu(expanded = attachMenuOpen, onDismissRequest = { attachMenuOpen = false }) {
                             DropdownMenuItem(
                                 text = { Text("Obrázek") },

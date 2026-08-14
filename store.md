@@ -2,8 +2,8 @@
 schema_version: 1
 app_name: Hertz Chat
 package_id: cz.kuclab.hertzchat
-version_name: "0.9.3"
-version_code: 14
+version_name: "0.10.0"
+version_code: 15
 last_updated: 2026-08-14
 license: MIT
 category: Komunikace
@@ -33,6 +33,13 @@ download_url: https://github.com/Jerry256254/HertzChat/releases/latest
 logo: store/logo.png
 screenshots: []
 changelog:
+  - version: "0.10.0"
+    date: 2026-08-14
+    notes:
+      - "Nová funkce: spojení v místní síti úplně bez serverů. Když jsou dvě zařízení na stejné Wi-Fi (nebo hotspotu), najdou se přes mDNS a spojí se přímo podle IP - bez I2P, bez jakéhokoliv bootstrapu, dokonce i úplně bez internetu. Appka to použije automaticky, když to jde, a I2P zůstává pro spojení přes internet."
+      - Přílohy (obrázky, videa, hlasovky) teď fungují i ve skupinových chatech - médium se šifruje jedním klíčem, ale ten se každému členovi doručí zvlášť jeho vlastním Signal klíčem, takže pořád neexistuje žádný sdílený skupinový klíč
+      - "Oprava: text ve vstupním poli nebyl svisle vycentrovaný (Material TextField si rezervoval místo pro popisek, který tam žádný není) - pole je teď postavené na BasicTextField a text sedí přesně uprostřed"
+      - Tlačítko příloh je teď součástí pilulky vstupního pole ve všech chatech
   - version: "0.9.3"
     date: 2026-08-14
     notes:
