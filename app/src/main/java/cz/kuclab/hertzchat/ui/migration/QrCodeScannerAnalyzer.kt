@@ -4,7 +4,9 @@ import android.os.Handler
 import android.os.Looper
 import androidx.camera.core.ImageAnalysis
 import androidx.camera.core.ImageProxy
+import com.google.zxing.BarcodeFormat
 import com.google.zxing.BinaryBitmap
+import com.google.zxing.DecodeHintType
 import com.google.zxing.MultiFormatReader
 import com.google.zxing.PlanarYUVLuminanceSource
 import com.google.zxing.ReaderException
@@ -20,7 +22,24 @@ import java.util.concurrent.atomic.AtomicBoolean
  * Compose state / navigate from it.
  */
 class QrCodeScannerAnalyzer(private val onDecoded: (String) -> Unit) : ImageAnalysis.Analyzer {
-    private val reader = MultiFormatReader()
+    /**
+     * Restricted to QR and asked to try hard, both deliberately.
+     *
+     * Left unrestricted, the reader also runs every 1D barcode decoder over each frame,
+     * and the dense stripes inside a large QR can satisfy one of their checksums by
+     * accident - it then returns that "barcode" as a line of nonsense instead of failing,
+     * which is what reached the parser as a scanned code that was never JSON at all.
+     * TRY_HARDER matters because a Hertz ID is a big payload (a ~670-character JSON), so
+     * the code carries many small modules and needs the more thorough scan.
+     */
+    private val reader = MultiFormatReader().apply {
+        setHints(
+            mapOf(
+                DecodeHintType.POSSIBLE_FORMATS to listOf(BarcodeFormat.QR_CODE),
+                DecodeHintType.TRY_HARDER to true,
+            ),
+        )
+    }
     private val delivered = AtomicBoolean(false)
     private val mainHandler = Handler(Looper.getMainLooper())
 

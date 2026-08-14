@@ -2,8 +2,8 @@
 schema_version: 1
 app_name: Hertz Chat
 package_id: cz.kuclab.hertzchat
-version_name: "0.23.0"
-version_code: 30
+version_name: "0.24.0"
+version_code: 31
 last_updated: 2026-08-14
 license: MIT
 category: Komunikace
@@ -33,6 +33,13 @@ download_url: https://github.com/Jerry256254/HertzChat/releases/latest
 logo: store/logo.png
 screenshots: []
 changelog:
+  - version: "0.24.0"
+    date: 2026-08-14
+    notes:
+      - "Oprava skenování QR kódu. Čtečka zkoušela na každý snímek i všechny čárové kódy, a husté pruhy uvnitř velkého QR kódu dokážou náhodou projít kontrolním součtem některého z nich - vrátila pak ten „čárový kód“ jako řádku nesmyslů místo toho, aby čtení selhalo. Proto appka hlásila, že kód obsahuje něco jiného. Teď čte výhradně QR."
+      - "Kamera analyzuje obraz v rozlišení 1280x720 místo výchozích 640x480. Hertz ID je dlouhé, takže QR kód má přes sto modulů na stranu - při nižším rozlišení vycházely na jeden modul zhruba dva obrazové body, což je pod hranicí čitelnosti."
+      - "Zapnuto důkladnější hledání kódu ve snímku, které se u takto hustých kódů vyplatí."
+      - "Když se kód přečte, ale není to Hertz ID, hláška teď ukáže i začátek toho, co se načetlo."
   - version: "0.23.0"
     date: 2026-08-14
     notes:

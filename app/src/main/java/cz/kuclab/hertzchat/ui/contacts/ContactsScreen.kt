@@ -4,9 +4,12 @@ import android.Manifest
 import android.content.pm.PackageManager
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import android.util.Size
 import androidx.camera.core.CameraSelector
 import androidx.camera.core.ImageAnalysis
 import androidx.camera.core.Preview
+import androidx.camera.core.resolutionselector.ResolutionSelector
+import androidx.camera.core.resolutionselector.ResolutionStrategy
 import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.camera.view.PreviewView
 import androidx.compose.foundation.Image
@@ -389,8 +392,21 @@ private fun QrScannerDialog(onDismiss: () -> Unit, onScanned: (String) -> Unit) 
                     factory = { ctx ->
                         val previewView = PreviewView(ctx)
                         val executor = Executors.newSingleThreadExecutor()
+                        // CameraX analyses at 640x480 unless told otherwise, and that is
+                        // not enough for this code: a Hertz ID is a ~670-character payload,
+                        // so the QR runs to well over a hundred modules per side. Held at a
+                        // comfortable distance it covers maybe half the frame, leaving
+                        // roughly two pixels per module - under what a decoder can resolve.
+                        // At 1280x720 the same code lands at four to five pixels per module.
                         val analyzer = ImageAnalysis.Builder()
                             .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
+                            .setResolutionSelector(
+                                ResolutionSelector.Builder()
+                                    .setResolutionStrategy(
+                                        ResolutionStrategy(Size(1280, 720), ResolutionStrategy.FALLBACK_RULE_CLOSEST_HIGHER_THEN_LOWER),
+                                    )
+                                    .build(),
+                            )
                             .build()
                         analyzer.setAnalyzer(executor, QrCodeScannerAnalyzer { text -> onScanned(text) })
                         val providerFuture = ProcessCameraProvider.getInstance(ctx)

@@ -100,7 +100,8 @@ class ContactsViewModel @Inject constructor(
             looksLikeJson ->
                 "Kód se přečetl, ale nemá tvar Hertz ID - nejspíš pochází z jiné verze aplikace. Zkontroluj, že máte oba stejnou verzi."
             else ->
-                "Tohle není Hertz ID - naskenovaný kód obsahuje něco jiného. Na druhém telefonu otevři Kontakty a ukaž QR kód, který je tam nahoře."
+                "Tohle není Hertz ID - kód obsahuje něco jiného: „${text.take(30)}${if (text.length > 30) "…" else ""}“. " +
+                    "Na druhém telefonu otevři Kontakty a ukaž QR kód, který je tam nahoře."
         }
     }
 
