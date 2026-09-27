@@ -31,7 +31,6 @@ data class FriendRequestPayload(
     val preKeyBundle: PreKeyBundleWire,
     /** Non-null when this request was auto-sent as a consequence of a mutual group invite - see P2pChatService group handling. */
     val viaGroupId: String? = null,
-    val allowsMistralAccess: Boolean = true,
 )
 
 /**
@@ -52,7 +51,6 @@ data class FriendResponsePayload(
     val identityKeyBase64: String,
     val i2pDestination: String,
     val preKeyBundle: PreKeyBundleWire? = null,
-    val allowsMistralAccess: Boolean = true,
 )
 
 /**

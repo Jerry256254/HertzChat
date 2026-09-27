@@ -1,6 +1,6 @@
 package cz.kuclab.hertzchat.ui.chatlist
 
-import androidx.compose.foundation.Image
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.background
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.ExperimentalFoundationApi
@@ -27,14 +27,20 @@ import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.PushPin
 import androidx.compose.material.icons.outlined.PushPin
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.SmartToy
 import androidx.compose.material.icons.filled.VisibilityOff
+import androidx.compose.material.icons.filled.Wifi
+import androidx.compose.material3.Button
+import androidx.compose.material3.CenterAlignedTopAppBar
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
@@ -46,18 +52,20 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import coil.compose.AsyncImage
-import cz.kuclab.hertzchat.R
+import cz.kuclab.hertzchat.data.repository.IncomingFriendRequest
+import cz.kuclab.hertzchat.network.p2p.I2pState
 import cz.kuclab.hertzchat.ui.common.ActionMenu
 import cz.kuclab.hertzchat.ui.common.ActionMenuItem
 import cz.kuclab.hertzchat.ui.common.AppCard
+import cz.kuclab.hertzchat.ui.theme.HertzMatte
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ChatListScreen(
     onOpenChat: (String) -> Unit,
@@ -69,16 +77,22 @@ fun ChatListScreen(
     viewModel: ChatListViewModel = hiltViewModel(),
 ) {
     val items by viewModel.items.collectAsState()
-    val mistralEnabled by viewModel.mistralEnabled.collectAsState()
+    val i2pState by viewModel.i2pState.collectAsState()
+    val bootstrapPercent by viewModel.bootstrapPercent.collectAsState()
+    val bootstrapLabel by viewModel.bootstrapLabel.collectAsState()
+    val i2pError by viewModel.i2pError.collectAsState()
+    val requests by viewModel.incomingRequests.collectAsState()
 
     Scaffold(
         topBar = {
-            TopAppBar(
+            CenterAlignedTopAppBar(
                 title = { Text("Hertz Chat", fontWeight = FontWeight.Bold) },
-                actions = {
+                navigationIcon = {
                     IconButton(onClick = onOpenProfile) {
                         Icon(Icons.Filled.Person, contentDescription = "Profil")
                     }
+                },
+                actions = {
                     IconButton(onClick = onOpenSettings) {
                         Icon(Icons.Filled.Settings, contentDescription = "Nastavení")
                     }
@@ -99,7 +113,7 @@ fun ChatListScreen(
         // The assistant row is always present now, so "no chats yet" has to mean
         // "no real conversations yet" rather than "nothing in the list".
         val hasRealChats = items.any { it.kind != ChatListItemKind.ASSISTANT }
-        if (!hasRealChats && items.isEmpty()) {
+        if (!hasRealChats && items.isEmpty() && requests.isEmpty() && i2pState == I2pState.CONNECTED) {
             Column(
                 modifier = Modifier.fillMaxSize().padding(padding).padding(32.dp),
                 horizontalAlignment = Alignment.CenterHorizontally,
@@ -136,9 +150,37 @@ fun ChatListScreen(
             LazyColumn(
                 modifier = Modifier.fillMaxSize(),
                 contentPadding = PaddingValues(start = 12.dp, end = 12.dp, top = padding.calculateTopPadding() + 8.dp, bottom = 96.dp),
-                verticalArrangement = Arrangement.spacedBy(4.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
-                if (!hasRealChats) {
+                item {
+                    AnimatedVisibility(visible = i2pState != I2pState.CONNECTED) {
+                        I2pConnectBanner(
+                            state = i2pState,
+                            percent = bootstrapPercent,
+                            label = bootstrapLabel,
+                            error = i2pError,
+                            onRetry = viewModel::retryI2p,
+                        )
+                    }
+                }
+                if (requests.isNotEmpty()) {
+                    item {
+                        Text(
+                            "Žádosti o přátelství",
+                            style = MaterialTheme.typography.titleSmall,
+                            fontWeight = FontWeight.SemiBold,
+                            color = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.padding(start = 4.dp, top = 4.dp),
+                        )
+                    }
+                    items(requests, key = { it.contactId }) { request ->
+                        FriendRequestRow(
+                            request = request,
+                            onRespond = viewModel::respond,
+                        )
+                    }
+                }
+                if (!hasRealChats && requests.isEmpty()) {
                     item {
                         Text(
                             "Zatím tu nemáš žádné chaty - přidej si přátele tlačítkem dole (sdílej nebo naskenuj Hertz ID).",
@@ -156,7 +198,7 @@ fun ChatListScreen(
                             when (item.kind) {
                                 ChatListItemKind.CONTACT -> onOpenChat(item.contactId)
                                 ChatListItemKind.GROUP -> onOpenGroup(item.contactId)
-                                ChatListItemKind.ASSISTANT -> if (mistralEnabled) onOpenAssistant() else onOpenSettings()
+                                ChatListItemKind.ASSISTANT -> onOpenAssistant()
                             }
                         },
                         onTogglePin = { viewModel.togglePin(item) },
@@ -165,6 +207,101 @@ fun ChatListScreen(
                     )
                 }
             }
+        }
+    }
+}
+
+/**
+ * The connection status lives on the main screen now, not buried in Contacts:
+ * while I2P is still bootstrapping this banner shows the live progress, and the
+ * moment the router connects it fades away on its own.
+ */
+@Composable
+private fun I2pConnectBanner(
+    state: I2pState?,
+    percent: Int,
+    label: String?,
+    error: String?,
+    onRetry: () -> Unit,
+) {
+    AppCard(containerColor = HertzMatte.cardRaised()) {
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(16.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            if (error != null) {
+                Icon(
+                    Icons.Filled.Wifi,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.error,
+                    modifier = Modifier.size(28.dp),
+                )
+            } else {
+                CircularProgressIndicator(
+                    progress = { (percent.coerceIn(0, 100)) / 100f },
+                    modifier = Modifier.size(28.dp),
+                    strokeWidth = 3.dp,
+                )
+            }
+            Column(modifier = Modifier.weight(1f).padding(start = 12.dp)) {
+                Text(
+                    when {
+                        error != null -> "Nepodařilo se připojit k I2P"
+                        state == I2pState.STOPPED -> "Síť je vypnutá"
+                        else -> "Connecting to I2P - $percent%"
+                    },
+                    fontWeight = FontWeight.SemiBold,
+                )
+                Text(
+                    error ?: label ?: "Navazuje se spojení…",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = if (error != null) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            if (error != null) {
+                TextButton(onClick = onRetry) { Text("Zkusit znovu") }
+            }
+        }
+    }
+}
+
+@Composable
+private fun FriendRequestRow(
+    request: IncomingFriendRequest,
+    onRespond: (IncomingFriendRequest, Boolean) -> Unit,
+) {
+    AppCard {
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(16.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Row(modifier = Modifier.weight(1f), verticalAlignment = Alignment.CenterVertically) {
+                Box(
+                    modifier = Modifier
+                        .size(48.dp)
+                        .clip(CircleShape)
+                        .background(MaterialTheme.colorScheme.primaryContainer),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Text(
+                        request.nickname.take(1).uppercase(),
+                        color = MaterialTheme.colorScheme.onPrimaryContainer,
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                    )
+                }
+                Column(modifier = Modifier.padding(start = 12.dp)) {
+                    Text(request.nickname, fontWeight = FontWeight.SemiBold)
+                    Text(
+                        "Chce si tě přidat",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
+            TextButton(onClick = { onRespond(request, false) }) { Text("Odmítnout") }
+            Button(onClick = { onRespond(request, true) }) { Text("Přijmout") }
         }
     }
 }
@@ -184,7 +321,7 @@ private fun ChatListRow(
 
     AppCard(
         modifier = Modifier.fillMaxWidth(),
-        containerColor = if (item.pinned) MaterialTheme.colorScheme.secondaryContainer else MaterialTheme.colorScheme.surfaceContainer,
+        containerColor = if (item.pinned) HertzMatte.pinned() else HertzMatte.card(),
     ) {
         Row(
             modifier = Modifier
@@ -222,12 +359,7 @@ private fun ChatListRow(
                 contentAlignment = Alignment.Center,
             ) {
                 if (isAssistant) {
-                    Image(
-                        painter = painterResource(R.drawable.mistral_avatar),
-                        contentDescription = null,
-                        contentScale = ContentScale.Crop,
-                        modifier = Modifier.fillMaxSize().clip(CircleShape),
-                    )
+                    Icon(Icons.Filled.SmartToy, contentDescription = null, tint = MaterialTheme.colorScheme.onPrimaryContainer, modifier = Modifier.size(28.dp))
                 } else if (isGroup) {
                     Icon(Icons.Filled.Groups, contentDescription = null, tint = MaterialTheme.colorScheme.onPrimaryContainer)
                 } else if (item.avatarPath != null) {
@@ -270,6 +402,22 @@ private fun ChatListRow(
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(top = 2.dp),
                 )
+            }
+            if (item.unreadCount > 0) {
+                Box(
+                    modifier = Modifier
+                        .size(24.dp)
+                        .clip(CircleShape)
+                        .background(MaterialTheme.colorScheme.primary),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Text(
+                        if (item.unreadCount > 99) "99+" else item.unreadCount.toString(),
+                        style = MaterialTheme.typography.labelSmall,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onPrimary,
+                    )
+                }
             }
         }
     }

@@ -15,8 +15,8 @@ android {
         applicationId = "cz.kuclab.hertzchat"
         minSdk = 26
         targetSdk = 34
-        versionCode = 32
-        versionName = "0.25.0"
+        versionCode = 34
+        versionName = "0.27.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
@@ -81,6 +81,10 @@ android {
             // I2P's jars carry duplicate licensing/service-loader metadata across modules.
             excludes += "META-INF/LICENSE*"
             pickFirsts += "META-INF/services/net.i2p.util.EventDispatcher"
+            // Belt and suspenders: desktop-only natives must never end up in the APK again
+            // (the dropped libsignal-client jar used to drag in ~130 MB of these).
+            excludes += "**/*.dylib"
+            excludes += "**/*.dll"
         }
         jniLibs {
             // libsignal ships a *_testing variant of its native lib that's
@@ -155,8 +159,11 @@ dependencies {
     implementation("androidx.hilt:hilt-work:1.2.0")
     ksp("androidx.hilt:hilt-compiler:1.2.0")
 
-    // End-to-end encryption: Signal Protocol (X3DH + Double Ratchet)
-    implementation("org.signal:libsignal-client:0.86.5")
+    // End-to-end encryption: Signal Protocol (X3DH + Double Ratchet).
+    // The Android artifact only - the JVM libsignal-client jar was dropped on purpose:
+    // every org.signal import in this app is org.signal.libsignal.protocol.*, which the
+    // Android artifact fully covers, while the JVM jar dragged ~130 MB of desktop-only
+    // natives (.dylib/.dll) and duplicate classes into the APK.
     implementation("org.signal:libsignal-android:0.86.5")
 
     // QR code (device migration, contact/identity sharing)

@@ -18,6 +18,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.InsertDriveFile
 import androidx.compose.material.icons.filled.Image
+import androidx.compose.material.icons.filled.PhotoCamera
 import androidx.compose.material.icons.filled.VideoLibrary
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.Icon
@@ -67,7 +68,7 @@ fun ActionMenu(
     modifier: Modifier = Modifier,
     content: @Composable ColumnScope.() -> Unit,
 ) {
-    RoundedMenuSurface(radius = 20.dp) {
+    RoundedMenuSurface(radius = 24.dp) {
         DropdownMenu(
             expanded = expanded,
             onDismissRequest = onDismissRequest,
@@ -125,6 +126,7 @@ fun AttachmentMenu(
     onPickImage: () -> Unit,
     onPickVideo: () -> Unit,
     onPickFile: () -> Unit,
+    onTakePhoto: (() -> Unit)? = null,
 ) {
     RoundedMenuSurface(radius = 24.dp) {
         DropdownMenu(expanded = expanded, onDismissRequest = onDismissRequest) {
@@ -132,6 +134,14 @@ fun AttachmentMenu(
                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 14.dp),
                 horizontalArrangement = Arrangement.spacedBy(22.dp),
             ) {
+                if (onTakePhoto != null) {
+                    AttachmentOption(
+                        icon = Icons.Filled.PhotoCamera,
+                        label = "Vyfotit",
+                        color = Color(0xFF03A9F4),
+                        onClick = { onDismissRequest(); onTakePhoto() },
+                    )
+                }
                 AttachmentOption(
                     icon = Icons.Filled.Image,
                     label = "Obrázek",

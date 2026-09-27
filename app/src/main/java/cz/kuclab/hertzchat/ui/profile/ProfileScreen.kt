@@ -24,7 +24,7 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
-import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.CenterAlignedTopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -40,7 +40,8 @@ import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import coil.compose.AsyncImage
-import cz.kuclab.hertzchat.ui.chat.ImageEditorDialog
+import cz.kuclab.hertzchat.ui.chat.PhotoEditorDialog
+import cz.kuclab.hertzchat.ui.chat.PhotoSource
 import cz.kuclab.hertzchat.ui.common.AppCard
 
 @Composable
@@ -52,7 +53,7 @@ fun ProfileScreen(onOpenQrExport: () -> Unit, viewModel: ProfileViewModel = hilt
     var editingUri by remember { mutableStateOf<android.net.Uri?>(null) }
     val pickImage = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri -> editingUri = uri }
 
-    Scaffold(topBar = { TopAppBar(title = { Text("Profil") }) }) { padding ->
+    Scaffold(topBar = { CenterAlignedTopAppBar(title = { Text("Profil") }) }) { padding ->
         Column(
             modifier = Modifier.fillMaxSize().padding(padding).padding(24.dp),
             verticalArrangement = Arrangement.spacedBy(20.dp),
@@ -127,8 +128,8 @@ fun ProfileScreen(onOpenQrExport: () -> Unit, viewModel: ProfileViewModel = hilt
     }
 
     editingUri?.let { uri ->
-        ImageEditorDialog(
-            uri = uri,
+        PhotoEditorDialog(
+            source = PhotoSource.UriSource(uri),
             onCancel = { editingUri = null },
             onConfirm = { bytes ->
                 viewModel.onAvatarPicked(bytes)

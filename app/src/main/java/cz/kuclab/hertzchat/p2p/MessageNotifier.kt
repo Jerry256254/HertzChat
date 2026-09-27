@@ -55,7 +55,6 @@ class MessageNotifier @Inject constructor(
         if (activeChatTracker.isThreadVisible(threadId)) return
         val group = groupDao.find(threadId)
         val senderLabel = when {
-            message.fromAssistant -> "Mistral AI"
             group != null -> message.senderContactId?.let { contactDao.find(it)?.nickname } ?: "Neznámý"
             else -> contactDao.find(threadId)?.nickname ?: return
         }

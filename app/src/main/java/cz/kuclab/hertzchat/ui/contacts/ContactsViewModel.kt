@@ -4,9 +4,8 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import cz.kuclab.hertzchat.crypto.IdentityKeyManager
 import cz.kuclab.hertzchat.data.db.ContactDao
-import cz.kuclab.hertzchat.data.repository.IncomingFriendRequest
 import cz.kuclab.hertzchat.data.repository.P2pChatService
-import cz.kuclab.hertzchat.mistral.MistralKeyStore
+import cz.kuclab.hertzchat.data.repository.SettingsRepository
 import cz.kuclab.hertzchat.network.p2p.HertzId
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
@@ -23,14 +22,15 @@ import kotlinx.serialization.json.Json
 class ContactsViewModel @Inject constructor(
     private val p2pChatService: P2pChatService,
     contactDao: ContactDao,
-    mistralKeyStore: MistralKeyStore,
+    settingsRepository: SettingsRepository,
     identityKeyManager: IdentityKeyManager,
 ) : ViewModel() {
 
     private val json = Json { ignoreUnknownKeys = true }
 
-    val mistralEnabled = mistralKeyStore.enabled
-    val showMistralContact = mistralKeyStore.showAssistantContact
+    val showAssistantContact = settingsRepository.settings
+        .map { it.showAssistantContact }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), true)
 
     // Excludes the self contact: it exists so "message yourself" has a normal-looking
     // chat row, but it never has a real Signal session (self-messages are delivered
@@ -45,13 +45,8 @@ class ContactsViewModel @Inject constructor(
         p2pChatService.createGroup(name.trim(), memberContactIds)
     }
 
-    val incomingRequests = p2pChatService.incomingRequests
-    val i2pState = p2pChatService.i2pState.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
-    val bootstrapPercent = p2pChatService.bootstrapPercent.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 0)
-    val bootstrapLabel = p2pChatService.bootstrapLabel.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
+    /** Only the QR card still needs the network state (its error branch) - the status row moved to the chat list. */
     val i2pError = p2pChatService.i2pError.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
-    val i2pDiagnostics = p2pChatService.i2pDiagnostics.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
-    val lanPeerCount = p2pChatService.lanPeerCount.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 0)
 
     fun retryI2p() = p2pChatService.retryI2p()
 
@@ -116,9 +111,5 @@ class ContactsViewModel @Inject constructor(
 
     fun clearAddSuccess() {
         _addSuccess.value = false
-    }
-
-    fun respond(request: IncomingFriendRequest, accept: Boolean) {
-        p2pChatService.respondFriendRequest(request, accept)
     }
 }

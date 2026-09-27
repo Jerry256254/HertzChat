@@ -50,3 +50,31 @@ val MIGRATION_7_8 = object : Migration(7, 8) {
         db.execSQL("ALTER TABLE groups ADD COLUMN ownerId TEXT NOT NULL DEFAULT ''")
     }
 }
+
+/**
+ * The Mistral AI assistant is gone (replaced by the Hertz web assistant, which keeps
+ * no local history), so its two conversation tables go with it. Plain DROPs - there is
+ * nothing in them worth preserving or converting.
+ *
+ * Deliberately leaves the `contacts.allowsMistralAccess` and `messages.fromAssistant`
+ * columns in place: dropping a column needs SQLite 3.35+, which older supported
+ * devices don't have, and rebuilding both tables just to remove two unread booleans
+ * risks real user data for zero benefit. The columns are simply never read anymore.
+ */
+val MIGRATION_8_9 = object : Migration(8, 9) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL("DROP TABLE IF EXISTS assistant_messages")
+        db.execSQL("DROP TABLE IF EXISTS assistant_conversations")
+    }
+}
+
+/**
+ * Unread dots on the chat list need a per-thread "seen up to" watermark. New table only,
+ * so there is nothing to backfill: threads without a row simply treat every incoming
+ * message as unread until first opened.
+ */
+val MIGRATION_9_10 = object : Migration(9, 10) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL("CREATE TABLE IF NOT EXISTS thread_read_state (threadId TEXT NOT NULL PRIMARY KEY, lastSeenAt INTEGER NOT NULL)")
+    }
+}

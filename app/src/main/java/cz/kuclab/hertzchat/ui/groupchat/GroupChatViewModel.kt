@@ -13,18 +13,25 @@ import cz.kuclab.hertzchat.data.db.GroupDao
 import cz.kuclab.hertzchat.data.db.GroupMemberDao
 import cz.kuclab.hertzchat.data.db.GroupMemberEntity
 import cz.kuclab.hertzchat.data.db.MessageDao
+import cz.kuclab.hertzchat.data.db.MessageEntity
+import cz.kuclab.hertzchat.data.db.ThreadReadStateDao
+import cz.kuclab.hertzchat.data.db.ThreadReadStateEntity
 import cz.kuclab.hertzchat.data.model.PayloadKind
 import cz.kuclab.hertzchat.data.repository.DraftStore
 import cz.kuclab.hertzchat.data.repository.P2pChatService
 import cz.kuclab.hertzchat.media.MediaStorage
-import cz.kuclab.hertzchat.mistral.MISTRAL_ASSISTANT_CONTACT_ID
+import cz.kuclab.hertzchat.media.PendingCaptureStore
+import cz.kuclab.hertzchat.network.p2p.I2pState
 import cz.kuclab.hertzchat.p2p.ActiveChatTracker
+import cz.kuclab.hertzchat.ui.common.PendingAttachment
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import java.io.File
 import javax.inject.Inject
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
@@ -41,23 +48,46 @@ data class GroupMemberUi(val contactId: String, val nickname: String, val avatar
 @HiltViewModel
 class GroupChatViewModel @Inject constructor(
     savedStateHandle: SavedStateHandle,
-    messageDao: MessageDao,
+    private val messageDao: MessageDao,
     groupDao: GroupDao,
     groupMemberDao: GroupMemberDao,
     contactDao: ContactDao,
     identityKeyManager: IdentityKeyManager,
-    mediaStorage: MediaStorage,
+    private val mediaStorage: MediaStorage,
+    private val readStateDao: ThreadReadStateDao,
     private val activeChatTracker: ActiveChatTracker,
     private val p2pChatService: P2pChatService,
     private val draftStore: DraftStore,
+    private val captureStore: PendingCaptureStore,
     @ApplicationContext private val context: Context,
 ) : ViewModel() {
 
     val groupId: String = checkNotNull(savedStateHandle["groupId"])
     private val myId = identityKeyManager.contactId()
 
+    /** One-shot user-facing notices (cold-start deferred send, ...). */
+    private val _userNotice = MutableSharedFlow<String>(extraBufferCapacity = 1)
+    val userNotice: SharedFlow<String> = _userNotice
+    private var coldStartNoticeShown = false
+
+    /** Attachments staged in the input tray - sent together with the message, never alone. */
+    private val _pending = MutableStateFlow<List<PendingAttachment>>(emptyList())
+    val pending: StateFlow<List<PendingAttachment>> = _pending
+
+    /** A photo fresh from the in-app camera, waiting to be opened in the editor. */
+    val cameraCapture = captureStore.pendingCapture
+
+    fun consumeCapture() = captureStore.consume()
+
     init {
         activeChatTracker.activeThreadId.value = groupId
+        viewModelScope.launch {
+            messageDao.observeMessages(groupId).collect { list ->
+                list.maxOfOrNull { it.timestamp }?.let { newest ->
+                    readStateDao.upsert(ThreadReadStateEntity(groupId, newest))
+                }
+            }
+        }
     }
 
     override fun onCleared() {
@@ -108,12 +138,9 @@ class GroupChatViewModel @Inject constructor(
 
     fun mentionSuggestions(): List<MentionSuggestion> {
         val query = mentionQuery.value ?: return emptyList()
-        val fromMembers = members.value
+        return members.value
             .filter { it.nickname.startsWith(query, ignoreCase = true) }
             .map { MentionSuggestion(it.contactId, it.nickname) }
-        val mistral = listOf(MentionSuggestion(MISTRAL_ASSISTANT_CONTACT_ID, "Mistral"))
-            .filter { it.label.startsWith(query, ignoreCase = true) }
-        return fromMembers + mistral
     }
 
     fun onDraftChange(value: String) {
@@ -130,29 +157,28 @@ class GroupChatViewModel @Inject constructor(
 
     fun send() {
         val text = _draft.value.trim()
-        if (text.isEmpty()) return
-        p2pChatService.sendGroupText(groupId, text)
+        val staged = _pending.value
+        if (text.isEmpty() && staged.isEmpty()) return
+        warnIfOffline()
+        if (text.isNotEmpty()) p2pChatService.sendGroupText(groupId, text)
+        staged.forEach { p2pChatService.sendGroupMedia(groupId, it.file.readBytes(), it.mimeType, it.kind, it.fileName) }
+        clearPending()
         _draft.value = ""
         draftStore.clear(groupId)
     }
 
-    fun sendVideo(uri: Uri) = sendPickedMedia(uri, PayloadKind.VIDEO)
-
-    fun sendFile(uri: Uri) = sendPickedMedia(uri, PayloadKind.FILE)
-
-    fun sendImageBytes(bytes: ByteArray) {
-        p2pChatService.sendGroupMedia(groupId, bytes, "image/jpeg", PayloadKind.IMAGE, fileName = null)
-    }
-
-    fun sendVoice(file: File, durationMs: Long) {
+    /** Stages picked bytes without sending - they go out with [send] together with the message. */
+    fun stageAttachment(bytes: ByteArray, mimeType: String, kind: PayloadKind, fileName: String?) {
         viewModelScope.launch(Dispatchers.IO) {
-            val bytes = file.readBytes()
-            p2pChatService.sendGroupMedia(groupId, bytes, "audio/mp4", PayloadKind.VOICE, file.name, durationMs)
-            file.delete()
+            val dir = File(context.cacheDir, "pending").apply { mkdirs() }
+            val ext = mediaStorage.extensionFor(mimeType)
+            val file = File(dir, "pending_${System.currentTimeMillis()}_${(0..9999).random()}.$ext")
+            file.writeBytes(bytes)
+            _pending.value = _pending.value + PendingAttachment(file, mimeType, kind, fileName)
         }
     }
 
-    private fun sendPickedMedia(uri: Uri, kind: PayloadKind) {
+    fun stageAttachmentUri(uri: Uri, kind: PayloadKind) {
         viewModelScope.launch {
             val resolver = context.contentResolver
             val mimeType = resolver.getType(uri) ?: MimeTypeMap.getSingleton()
@@ -161,7 +187,67 @@ class GroupChatViewModel @Inject constructor(
             val bytes = withContext(Dispatchers.IO) {
                 resolver.openInputStream(uri)?.use { it.readBytes() }
             } ?: return@launch
-            p2pChatService.sendGroupMedia(groupId, bytes, mimeType, kind, fileName = displayNameOf(uri).takeIf { kind == PayloadKind.FILE })
+            stageAttachment(bytes, mimeType, kind, fileName = displayNameOf(uri).takeIf { kind == PayloadKind.FILE })
+        }
+    }
+
+    fun removePending(attachment: PendingAttachment) {
+        _pending.value = _pending.value - attachment
+        viewModelScope.launch(Dispatchers.IO) { runCatching { attachment.file.delete() } }
+    }
+
+    private fun clearPending() {
+        val staged = _pending.value
+        _pending.value = emptyList()
+        viewModelScope.launch(Dispatchers.IO) { staged.forEach { runCatching { it.file.delete() } } }
+    }
+
+    fun sendVoice(file: File, durationMs: Long) {
+        warnIfOffline()
+        viewModelScope.launch(Dispatchers.IO) {
+            val bytes = file.readBytes()
+            p2pChatService.sendGroupMedia(groupId, bytes, "audio/mp4", PayloadKind.VOICE, file.name, durationMs)
+            file.delete()
+        }
+    }
+
+    /** In-chat find - LIKE wildcards in the query are escaped so they match literally. */
+    suspend fun searchInChat(rawQuery: String): List<MessageEntity> {
+        val escaped = rawQuery.trim()
+            .replace("\\", "\\\\")
+            .replace("%", "\\%")
+            .replace("_", "\\_")
+        if (escaped.isEmpty()) return emptyList()
+        return messageDao.searchInThread(groupId, escaped)
+    }
+
+    /** Wipes this group's conversation locally only - membership stays untouched. */
+    fun clearChat() {
+        viewModelScope.launch { messageDao.deleteAllForContact(groupId) }
+    }
+
+    /** Saves an attachment to shared storage (Gallery/Downloads) and reports where it landed. */
+    fun downloadMessage(message: MessageEntity) {
+        viewModelScope.launch(Dispatchers.IO) {
+            val file = message.mediaPath?.let { File(it) }
+            if (file == null || !file.exists()) {
+                _userNotice.emit("Soubor už není k dispozici")
+                return@launch
+            }
+            mediaStorage.saveToPublic(file, message.mediaMimeType, message.mediaFileName ?: file.name)
+                .onSuccess { location -> _userNotice.emit("Uloženo do $location") }
+                .onFailure { _userNotice.emit("Uložení selhalo") }
+        }
+    }
+
+    private fun warnIfOffline() {
+        if (p2pChatService.i2pState.value == I2pState.CONNECTED) {
+            coldStartNoticeShown = false
+            return
+        }
+        if (!coldStartNoticeShown) {
+            coldStartNoticeShown = true
+            _userNotice.tryEmit("Zpráva se odešle po připojení k I2P")
         }
     }
 

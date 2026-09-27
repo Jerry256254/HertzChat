@@ -8,11 +8,9 @@ import androidx.lifecycle.viewModelScope
 import cz.kuclab.hertzchat.BuildConfig
 import cz.kuclab.hertzchat.data.db.ContactDao
 import cz.kuclab.hertzchat.data.repository.AppSettings
-import cz.kuclab.hertzchat.data.repository.P2pChatService
 import cz.kuclab.hertzchat.data.repository.SettingsRepository
 import cz.kuclab.hertzchat.locale.LocalePrefs
 import cz.kuclab.hertzchat.media.MediaStorage
-import cz.kuclab.hertzchat.mistral.MistralKeyStore
 import cz.kuclab.hertzchat.p2p.P2pForegroundService
 import cz.kuclab.hertzchat.update.UpdateChecker
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -38,19 +36,11 @@ class SettingsViewModel @Inject constructor(
     private val contactDao: ContactDao,
     private val mediaStorage: MediaStorage,
     private val updateChecker: UpdateChecker,
-    private val mistralKeyStore: MistralKeyStore,
-    private val p2pChatService: P2pChatService,
     @ApplicationContext private val context: Context,
 ) : ViewModel() {
 
     val settings = settingsRepository.settings.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), AppSettings())
     val blockedContacts = contactDao.observeBlocked().stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
-
-    val mistralEnabled = mistralKeyStore.enabled
-    val mistralConsentGiven = mistralKeyStore.consentGiven
-    val mistralShowAssistantContact = mistralKeyStore.showAssistantContact
-    val mistralModel = mistralKeyStore.model
-    val mistralKeys = mistralKeyStore.keys
 
     private val _mediaBytes = MutableStateFlow(mediaStorage.mediaStorageBytes())
     val mediaBytes: StateFlow<Long> = _mediaBytes
@@ -80,11 +70,7 @@ class SettingsViewModel @Inject constructor(
     fun setAutoAcceptFriendRequests(value: Boolean) = viewModelScope.launch { settingsRepository.setAutoAcceptFriendRequests(value) }
     fun unblock(contactId: String) = viewModelScope.launch { contactDao.setBlocked(contactId, false) }
 
-    /** Lets other people invoke @Mistral in threads that include the local user - broadcasts the change so their devices' context filtering picks it up immediately. */
-    fun setAllowMistralOnMyMessages(value: Boolean) {
-        viewModelScope.launch { settingsRepository.setAllowMistralOnMyMessages(value) }
-        p2pChatService.broadcastMistralPreference(value)
-    }
+    fun setShowAssistantContact(value: Boolean) = viewModelScope.launch { settingsRepository.setShowAssistantContact(value) }
 
     /** Persists the choice to both stores - the reactive DataStore copy and the fast synchronous one [MainActivity][cz.kuclab.hertzchat.MainActivity] reads at cold start. The caller is responsible for recreating the Activity to apply it immediately. */
     fun setLanguageCode(value: String) {
@@ -96,17 +82,6 @@ class SettingsViewModel @Inject constructor(
         mediaStorage.clearMedia()
         _mediaBytes.value = mediaStorage.mediaStorageBytes()
     }
-
-    /** Turning Mistral on for the first time requires the explicit consent dialog to have been confirmed first - see [SettingsScreen]. */
-    fun setMistralEnabled(value: Boolean) = mistralKeyStore.setEnabled(value)
-    fun confirmMistralConsent() {
-        mistralKeyStore.setConsentGiven(true)
-        mistralKeyStore.setEnabled(true)
-    }
-    fun setMistralShowAssistantContact(value: Boolean) = mistralKeyStore.setShowAssistantContact(value)
-    fun setMistralModel(value: String) = mistralKeyStore.setModel(value)
-    fun addMistralKey(key: String) = mistralKeyStore.addKey(key)
-    fun removeMistralKey(index: Int) = mistralKeyStore.removeKey(index)
 
     fun checkForUpdates() {
         _updateCheckState.value = UpdateCheckState.Checking

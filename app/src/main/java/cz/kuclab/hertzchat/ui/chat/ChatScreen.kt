@@ -16,30 +16,42 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.AttachFile
 import androidx.compose.material.icons.filled.Block
 import androidx.compose.material.icons.filled.ContentCopy
-import androidx.compose.material.icons.filled.Mic
-import androidx.compose.material.icons.automirrored.filled.Send
-import androidx.compose.material.icons.filled.Stop
+import androidx.compose.material.icons.filled.DeleteSweep
+import androidx.compose.material.icons.filled.ErrorOutline
+import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.Search
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.CenterAlignedTopAppBar
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SmallFloatingActionButton
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -53,53 +65,99 @@ import androidx.core.content.ContextCompat
 import androidx.compose.ui.layout.ContentScale
 import androidx.hilt.navigation.compose.hiltViewModel
 import coil.compose.AsyncImage
+import cz.kuclab.hertzchat.data.db.DeliveryState
 import cz.kuclab.hertzchat.data.db.MessageEntity
 import cz.kuclab.hertzchat.data.db.MessageType
+import cz.kuclab.hertzchat.data.model.PayloadKind
 import cz.kuclab.hertzchat.media.VoiceRecorder
+import cz.kuclab.hertzchat.ui.common.ActionMenu
+import cz.kuclab.hertzchat.ui.common.ActionMenuItem
 import cz.kuclab.hertzchat.ui.common.AttachmentMenu
-import cz.kuclab.hertzchat.ui.common.ChatInputAccentButton
-import cz.kuclab.hertzchat.ui.common.ChatInputBar
 import cz.kuclab.hertzchat.ui.common.ChatInputPillIcon
+import cz.kuclab.hertzchat.ui.common.ChatSearchBar
+import cz.kuclab.hertzchat.ui.common.HoldToRecordButton
 import cz.kuclab.hertzchat.ui.common.MarkdownText
+import cz.kuclab.hertzchat.ui.common.ThreadInputBar
+import cz.kuclab.hertzchat.ui.common.highlightQuery
 import cz.kuclab.hertzchat.ui.theme.HertzGreen
+import cz.kuclab.hertzchat.ui.theme.HertzShapes
 import java.io.File
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 
-private val BubbleShapeMine = RoundedCornerShape(topStart = 18.dp, topEnd = 18.dp, bottomStart = 18.dp, bottomEnd = 4.dp)
-private val BubbleShapeTheirs = RoundedCornerShape(topStart = 18.dp, topEnd = 18.dp, bottomStart = 4.dp, bottomEnd = 18.dp)
-
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun ChatScreen(contactId: String, onBack: () -> Unit, viewModel: ChatViewModel = hiltViewModel()) {
+fun ChatScreen(contactId: String, onBack: () -> Unit, onOpenCamera: () -> Unit, onOpenFile: (String) -> Unit, viewModel: ChatViewModel = hiltViewModel()) {
     val state by viewModel.uiState.collectAsState()
     val draft by viewModel.draft.collectAsState()
     val nickname by viewModel.contactNickname.collectAsState()
     val avatarPath by viewModel.contactAvatarPath.collectAsState()
+    val pending by viewModel.pending.collectAsState()
     val context = LocalContext.current
 
     var attachMenuOpen by remember { mutableStateOf(false) }
-    var isRecording by remember { mutableStateOf(false) }
     var detailsOpen by remember { mutableStateOf(false) }
+    var overflowOpen by remember { mutableStateOf(false) }
+    var confirmClear by remember { mutableStateOf(false) }
+    var searchOpen by remember { mutableStateOf(false) }
+    var searchQuery by remember { mutableStateOf("") }
+    var matchIds by remember { mutableStateOf<List<String>>(emptyList()) }
+    var matchPos by remember { mutableStateOf(0) }
+
+    var isRecording by remember { mutableStateOf(false) }
+    var recordStartedAt by remember { mutableLongStateOf(0L) }
+    var recordElapsed by remember { mutableLongStateOf(0L) }
+    var pendingVoice by remember { mutableStateOf<Pair<File, Long>?>(null) }
     val voiceRecorder = remember { VoiceRecorder(context) }
+
+    val listState = rememberLazyListState()
+    val showScrollDown by remember { derivedStateOf { listState.firstVisibleItemIndex > 2 } }
+    val snackbar = remember { SnackbarHostState() }
+    val scope = rememberCoroutineScope()
+
+    LaunchedEffect(isRecording) {
+        while (isRecording) {
+            recordElapsed = System.currentTimeMillis() - recordStartedAt
+            delay(250)
+        }
+    }
+
+    LaunchedEffect(Unit) {
+        viewModel.userNotice.collect { snackbar.showSnackbar(it) }
+    }
+
+    LaunchedEffect(searchQuery, searchOpen) {
+        if (!searchOpen || searchQuery.isBlank()) {
+            matchIds = emptyList()
+            return@LaunchedEffect
+        }
+        delay(300)
+        matchIds = viewModel.searchInChat(searchQuery).map { it.messageId }
+        matchPos = 0
+    }
+
+    LaunchedEffect(matchIds, matchPos) {
+        val id = matchIds.getOrNull(matchPos) ?: return@LaunchedEffect
+        val ascendingIndex = state.messages.indexOfFirst { it.messageId == id }
+        if (ascendingIndex != -1) listState.animateScrollToItem(state.messages.size - 1 - ascendingIndex)
+    }
 
     var editingImageUri by remember { mutableStateOf<android.net.Uri?>(null) }
     val pickImage = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
         editingImageUri = uri
     }
     val pickVideo = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
-        uri?.let(viewModel::sendVideo)
+        uri?.let { viewModel.stageAttachmentUri(it, PayloadKind.VIDEO) }
     }
     val pickFile = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
-        uri?.let(viewModel::sendFile)
+        uri?.let { viewModel.stageAttachmentUri(it, PayloadKind.FILE) }
     }
-    val micPermissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
-        if (granted) {
-            isRecording = true
-            voiceRecorder.start()
-        }
-    }
+    val micPermissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { }
 
     Scaffold(
+        snackbarHost = { SnackbarHost(snackbar) },
         topBar = {
-            TopAppBar(
+            CenterAlignedTopAppBar(
                 navigationIcon = { IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Zpět") } },
                 title = {
                     Row(
@@ -131,12 +189,32 @@ fun ChatScreen(contactId: String, onBack: () -> Unit, viewModel: ChatViewModel =
                         )
                     }
                 },
+                actions = {
+                    Box {
+                        IconButton(onClick = { overflowOpen = true }) {
+                            Icon(Icons.Filled.MoreVert, contentDescription = "Možnosti konverzace")
+                        }
+                        ActionMenu(expanded = overflowOpen, onDismissRequest = { overflowOpen = false }) {
+                            ActionMenuItem(
+                                text = "Hledat v konverzaci",
+                                icon = Icons.Filled.Search,
+                                onClick = { overflowOpen = false; searchOpen = true },
+                            )
+                            ActionMenuItem(
+                                text = "Vyčistit konverzaci",
+                                icon = Icons.Filled.DeleteSweep,
+                                destructive = true,
+                                onClick = { overflowOpen = false; confirmClear = true },
+                            )
+                        }
+                    }
+                },
             )
         },
         bottomBar = {
-            ChatInputBar(
-                value = draft,
-                onValueChange = viewModel::onDraftChange,
+            ThreadInputBar(
+                draft = draft,
+                onDraftChange = viewModel::onDraftChange,
                 placeholder = "Zpráva",
                 leading = {
                     Box {
@@ -151,61 +229,151 @@ fun ChatScreen(contactId: String, onBack: () -> Unit, viewModel: ChatViewModel =
                             onPickImage = { pickImage.launch("image/*") },
                             onPickVideo = { pickVideo.launch("video/*") },
                             onPickFile = { pickFile.launch("*/*") },
+                            onTakePhoto = onOpenCamera,
                         )
                     }
                 },
-                trailingButton = {
-                    ChatInputAccentButton(
-                        onClick = {
-                            if (isRecording) {
-                                isRecording = false
-                                voiceRecorder.stop()?.let { (file, durationMs) ->
-                                    if (durationMs > 400) viewModel.sendVoice(file, durationMs) else file.delete()
-                                }
-                            } else if (draft.isNotBlank()) {
-                                viewModel.send()
+                attachments = pending,
+                onRemoveAttachment = viewModel::removePending,
+                isRecording = isRecording,
+                recordElapsedMs = recordElapsed,
+                pendingVoice = pendingVoice,
+                onDeleteVoice = {
+                    pendingVoice?.first?.delete()
+                    pendingVoice = null
+                },
+                onSend = {
+                    pendingVoice?.let { (file, duration) ->
+                        viewModel.sendVoice(file, duration)
+                        pendingVoice = null
+                    } ?: viewModel.send()
+                },
+                micButton = {
+                    HoldToRecordButton(
+                        onPressStart = {
+                            val granted = ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED
+                            if (!granted) {
+                                micPermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
+                                return@HoldToRecordButton false
+                            }
+                            val started = runCatching { voiceRecorder.start() }.isSuccess
+                            if (started) {
+                                recordStartedAt = System.currentTimeMillis()
+                                recordElapsed = 0
+                                isRecording = true
+                            }
+                            started
+                        },
+                        onPressEnd = {
+                            isRecording = false
+                            val clip = voiceRecorder.stop()
+                            if (clip != null && clip.second > 400) {
+                                pendingVoice = clip
                             } else {
-                                val hasPermission = ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED
-                                if (hasPermission) {
-                                    isRecording = true
-                                    voiceRecorder.start()
-                                } else {
-                                    micPermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
-                                }
+                                clip?.first?.delete()
                             }
                         },
-                        icon = when {
-                            isRecording -> Icons.Filled.Stop
-                            draft.isNotBlank() -> Icons.AutoMirrored.Filled.Send
-                            else -> Icons.Filled.Mic
-                        },
-                        contentDescription = if (isRecording) "Zastavit nahrávání" else if (draft.isNotBlank()) "Odeslat" else "Nahrát hlasovku",
-                        containerColor = if (isRecording) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary,
                     )
                 },
             )
         },
     ) { padding ->
-        LazyColumn(
-            modifier = Modifier.fillMaxWidth().padding(padding),
-            contentPadding = PaddingValues(12.dp),
-            verticalArrangement = Arrangement.spacedBy(6.dp),
-        ) {
-            items(state.messages, key = { it.messageId }) { message ->
-                MessageBubble(message)
+        Column(modifier = Modifier.fillMaxWidth().padding(padding)) {
+            if (searchOpen) {
+                ChatSearchBar(
+                    query = searchQuery,
+                    onQueryChange = { searchQuery = it },
+                    matchIndex = matchPos,
+                    matchCount = matchIds.size,
+                    onPrev = { if (matchIds.isNotEmpty()) matchPos = (matchPos - 1 + matchIds.size) % matchIds.size },
+                    onNext = { if (matchIds.isNotEmpty()) matchPos = (matchPos + 1) % matchIds.size },
+                    onClose = { searchOpen = false; searchQuery = "" },
+                )
             }
+            val threadMedia = remember(state.messages) {
+                state.messages.filter { it.type == MessageType.IMAGE || it.type == MessageType.VIDEO }
+            }
+            Box(modifier = Modifier.weight(1f)) {
+                // Reversed so the thread opens at the newest message and sticks there -
+                // index 0 is always the bottom, which is also what the scroll-down
+                // button and search jumps animate to.
+                LazyColumn(
+                    state = listState,
+                    reverseLayout = true,
+                    modifier = Modifier.fillMaxWidth(),
+                    contentPadding = PaddingValues(12.dp),
+                    verticalArrangement = Arrangement.spacedBy(6.dp),
+                ) {
+                    items(state.messages.reversed(), key = { it.messageId }) { message ->
+                        MessageBubble(
+                            message = message,
+                            searchQuery = if (searchOpen) searchQuery else "",
+                            isCurrentMatch = searchOpen && matchIds.getOrNull(matchPos) == message.messageId,
+                            threadMedia = threadMedia,
+                            onDownload = viewModel::downloadMessage,
+                            onOpenFile = { onOpenFile(it.messageId) },
+                        )
+                    }
+                }
+                if (showScrollDown && !searchOpen) {
+                    SmallFloatingActionButton(
+                        onClick = { scope.launch { listState.animateScrollToItem(0) } },
+                        modifier = Modifier.align(Alignment.BottomEnd).padding(end = 12.dp, bottom = 8.dp),
+                        containerColor = MaterialTheme.colorScheme.primaryContainer,
+                        contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
+                    ) {
+                        Icon(Icons.Filled.KeyboardArrowDown, contentDescription = "Sjet dolů")
+                    }
+                }
+            }
+        }
+    }
+
+    var editingBytes by remember { mutableStateOf<ByteArray?>(null) }
+    val capture by viewModel.cameraCapture.collectAsState()
+    LaunchedEffect(capture) {
+        capture?.let {
+            editingBytes = it.bytes
+            viewModel.consumeCapture()
         }
     }
 
     editingImageUri?.let { uri ->
         val quality by viewModel.imageJpegQuality.collectAsState()
-        ImageEditorDialog(
-            uri = uri,
+        PhotoEditorDialog(
+            source = PhotoSource.UriSource(uri),
             jpegQuality = quality,
             onCancel = { editingImageUri = null },
             onConfirm = { bytes ->
-                viewModel.sendImageBytes(bytes)
+                viewModel.stageAttachment(bytes, "image/jpeg", PayloadKind.IMAGE, fileName = null)
                 editingImageUri = null
+            },
+        )
+    }
+
+    editingBytes?.let { bytes ->
+        val quality by viewModel.imageJpegQuality.collectAsState()
+        PhotoEditorDialog(
+            source = PhotoSource.BytesSource(bytes),
+            jpegQuality = quality,
+            onCancel = { editingBytes = null },
+            onConfirm = { edited ->
+                viewModel.stageAttachment(edited, "image/jpeg", PayloadKind.IMAGE, fileName = null)
+                editingBytes = null
+            },
+        )
+    }
+
+    if (confirmClear) {
+        AlertDialog(
+            onDismissRequest = { confirmClear = false },
+            title = { Text("Vyčistit konverzaci?") },
+            text = { Text("Smaže se celá historie zpráv v tomto chatu na tomto zařízení. Kontakt zůstane - jen jeho zprávy zmizí.") },
+            confirmButton = {
+                TextButton(onClick = { confirmClear = false; viewModel.clearChat() }) { Text("Vyčistit") }
+            },
+            dismissButton = {
+                TextButton(onClick = { confirmClear = false }) { Text("Zrušit") }
             },
         )
     }
@@ -223,6 +391,92 @@ fun ChatScreen(contactId: String, onBack: () -> Unit, viewModel: ChatViewModel =
                 onBack()
             },
         )
+    }
+}
+
+@Composable
+private fun MessageBubble(
+    message: MessageEntity,
+    searchQuery: String = "",
+    isCurrentMatch: Boolean = false,
+    threadMedia: List<MessageEntity> = emptyList(),
+    onDownload: (MessageEntity) -> Unit = {},
+    onOpenFile: (MessageEntity) -> Unit = {},
+) {
+    val bubbleColor = when {
+        isCurrentMatch -> MaterialTheme.colorScheme.primaryContainer
+        message.fromMe -> HertzGreen
+        else -> MaterialTheme.colorScheme.surfaceVariant
+    }
+    val textColor = when {
+        isCurrentMatch -> MaterialTheme.colorScheme.onPrimaryContainer
+        message.fromMe -> androidx.compose.ui.graphics.Color.White
+        else -> MaterialTheme.colorScheme.onSurfaceVariant
+    }
+    val alignedRight = message.fromMe
+    val alignment = if (alignedRight) Alignment.CenterEnd else Alignment.CenterStart
+    val bubbleShape = if (alignedRight) HertzShapes.BubbleMine else HertzShapes.BubbleTheirs
+
+    androidx.compose.foundation.layout.Column(modifier = Modifier.fillMaxWidth(), horizontalAlignment = if (alignedRight) Alignment.End else Alignment.Start) {
+        Box(modifier = Modifier.fillMaxWidth(), contentAlignment = alignment) {
+            when (message.type) {
+                MessageType.TEXT -> Box(
+                    modifier = Modifier
+                        .clip(bubbleShape)
+                        .background(bubbleColor)
+                        .padding(horizontal = 14.dp, vertical = 10.dp),
+                ) {
+                    if (searchQuery.isBlank()) {
+                        MarkdownText(message.text.orEmpty(), color = textColor)
+                    } else {
+                        Text(highlightQuery(message.text.orEmpty(), searchQuery), color = textColor)
+                    }
+                }
+                MessageType.IMAGE -> ImageBubble(
+                    message = message,
+                    threadMedia = threadMedia.ifEmpty { listOf(message) },
+                    mediaIndex = threadMedia.indexOfFirst { it.messageId == message.messageId }.coerceAtLeast(0),
+                    onDownload = onDownload,
+                )
+                MessageType.VIDEO -> VideoBubble(
+                    message = message,
+                    threadMedia = threadMedia.ifEmpty { listOf(message) },
+                    mediaIndex = threadMedia.indexOfFirst { it.messageId == message.messageId }.coerceAtLeast(0),
+                    onDownload = onDownload,
+                )
+                MessageType.VOICE -> Box(
+                    modifier = Modifier
+                        .clip(bubbleShape)
+                        .background(bubbleColor),
+                ) {
+                    VoiceBubble(message, onSurface = textColor, accent = textColor, onDownload = onDownload)
+                }
+                MessageType.FILE -> Box(
+                    modifier = Modifier
+                        .clip(bubbleShape)
+                        .background(bubbleColor),
+                ) {
+                    FileBubble(message, onSurface = textColor, onOpenFile = onOpenFile, onDownload = onDownload)
+                }
+            }
+        }
+        // No delivery receipts under messages anymore: a small spinner only while the
+        // message hasn't left the device yet, an error mark if it failed for good.
+        if (message.fromMe) {
+            when (message.deliveryState) {
+                DeliveryState.PENDING, DeliveryState.SENDING -> CircularProgressIndicator(
+                    modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp).size(12.dp),
+                    strokeWidth = 2.dp,
+                )
+                DeliveryState.FAILED -> Icon(
+                    Icons.Filled.ErrorOutline,
+                    contentDescription = "Nepodařilo se odeslat",
+                    tint = MaterialTheme.colorScheme.error,
+                    modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp).size(14.dp),
+                )
+                else -> Unit
+            }
+        }
     }
 }
 
@@ -293,78 +547,4 @@ private fun ContactDetailsSheet(
             }
         }
     }
-}
-
-@Composable
-private fun MessageBubble(message: MessageEntity) {
-    val isAssistant = message.fromAssistant
-    val bubbleColor = when {
-        isAssistant -> MaterialTheme.colorScheme.tertiaryContainer
-        message.fromMe -> HertzGreen
-        else -> MaterialTheme.colorScheme.surfaceVariant
-    }
-    val textColor = when {
-        isAssistant -> MaterialTheme.colorScheme.onTertiaryContainer
-        message.fromMe -> androidx.compose.ui.graphics.Color.White
-        else -> MaterialTheme.colorScheme.onSurfaceVariant
-    }
-    val alignedRight = message.fromMe && !isAssistant
-    val alignment = if (alignedRight) Alignment.CenterEnd else Alignment.CenterStart
-    val bubbleShape = if (alignedRight) BubbleShapeMine else BubbleShapeTheirs
-
-    androidx.compose.foundation.layout.Column(modifier = Modifier.fillMaxWidth(), horizontalAlignment = if (alignedRight) Alignment.End else Alignment.Start) {
-        if (isAssistant) {
-            Text(
-                "Mistral AI",
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(start = 4.dp, bottom = 2.dp),
-            )
-        }
-        Box(modifier = Modifier.fillMaxWidth(), contentAlignment = alignment) {
-            when (message.type) {
-                MessageType.TEXT -> Box(
-                    modifier = Modifier
-                        .clip(bubbleShape)
-                        .background(bubbleColor)
-                        .padding(horizontal = 14.dp, vertical = 10.dp),
-                ) {
-                    MarkdownText(message.text.orEmpty(), color = textColor)
-                }
-                MessageType.IMAGE -> ImageBubble(message)
-                MessageType.VIDEO -> VideoBubble(message)
-                MessageType.VOICE -> Box(
-                    modifier = Modifier
-                        .clip(bubbleShape)
-                        .background(bubbleColor),
-                ) {
-                    VoiceBubble(message, onSurface = textColor, accent = textColor)
-                }
-                MessageType.FILE -> Box(
-                    modifier = Modifier
-                        .clip(bubbleShape)
-                        .background(bubbleColor),
-                ) {
-                    FileBubble(message, onSurface = textColor)
-                }
-            }
-        }
-        if (message.fromMe) {
-            Text(
-                text = deliveryStateLabel(message.deliveryState),
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp),
-            )
-        }
-    }
-}
-
-private fun deliveryStateLabel(state: cz.kuclab.hertzchat.data.db.DeliveryState): String = when (state) {
-    cz.kuclab.hertzchat.data.db.DeliveryState.PENDING -> "Čeká se, až bude příjemce online..."
-    cz.kuclab.hertzchat.data.db.DeliveryState.SENDING -> "Odesílá se..."
-    cz.kuclab.hertzchat.data.db.DeliveryState.SENT -> "Odesláno"
-    cz.kuclab.hertzchat.data.db.DeliveryState.DELIVERED -> "Doručeno"
-    cz.kuclab.hertzchat.data.db.DeliveryState.READ -> "Přečteno"
-    cz.kuclab.hertzchat.data.db.DeliveryState.FAILED -> "Nepodařilo se odeslat"
 }

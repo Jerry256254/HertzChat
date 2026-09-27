@@ -10,7 +10,6 @@ import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -26,9 +25,11 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import cz.kuclab.hertzchat.ui.theme.HertzMatte
+import cz.kuclab.hertzchat.ui.theme.HertzShapes
 
 /**
- * The message composer shared by every chat surface (1:1, group, assistant): a
+ * The message composer shared by every chat surface (1:1, group): a
  * pill-shaped field with optional icons docked inside it on the left (attach) and
  * a separate circular accent button outside it on the right (send/mic/stop).
  *
@@ -61,8 +62,8 @@ fun ChatInputBar(
     ) {
         Surface(
             modifier = Modifier.weight(1f),
-            shape = RoundedCornerShape(26.dp),
-            color = MaterialTheme.colorScheme.surfaceContainerHigh,
+            shape = HertzShapes.Pill,
+            color = HertzMatte.input(),
         ) {
             Row(
                 modifier = Modifier.heightIn(min = 52.dp).padding(horizontal = 6.dp),

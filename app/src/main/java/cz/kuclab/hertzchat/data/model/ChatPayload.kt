@@ -42,11 +42,11 @@ data class ChatPayload(
      * this one; if its own contactId is missing, that's how it learns it was removed.
      */
     val groupRoster: List<HertzId>? = null,
-    /** True when this is Mistral's reply, relayed into the thread by whoever invoked @Mistral - rendered with the assistant's identity, not the relayer's. */
-    val fromAssistant: Boolean = false,
-    /** Only set for [PayloadKind.PREFERENCE_UPDATE] - broadcast to every contact whenever the local "let others use @Mistral on my messages" toggle changes. */
-    val allowsMistralAccess: Boolean? = null,
 )
 
+// Note: older peers may still send `fromAssistant`, `allowsMistralAccess` or a
+// PREFERENCE_UPDATE kind from the removed Mistral assistant - all safely ignored
+// (unknown fields via ignoreUnknownKeys, unknown kinds via the runCatching around decode).
+
 @Serializable
-enum class PayloadKind { TEXT, IMAGE, VIDEO, VOICE, FILE, AVATAR, DELIVERED_ACK, READ_ACK, TYPING, GROUP_INVITE, GROUP_ROSTER_UPDATE, PREFERENCE_UPDATE }
+enum class PayloadKind { TEXT, IMAGE, VIDEO, VOICE, FILE, AVATAR, DELIVERED_ACK, READ_ACK, TYPING, GROUP_INVITE, GROUP_ROSTER_UPDATE }

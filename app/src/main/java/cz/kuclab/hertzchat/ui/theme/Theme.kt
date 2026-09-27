@@ -68,6 +68,7 @@ fun HertzChatTheme(
     MaterialTheme(
         colorScheme = colorScheme,
         typography = HertzTypography,
+        shapes = HertzThemeShapes,
         content = content,
     )
 }

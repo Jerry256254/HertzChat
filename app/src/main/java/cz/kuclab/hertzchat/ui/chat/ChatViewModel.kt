@@ -9,18 +9,26 @@ import androidx.lifecycle.viewModelScope
 import cz.kuclab.hertzchat.crypto.IdentityKeyManager
 import cz.kuclab.hertzchat.data.db.ContactDao
 import cz.kuclab.hertzchat.data.db.MessageDao
+import cz.kuclab.hertzchat.data.db.MessageEntity
+import cz.kuclab.hertzchat.data.db.ThreadReadStateDao
+import cz.kuclab.hertzchat.data.db.ThreadReadStateEntity
 import cz.kuclab.hertzchat.data.model.PayloadKind
 import cz.kuclab.hertzchat.data.repository.DraftStore
 import cz.kuclab.hertzchat.data.repository.P2pChatService
 import cz.kuclab.hertzchat.data.repository.SettingsRepository
 import cz.kuclab.hertzchat.media.MediaStorage
+import cz.kuclab.hertzchat.media.PendingCaptureStore
+import cz.kuclab.hertzchat.network.p2p.I2pState
 import cz.kuclab.hertzchat.p2p.ActiveChatTracker
+import cz.kuclab.hertzchat.ui.common.PendingAttachment
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import java.io.File
 import javax.inject.Inject
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.first
@@ -32,14 +40,16 @@ import kotlinx.coroutines.withContext
 @HiltViewModel
 class ChatViewModel @Inject constructor(
     savedStateHandle: SavedStateHandle,
-    messageDao: MessageDao,
+    private val messageDao: MessageDao,
     private val contactDao: ContactDao,
+    private val readStateDao: ThreadReadStateDao,
     private val p2pChatService: P2pChatService,
     private val settingsRepository: SettingsRepository,
     private val draftStore: DraftStore,
     identityKeyManager: IdentityKeyManager,
     private val mediaStorage: MediaStorage,
     private val activeChatTracker: ActiveChatTracker,
+    private val captureStore: PendingCaptureStore,
     @ApplicationContext private val context: Context,
 ) : ViewModel() {
 
@@ -50,6 +60,15 @@ class ChatViewModel @Inject constructor(
         // Suppresses the notification MessageNotifier would otherwise fire for a message
         // arriving in the exact thread already open on screen.
         activeChatTracker.activeThreadId.value = contactId
+        // While this screen is alive everything shown is "seen" - the watermark follows
+        // the newest visible message, which clears the chat-list unread dot live.
+        viewModelScope.launch {
+            messageDao.observeMessages(contactId).collect { list ->
+                list.maxOfOrNull { it.timestamp }?.let { newest ->
+                    readStateDao.upsert(ThreadReadStateEntity(contactId, newest))
+                }
+            }
+        }
     }
 
     override fun onCleared() {
@@ -67,6 +86,20 @@ class ChatViewModel @Inject constructor(
 
     private val _imageJpegQuality = MutableStateFlow(95)
     val imageJpegQuality: StateFlow<Int> = _imageJpegQuality
+
+    /** One-shot user-facing notices (cold-start deferred send, ...). */
+    private val _userNotice = MutableSharedFlow<String>(extraBufferCapacity = 1)
+    val userNotice: SharedFlow<String> = _userNotice
+    private var coldStartNoticeShown = false
+
+    /** Attachments staged in the input tray - sent together with the message, never alone. */
+    private val _pending = MutableStateFlow<List<PendingAttachment>>(emptyList())
+    val pending: StateFlow<List<PendingAttachment>> = _pending
+
+    /** A photo fresh from the in-app camera, waiting to be opened in the editor. */
+    val cameraCapture = captureStore.pendingCapture
+
+    fun consumeCapture() = captureStore.consume()
 
     init {
         viewModelScope.launch {
@@ -100,33 +133,28 @@ class ChatViewModel @Inject constructor(
 
     fun send() {
         val text = _draft.value.trim()
-        if (text.isEmpty()) return
-        p2pChatService.sendText(contactId, text)
+        val staged = _pending.value
+        if (text.isEmpty() && staged.isEmpty()) return
+        warnIfOffline()
+        if (text.isNotEmpty()) p2pChatService.sendText(contactId, text)
+        staged.forEach { p2pChatService.sendMedia(contactId, it.file.readBytes(), it.mimeType, it.kind, it.fileName) }
+        clearPending()
         _draft.value = ""
         draftStore.clear(contactId)
     }
 
-    fun sendVideo(uri: Uri) = sendPickedMedia(uri, PayloadKind.VIDEO)
-
-    fun sendFile(uri: Uri) = sendPickedMedia(uri, PayloadKind.FILE)
-
-    fun sendImageBytes(bytes: ByteArray) {
-        p2pChatService.sendMedia(contactId, bytes, "image/jpeg", PayloadKind.IMAGE, fileName = null)
-    }
-
-    fun sendVoice(file: File, durationMs: Long) {
+    /** Stages picked bytes without sending - they go out with [send] together with the message. */
+    fun stageAttachment(bytes: ByteArray, mimeType: String, kind: PayloadKind, fileName: String?) {
         viewModelScope.launch(Dispatchers.IO) {
-            val bytes = file.readBytes()
-            p2pChatService.sendMedia(contactId, bytes, "audio/mp4", PayloadKind.VOICE, file.name, durationMs)
-            file.delete()
+            val dir = File(context.cacheDir, "pending").apply { mkdirs() }
+            val ext = mediaStorage.extensionFor(mimeType)
+            val file = File(dir, "pending_${System.currentTimeMillis()}_${(0..9999).random()}.$ext")
+            file.writeBytes(bytes)
+            _pending.value = _pending.value + PendingAttachment(file, mimeType, kind, fileName)
         }
     }
 
-    fun blockContact() {
-        viewModelScope.launch { contactDao.setBlocked(contactId, true) }
-    }
-
-    private fun sendPickedMedia(uri: Uri, kind: PayloadKind) {
+    fun stageAttachmentUri(uri: Uri, kind: PayloadKind) {
         viewModelScope.launch {
             val resolver = context.contentResolver
             val mimeType = resolver.getType(uri) ?: MimeTypeMap.getSingleton()
@@ -135,7 +163,76 @@ class ChatViewModel @Inject constructor(
             val bytes = withContext(Dispatchers.IO) {
                 resolver.openInputStream(uri)?.use { it.readBytes() }
             } ?: return@launch
-            p2pChatService.sendMedia(contactId, bytes, mimeType, kind, fileName = displayNameOf(uri).takeIf { kind == PayloadKind.FILE })
+            stageAttachment(bytes, mimeType, kind, fileName = displayNameOf(uri).takeIf { kind == PayloadKind.FILE })
+        }
+    }
+
+    fun removePending(attachment: PendingAttachment) {
+        _pending.value = _pending.value - attachment
+        viewModelScope.launch(Dispatchers.IO) { runCatching { attachment.file.delete() } }
+    }
+
+    private fun clearPending() {
+        val staged = _pending.value
+        _pending.value = emptyList()
+        viewModelScope.launch(Dispatchers.IO) { staged.forEach { runCatching { it.file.delete() } } }
+    }
+
+    fun sendVoice(file: File, durationMs: Long) {
+        warnIfOffline()
+        viewModelScope.launch(Dispatchers.IO) {
+            val bytes = file.readBytes()
+            p2pChatService.sendMedia(contactId, bytes, "audio/mp4", PayloadKind.VOICE, file.name, durationMs)
+            file.delete()
+        }
+    }
+
+    /** In-chat find - LIKE wildcards in the query are escaped so they match literally. */
+    suspend fun searchInChat(rawQuery: String): List<MessageEntity> {
+        val escaped = rawQuery.trim()
+            .replace("\\", "\\\\")
+            .replace("%", "\\%")
+            .replace("_", "\\_")
+        if (escaped.isEmpty()) return emptyList()
+        return messageDao.searchInThread(contactId, escaped)
+    }
+
+    /** Wipes this conversation locally only - the contact, trust and Signal session stay untouched. */
+    fun clearChat() {
+        viewModelScope.launch { messageDao.deleteAllForContact(contactId) }
+    }
+
+    /** Saves an attachment to shared storage (Gallery/Downloads) and reports where it landed. */
+    fun downloadMessage(message: MessageEntity) {
+        viewModelScope.launch(Dispatchers.IO) {
+            val file = message.mediaPath?.let { File(it) }
+            if (file == null || !file.exists()) {
+                _userNotice.emit("Soubor už není k dispozici")
+                return@launch
+            }
+            mediaStorage.saveToPublic(file, message.mediaMimeType, message.mediaFileName ?: file.name)
+                .onSuccess { location -> _userNotice.emit("Uloženo do $location") }
+                .onFailure { _userNotice.emit("Uložení selhalo") }
+        }
+    }
+
+    fun blockContact() {
+        viewModelScope.launch { contactDao.setBlocked(contactId, true) }
+    }
+
+    /**
+     * Sending during a cold start (I2P not connected yet) queues the message for later -
+     * correct, but silent. The first such send per screen shows a notice so "nothing
+     * happened" doesn't read as broken.
+     */
+    private fun warnIfOffline() {
+        if (isSelf || p2pChatService.i2pState.value == I2pState.CONNECTED) {
+            coldStartNoticeShown = false
+            return
+        }
+        if (!coldStartNoticeShown) {
+            coldStartNoticeShown = true
+            _userNotice.tryEmit("Zpráva se odešle po připojení k I2P")
         }
     }
 

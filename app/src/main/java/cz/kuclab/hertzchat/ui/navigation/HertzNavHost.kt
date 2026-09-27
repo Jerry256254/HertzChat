@@ -12,10 +12,12 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import cz.kuclab.hertzchat.ui.chat.ChatScreen
 import cz.kuclab.hertzchat.ui.chatlist.ChatListScreen
 import cz.kuclab.hertzchat.ui.contacts.ContactsScreen
+import cz.kuclab.hertzchat.ui.file.FileViewerScreen
 import cz.kuclab.hertzchat.ui.groupchat.GroupChatScreen
+import cz.kuclab.hertzchat.ui.assistant.HertzAssistantScreen
+import cz.kuclab.hertzchat.ui.camera.CameraScreen
 import cz.kuclab.hertzchat.ui.migration.QrExportScreen
 import cz.kuclab.hertzchat.ui.migration.QrImportScreen
-import cz.kuclab.hertzchat.ui.mistral.AssistantChatScreen
 import cz.kuclab.hertzchat.ui.onboarding.OnboardingScreen
 import cz.kuclab.hertzchat.ui.profile.ProfileScreen
 import cz.kuclab.hertzchat.ui.settings.SettingsScreen
@@ -52,27 +54,46 @@ fun HertzNavHost(viewModel: RootViewModel = hiltViewModel()) {
             arguments = listOf(navArgument("contactId") { type = NavType.StringType }),
         ) { backStackEntry ->
             val contactId = backStackEntry.arguments?.getString("contactId").orEmpty()
-            ChatScreen(contactId = contactId, onBack = { navController.popBackStack() })
+            ChatScreen(
+                contactId = contactId,
+                onBack = { navController.popBackStack() },
+                onOpenCamera = { navController.navigate(Routes.CAMERA) },
+                onOpenFile = { messageId -> navController.navigate(Routes.fileViewer(messageId)) },
+            )
         }
         composable(
             route = Routes.GROUP_CHAT,
             arguments = listOf(navArgument("groupId") { type = NavType.StringType }),
         ) { backStackEntry ->
             val groupId = backStackEntry.arguments?.getString("groupId").orEmpty()
-            GroupChatScreen(groupId = groupId, onBack = { navController.popBackStack() }, onLeft = { navController.popBackStack() })
+            GroupChatScreen(
+                groupId = groupId,
+                onBack = { navController.popBackStack() },
+                onLeft = { navController.popBackStack() },
+                onOpenCamera = { navController.navigate(Routes.CAMERA) },
+                onOpenFile = { messageId -> navController.navigate(Routes.fileViewer(messageId)) },
+            )
         }
         composable(Routes.CONTACTS) {
             ContactsScreen(
                 onOpenChat = { contactId -> navController.navigate(Routes.chat(contactId)) },
                 onOpenAssistant = { navController.navigate(Routes.ASSISTANT_CHAT) },
-                onOpenSettings = { navController.navigate(Routes.SETTINGS) },
             )
         }
         composable(Routes.SETTINGS) {
-            SettingsScreen()
+            SettingsScreen(onOpenAssistant = { navController.navigate(Routes.ASSISTANT_CHAT) })
         }
         composable(Routes.ASSISTANT_CHAT) {
-            AssistantChatScreen(onBack = { navController.popBackStack() })
+            HertzAssistantScreen(onBack = { navController.popBackStack() })
+        }
+        composable(Routes.CAMERA) {
+            CameraScreen(onDone = { navController.popBackStack() })
+        }
+        composable(
+            route = Routes.FILE_VIEWER,
+            arguments = listOf(navArgument("messageId") { type = NavType.StringType }),
+        ) {
+            FileViewerScreen(onBack = { navController.popBackStack() })
         }
         composable(Routes.PROFILE) {
             ProfileScreen(onOpenQrExport = { navController.navigate(Routes.QR_EXPORT) })

@@ -2,7 +2,6 @@ package cz.kuclab.hertzchat.ui.settings
 
 import android.content.Intent
 import android.net.Uri
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -12,9 +11,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Block
 import androidx.compose.material.icons.filled.CheckCircle
@@ -29,7 +25,6 @@ import androidx.compose.material.icons.filled.Storage
 import androidx.compose.material.icons.filled.SystemUpdate
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.Wifi
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
@@ -37,15 +32,13 @@ import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.CenterAlignedTopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -54,39 +47,26 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import cz.kuclab.hertzchat.BuildConfig
 import cz.kuclab.hertzchat.R
-import cz.kuclab.hertzchat.mistral.MISTRAL_MODEL_LARGE
-import cz.kuclab.hertzchat.mistral.MISTRAL_MODEL_MEDIUM
-import cz.kuclab.hertzchat.mistral.MISTRAL_MODEL_SMALL
 import cz.kuclab.hertzchat.ui.common.AppDropdownMenu
 import cz.kuclab.hertzchat.ui.common.AppCard
 import cz.kuclab.hertzchat.ui.common.LanguagePickerRow
-import cz.kuclab.hertzchat.ui.onboarding.MISTRAL_CONSENT_TEXT
 
 @Composable
-fun SettingsScreen(viewModel: SettingsViewModel = hiltViewModel()) {
+fun SettingsScreen(onOpenAssistant: () -> Unit, viewModel: SettingsViewModel = hiltViewModel()) {
     val settings by viewModel.settings.collectAsState()
     val blocked by viewModel.blockedContacts.collectAsState()
     val mediaBytes by viewModel.mediaBytes.collectAsState()
     val updateCheckState by viewModel.updateCheckState.collectAsState()
-    val mistralEnabled by viewModel.mistralEnabled.collectAsState()
-    val mistralConsentGiven by viewModel.mistralConsentGiven.collectAsState()
-    val mistralShowAssistantContact by viewModel.mistralShowAssistantContact.collectAsState()
-    val mistralModel by viewModel.mistralModel.collectAsState()
-    val mistralKeys by viewModel.mistralKeys.collectAsState()
-    var showMistralConsentDialog by remember { mutableStateOf(false) }
     val context = LocalContext.current
 
-    Scaffold(topBar = { TopAppBar(title = { Text(stringResource(R.string.settings_title)) }) }) { padding ->
+    Scaffold(topBar = { CenterAlignedTopAppBar(title = { Text(stringResource(R.string.settings_title)) }) }) { padding ->
         LazyColumn(
             modifier = Modifier.fillMaxSize().padding(padding).padding(horizontal = 16.dp),
             verticalArrangement = Arrangement.spacedBy(4.dp),
@@ -136,47 +116,29 @@ fun SettingsScreen(viewModel: SettingsViewModel = hiltViewModel()) {
                         checked = settings.autoAcceptFriendRequests,
                         onCheckedChange = viewModel::setAutoAcceptFriendRequests,
                     )
-                    HorizontalDivider()
-                    SettingsSwitchRow(
-                        icon = Icons.Filled.SmartToy,
-                        title = stringResource(R.string.settings_allow_mistral_title),
-                        subtitle = stringResource(R.string.settings_allow_mistral_subtitle),
-                        checked = settings.allowMistralOnMyMessages,
-                        onCheckedChange = viewModel::setAllowMistralOnMyMessages,
-                    )
                 }
             }
 
-            item { SectionTitle(Icons.Filled.SmartToy, stringResource(R.string.settings_section_mistral)) }
+            item { SectionTitle(Icons.Filled.SmartToy, stringResource(R.string.settings_section_assistant)) }
             item {
                 SettingsCard {
-                    SettingsSwitchRow(
-                        icon = Icons.Filled.SmartToy,
-                        title = stringResource(R.string.settings_mistral_enabled_title),
-                        subtitle = stringResource(R.string.settings_mistral_enabled_subtitle),
-                        checked = mistralEnabled,
-                        onCheckedChange = { turningOn ->
-                            if (turningOn && !mistralConsentGiven) {
-                                showMistralConsentDialog = true
-                            } else {
-                                viewModel.setMistralEnabled(turningOn)
-                            }
-                        },
+                    Text(
+                        stringResource(R.string.settings_assistant_about),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(top = 12.dp),
                     )
-                    HorizontalDivider()
                     SettingsSwitchRow(
                         icon = Icons.Filled.Visibility,
-                        title = stringResource(R.string.settings_mistral_show_contact_title),
-                        subtitle = stringResource(R.string.settings_mistral_show_contact_subtitle),
-                        checked = mistralShowAssistantContact,
-                        onCheckedChange = viewModel::setMistralShowAssistantContact,
+                        title = stringResource(R.string.settings_assistant_show_title),
+                        subtitle = stringResource(R.string.settings_assistant_show_subtitle),
+                        checked = settings.showAssistantContact,
+                        onCheckedChange = viewModel::setShowAssistantContact,
                     )
                     HorizontalDivider()
-                    MistralModelRow(current = mistralModel, onChange = viewModel::setMistralModel)
-                    HorizontalDivider()
-                    MistralApiKeysRow(keys = mistralKeys, onAdd = viewModel::addMistralKey, onRemove = viewModel::removeMistralKey)
-                    HorizontalDivider()
-                    MistralHelperLinksRow(context = context)
+                    TextButton(onClick = onOpenAssistant, modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
+                        Text(stringResource(R.string.settings_assistant_open))
+                    }
                 }
             }
 
@@ -244,30 +206,6 @@ fun SettingsScreen(viewModel: SettingsViewModel = hiltViewModel()) {
             }
         }
     }
-
-    if (showMistralConsentDialog) {
-        AlertDialog(
-            onDismissRequest = { showMistralConsentDialog = false },
-            title = { Text(stringResource(R.string.settings_mistral_consent_title)) },
-            text = {
-                Text(
-                    MISTRAL_CONSENT_TEXT,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .verticalScroll(rememberScrollState()),
-                )
-            },
-            confirmButton = {
-                TextButton(onClick = {
-                    showMistralConsentDialog = false
-                    viewModel.confirmMistralConsent()
-                }) { Text(stringResource(R.string.settings_mistral_consent_confirm)) }
-            },
-            dismissButton = {
-                TextButton(onClick = { showMistralConsentDialog = false }) { Text(stringResource(R.string.settings_mistral_consent_cancel)) }
-            },
-        )
-    }
 }
 
 @Composable
@@ -317,105 +255,6 @@ private fun SettingsSwitchRow(
             }
         }
         Switch(checked = checked, onCheckedChange = onCheckedChange)
-    }
-}
-
-@Composable
-private fun MistralModelRow(current: String, onChange: (String) -> Unit) {
-    val options = listOf(
-        MISTRAL_MODEL_SMALL to "Small",
-        MISTRAL_MODEL_MEDIUM to "Medium",
-        MISTRAL_MODEL_LARGE to "Large",
-    )
-    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(vertical = 12.dp)) {
-        Image(
-            painter = painterResource(R.drawable.mistral_avatar),
-            contentDescription = null,
-            contentScale = ContentScale.Crop,
-            modifier = Modifier.size(24.dp).clip(CircleShape),
-        )
-        Text(stringResource(R.string.settings_mistral_model_label), modifier = Modifier.weight(1f).padding(start = 12.dp))
-    }
-    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(bottom = 8.dp)) {
-        options.forEach { (value, label) ->
-            AssistChip(
-                onClick = { onChange(value) },
-                label = { Text(label) },
-                colors = if (current == value) {
-                    androidx.compose.material3.AssistChipDefaults.assistChipColors(
-                        containerColor = MaterialTheme.colorScheme.primary,
-                        labelColor = MaterialTheme.colorScheme.onPrimary,
-                    )
-                } else {
-                    androidx.compose.material3.AssistChipDefaults.assistChipColors()
-                },
-            )
-        }
-    }
-}
-
-@Composable
-private fun MistralApiKeysRow(keys: List<String>, onAdd: (String) -> Unit, onRemove: (Int) -> Unit) {
-    var newKey by remember { mutableStateOf("") }
-    Column(modifier = Modifier.padding(vertical = 12.dp)) {
-        Text(stringResource(R.string.settings_mistral_keys_label))
-        if (keys.isEmpty()) {
-            Text(
-                stringResource(R.string.settings_mistral_keys_empty),
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(top = 4.dp),
-            )
-        } else {
-            keys.forEachIndexed { index, key ->
-                Row(
-                    modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Text(maskApiKey(key), style = MaterialTheme.typography.bodyMedium)
-                    IconButton(onClick = { onRemove(index) }) {
-                        Icon(Icons.Filled.Delete, contentDescription = stringResource(R.string.settings_mistral_key_remove))
-                    }
-                }
-            }
-        }
-        Row(modifier = Modifier.fillMaxWidth().padding(top = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-            OutlinedTextField(
-                value = newKey,
-                onValueChange = { newKey = it },
-                modifier = Modifier.weight(1f),
-                placeholder = { Text(stringResource(R.string.settings_mistral_key_placeholder)) },
-                singleLine = true,
-            )
-            TextButton(onClick = { onAdd(newKey); newKey = "" }, enabled = newKey.isNotBlank()) {
-                Text(stringResource(R.string.settings_mistral_key_add))
-            }
-        }
-    }
-}
-
-private fun maskApiKey(key: String): String {
-    if (key.length <= 8) return "•".repeat(key.length)
-    return key.take(4) + "…" + key.takeLast(4)
-}
-
-@Composable
-private fun MistralHelperLinksRow(context: android.content.Context) {
-    Column(modifier = Modifier.padding(vertical = 12.dp)) {
-        Text(
-            stringResource(R.string.settings_mistral_helper_text),
-            style = MaterialTheme.typography.labelSmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
-        TextButton(
-            onClick = { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://kuclab.org/15mail"))) },
-            modifier = Modifier.fillMaxWidth(),
-        ) { Text(stringResource(R.string.settings_mistral_helper_email)) }
-        TextButton(
-            onClick = { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://console.mistral.ai/api-keys"))) },
-            modifier = Modifier.fillMaxWidth(),
-        ) { Text(stringResource(R.string.settings_mistral_helper_key)) }
     }
 }
 

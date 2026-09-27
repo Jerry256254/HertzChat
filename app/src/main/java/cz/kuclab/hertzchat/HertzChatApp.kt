@@ -19,6 +19,9 @@ class HertzChatApp : Application(), Configuration.Provider {
     override fun attachBaseContext(base: Context) {
         super.attachBaseContext(base)
         CrashReporter.install(this)
+        // One-way cleanup of the removed Mistral assistant: its encrypted prefs held the
+        // user's API keys, and nothing reads them anymore. No-op when already gone.
+        deleteSharedPreferences("hertzchat_mistral_prefs")
     }
 
     override val workManagerConfiguration: Configuration

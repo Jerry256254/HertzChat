@@ -25,28 +25,26 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Groups
 import androidx.compose.material.icons.filled.QrCodeScanner
+import androidx.compose.material.icons.filled.SmartToy
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.CenterAlignedTopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -67,35 +65,25 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.compose.ui.window.Dialog
 import androidx.core.content.ContextCompat
-import androidx.compose.ui.res.painterResource
 import androidx.hilt.navigation.compose.hiltViewModel
-import cz.kuclab.hertzchat.R
 import cz.kuclab.hertzchat.ui.common.AppCard
 import cz.kuclab.hertzchat.ui.migration.QrCodeScannerAnalyzer
+import cz.kuclab.hertzchat.ui.theme.HertzShapes
 import cz.kuclab.hertzchat.ui.migration.generateQrBitmap
 import java.util.concurrent.Executors
-import cz.kuclab.hertzchat.network.p2p.I2pState
 import kotlinx.coroutines.delay
 
 @Composable
 fun ContactsScreen(
     onOpenChat: (String) -> Unit,
     onOpenAssistant: () -> Unit,
-    onOpenSettings: () -> Unit,
     viewModel: ContactsViewModel = hiltViewModel(),
 ) {
-    val requests by viewModel.incomingRequests.collectAsState()
-    val i2pState by viewModel.i2pState.collectAsState()
-    val bootstrapPercent by viewModel.bootstrapPercent.collectAsState()
     val i2pError by viewModel.i2pError.collectAsState()
-    val i2pDiagnostics by viewModel.i2pDiagnostics.collectAsState()
-    val bootstrapLabel by viewModel.bootstrapLabel.collectAsState()
-    val lanPeerCount by viewModel.lanPeerCount.collectAsState()
     val addError by viewModel.addError.collectAsState()
     val addSuccess by viewModel.addSuccess.collectAsState()
     val myQrText by viewModel.myHertzIdQrText.collectAsState()
-    val mistralEnabled by viewModel.mistralEnabled.collectAsState()
-    val showMistralContact by viewModel.showMistralContact.collectAsState()
+    val showAssistantContact by viewModel.showAssistantContact.collectAsState()
     val contacts by viewModel.contacts.collectAsState()
     val clipboard = LocalClipboardManager.current
 
@@ -110,22 +98,17 @@ fun ContactsScreen(
         }
     }
 
-    Scaffold(topBar = { TopAppBar(title = { Text("Kontakty") }) }) { padding ->
+    Scaffold(topBar = { CenterAlignedTopAppBar(title = { Text("Kontakty") }) }) { padding ->
         LazyColumn(
             modifier = Modifier.fillMaxWidth().padding(padding),
             contentPadding = PaddingValues(16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            if (showMistralContact) {
+            if (showAssistantContact) {
                 item {
-                    MistralAssistantCard(
-                        configured = mistralEnabled,
-                        onClick = { if (mistralEnabled) onOpenAssistant() else onOpenSettings() },
-                    )
+                    HertzAssistantCard(onClick = onOpenAssistant)
                 }
             }
-            item { I2pStatusRow(i2pState, bootstrapPercent, bootstrapLabel, i2pError, i2pDiagnostics, lanPeerCount, onRetry = viewModel::retryI2p) }
-
             item {
                 AppCard {
                     Column(
@@ -226,24 +209,6 @@ fun ContactsScreen(
                 }
             }
 
-            if (requests.isNotEmpty()) {
-                item { Text("Žádosti o přátelství", fontWeight = FontWeight.SemiBold) }
-                items(requests, key = { it.contactId }) { request ->
-                    AppCard {
-                        Row(
-                            modifier = Modifier.fillMaxWidth().padding(16.dp),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically,
-                        ) {
-                            Text(request.nickname)
-                            Row {
-                                TextButton(onClick = { viewModel.respond(request, false) }) { Text("Odmítnout") }
-                                Button(onClick = { viewModel.respond(request, true) }) { Text("Přijmout") }
-                            }
-                        }
-                    }
-                }
-            }
         }
     }
 
@@ -264,7 +229,7 @@ fun ContactsScreen(
 }
 
 @Composable
-private fun MistralAssistantCard(configured: Boolean, onClick: () -> Unit) {
+private fun HertzAssistantCard(onClick: () -> Unit) {
     AppCard(
         modifier = Modifier.fillMaxWidth(),
         containerColor = MaterialTheme.colorScheme.secondaryContainer,
@@ -276,74 +241,28 @@ private fun MistralAssistantCard(configured: Boolean, onClick: () -> Unit) {
                 .padding(16.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Image(
-                painter = painterResource(R.drawable.mistral_avatar),
-                contentDescription = "Mistral AI",
-                contentScale = androidx.compose.ui.layout.ContentScale.Crop,
-                modifier = Modifier.size(48.dp).clip(androidx.compose.foundation.shape.CircleShape),
-            )
+            Box(
+                modifier = Modifier
+                    .size(48.dp)
+                    .clip(androidx.compose.foundation.shape.CircleShape)
+                    .background(MaterialTheme.colorScheme.primaryContainer),
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(
+                    Icons.Filled.SmartToy,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.onPrimaryContainer,
+                    modifier = Modifier.size(26.dp),
+                )
+            }
             Column(modifier = Modifier.weight(1f).padding(start = 12.dp)) {
-                Text("Mistral AI", fontWeight = FontWeight.SemiBold)
+                Text("Hertz AI", fontWeight = FontWeight.SemiBold)
                 Text(
-                    if (configured) "Asistent appky - klepnutím zahájíš konverzaci" else "Asistent appky - klepnutím nastavíš přístup",
+                    "AI asistent KucLab Hertz - klepnutím otevřeš",
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSecondaryContainer,
                 )
             }
-        }
-    }
-}
-
-@Composable
-private fun I2pStatusRow(state: I2pState?, bootstrapPercent: Int, bootstrapLabel: String?, error: String?, diagnostics: String?, lanPeerCount: Int, onRetry: () -> Unit) {
-    val label = when {
-        error != null -> "Nepodařilo se připojit k síti I2P"
-        state == I2pState.CONNECTED -> "Připojeno k síti I2P"
-        state == I2pState.STARTING -> "Připojování k síti I2P... $bootstrapPercent %"
-        state == I2pState.STOPPED -> "Síť vypnutá"
-        else -> "Navazuje se spojení..."
-    }
-    val color = if (error != null) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant
-    Column {
-        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
-            Text(label, style = MaterialTheme.typography.labelSmall, color = color, modifier = Modifier.weight(1f))
-            if (error != null) {
-                TextButton(onClick = onRetry) { Text("Zkusit znovu") }
-            }
-        }
-        if (error != null) {
-            Text(error, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.error)
-        } else if (state != I2pState.CONNECTED) {
-            // Determinate, so the bar reflects the real percentage instead of an endless
-            // sweep that says nothing about whether anything is happening.
-            LinearProgressIndicator(
-                progress = { bootstrapPercent / 100f },
-                modifier = Modifier.fillMaxWidth().padding(top = 4.dp).clip(RoundedCornerShape(4.dp)),
-            )
-            bootstrapLabel?.let {
-                Text(
-                    it,
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(top = 4.dp),
-                )
-            }
-        }
-        if (lanPeerCount > 0) {
-            Text(
-                "V místní síti: $lanPeerCount - spojení přímo, bez internetu a bez serverů",
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.secondary,
-                modifier = Modifier.padding(top = 2.dp),
-            )
-        }
-        if (error == null && diagnostics != null) {
-            Text(
-                diagnostics,
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
-                modifier = Modifier.padding(top = 2.dp),
-            )
         }
     }
 }
@@ -361,7 +280,7 @@ private fun QrScannerDialog(onDismiss: () -> Unit, onScanned: (String) -> Unit) 
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .clip(RoundedCornerShape(20.dp))
+                .clip(HertzShapes.Dialog)
                 .background(MaterialTheme.colorScheme.surface),
         ) {
             if (!hasPermission) {
@@ -426,7 +345,7 @@ private fun QrScannerDialog(onDismiss: () -> Unit, onScanned: (String) -> Unit) 
                     modifier = Modifier
                         .align(Alignment.TopCenter)
                         .padding(top = 24.dp)
-                        .clip(RoundedCornerShape(12.dp))
+                        .clip(HertzShapes.Pill)
                         .background(androidx.compose.ui.graphics.Color.Black.copy(alpha = 0.5f))
                         .padding(horizontal = 16.dp, vertical = 8.dp),
                 )

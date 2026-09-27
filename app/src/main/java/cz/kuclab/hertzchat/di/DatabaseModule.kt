@@ -11,6 +11,8 @@ import cz.kuclab.hertzchat.data.db.MIGRATION_4_5
 import cz.kuclab.hertzchat.data.db.MIGRATION_5_6
 import cz.kuclab.hertzchat.data.db.MIGRATION_6_7
 import cz.kuclab.hertzchat.data.db.MIGRATION_7_8
+import cz.kuclab.hertzchat.data.db.MIGRATION_8_9
+import cz.kuclab.hertzchat.data.db.MIGRATION_9_10
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
@@ -52,7 +54,7 @@ object DatabaseModule {
         val factory = SupportFactory(dbPassphrase(context))
         return Room.databaseBuilder(context, AppDatabase::class.java, "hertzchat.db")
             .openHelperFactory(factory)
-            .addMigrations(MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8)
+            .addMigrations(MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10)
             // Only bridges the gap for anyone still behind version 4 - a real
             // Migration always wins over this when one is registered above.
             .fallbackToDestructiveMigration()
@@ -66,16 +68,13 @@ object DatabaseModule {
     fun provideMessageDao(database: AppDatabase) = database.messageDao()
 
     @Provides
-    fun provideAssistantConversationDao(database: AppDatabase) = database.assistantConversationDao()
-
-    @Provides
-    fun provideAssistantMessageDao(database: AppDatabase) = database.assistantMessageDao()
-
-    @Provides
     fun provideGroupDao(database: AppDatabase) = database.groupDao()
 
     @Provides
     fun provideGroupMemberDao(database: AppDatabase) = database.groupMemberDao()
+
+    @Provides
+    fun provideThreadReadStateDao(database: AppDatabase) = database.threadReadStateDao()
 
     @Provides
     @Singleton

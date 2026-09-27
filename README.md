@@ -35,9 +35,20 @@ appka není z Play Store.
   zpráva se u odesílatele uloží a appka to zkouší znovu, dokud se nedoručí.
   "Online" tu neznamená mít appku otevřenou - stačí mít internet, appka
   naslouchá i na pozadí.
-- **Prohlížeč a editor médií** — fotky a videa na celou obrazovku (přiblížení
-  gestem), přehrávač hlasovek, základní úprava obrázku (rotace, oříznutí na
-  poměr stran) před odesláním.
+- **Galerie médií** — všechny fotky a videa z konverzace na jednom místě,
+  listování prstem, přiblížení gestem i dvojklikem, videa s náhledy a
+  přehrávačem, každá příloha jde jedním tlačítkem stáhnout do zařízení.
+- **Foťák a editor fotek v appce** — focení přímo z chatu ve špičkové
+  kvalitě (blesk, přední/zadní foťák) a editor s ořezem, kreslením a
+  mozaikovou cenzurou. Fotky se jen připnou do rozepsané zprávy - klidně
+  několik najednou - a odešlou se až s ní.
+- **Hlasovky přidržením** — nahrávání jen po dobu držení tlačítka, pak
+  náhled s poslechem: poslat, nebo smazat a zkusit znovu.
+- **Vestavěný prohlížeč souborů** — texty, markdown a PDF se otevřou přímo
+  v appce, bez stahování a bez opuštění zařízení.
+- **Hledání v konverzaci a čištění chatu** — najde slovo, větu i frázi
+  s proklikem na výskyty; historii jde lokálně vymazat bez smazání
+  kontaktu.
 - **Profilové fotky** — vlastní i u kontaktů, přenáší se stejně šifrovaně
   jako ostatní média.
 - **Oznámení o nových zprávách** — i když appka zrovna neběží na popředí,
@@ -61,22 +72,17 @@ appka není z Play Store.
   telefonu pokračuješ se stejnou identitou (i stejnou I2P adresou) na
   novém zařízení.
 - **Otevřený zdrojový kód** — kompletně, žádná skrytá součást.
-- **Volitelný Mistral AI asistent** — vestavěný chatovací asistent, vypnutý
-  ve výchozím stavu. Používá výhradně vlastní API klíč(e) uživatele (jde
-  přidat víc, appka je zkouší popořadě), vlastní historii konverzací
-  (`/new`, `/chats`), výběr modelu. Jediné místo v appce, kde obsah zprávy
-  záměrně opouští zařízení - podrobně vysvětleno v Podmínkách užití,
-  Zásadách ochrany soukromí a zvláštním souhlasu přímo v appce.
+- **AI asistent Hertz** — KucLab Hertz (kuclab.org/hertz) zabudovaný přímo
+  v appce jako webové zobrazení - přihlásíš se svým KucLab účtem, login
+  zůstane uložený a nic se neotevírá venku v prohlížeči. Jediné místo
+  v appce, kde obsah zprávy záměrně opouští zařízení (běží na serverech
+  KucLabu) - podrobně vysvětleno v Podmínkách užití a Zásadách ochrany
+  soukromí přímo v appce.
 - **Skupinové chaty** — každý člen dostává zprávu zvlášť zašifrovanou jeho
   vlastním klíčem (žádný sdílený skupinový klíč); appka mezi členy, kteří
   se ještě neznají, automaticky vyřídí vzájemné přátelství.
-- **`@Mistral` přímo v chatu nebo skupině** — `@Mistral 10 shrň to` pošle
-  posledních 10 zpráv (jen od účastníků, kteří si to v Nastavení
-  nezakázali) spolu s dotazem na Mistral AI a odpověď vloží zpět do
-  konverzace, viditelnou všem. Kdokoliv si v Nastavení může zakázat, aby
-  jeho zprávy sloužily jako kontext pro cizí dotazy.
-- **`@zmiňování`** lidí (i `@Mistral`) ve skupinách, s našeptáváním jmen a
-  zvýrazněným oznámením, když jsi zmíněn/a.
+- **`@zmiňování`** lidí ve skupinách, s našeptáváním jmen a zvýrazněným
+  oznámením, když jsi zmíněn/a.
 
 ## Design
 

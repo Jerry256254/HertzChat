@@ -17,12 +17,6 @@ class Converters {
 
     @TypeConverter
     fun toDeliveryState(value: String): DeliveryState = DeliveryState.valueOf(value)
-
-    @TypeConverter
-    fun fromAssistantRole(value: AssistantRole): String = value.name
-
-    @TypeConverter
-    fun toAssistantRole(value: String): AssistantRole = AssistantRole.valueOf(value)
 }
 
 @Database(
@@ -34,12 +28,11 @@ class Converters {
         KyberPreKeyEntity::class,
         ContactEntity::class,
         MessageEntity::class,
-        AssistantConversationEntity::class,
-        AssistantMessageEntity::class,
         GroupEntity::class,
         GroupMemberEntity::class,
+        ThreadReadStateEntity::class,
     ],
-    version = 8,
+    version = 10,
     exportSchema = false,
 )
 @TypeConverters(Converters::class)
@@ -51,8 +44,7 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun kyberPreKeyDao(): KyberPreKeyDao
     abstract fun contactDao(): ContactDao
     abstract fun messageDao(): MessageDao
-    abstract fun assistantConversationDao(): AssistantConversationDao
-    abstract fun assistantMessageDao(): AssistantMessageDao
     abstract fun groupDao(): GroupDao
     abstract fun groupMemberDao(): GroupMemberDao
+    abstract fun threadReadStateDao(): ThreadReadStateDao
 }

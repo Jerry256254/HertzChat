@@ -3,14 +3,15 @@ package cz.kuclab.hertzchat.ui.chatlist
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import cz.kuclab.hertzchat.crypto.IdentityKeyManager
-import cz.kuclab.hertzchat.data.db.AssistantConversationDao
-import cz.kuclab.hertzchat.data.db.AssistantMessageDao
 import cz.kuclab.hertzchat.data.db.ContactDao
 import cz.kuclab.hertzchat.data.db.GroupDao
 import cz.kuclab.hertzchat.data.db.MessageDao
+import cz.kuclab.hertzchat.data.db.ThreadReadStateDao
+import cz.kuclab.hertzchat.data.repository.IncomingFriendRequest
+import cz.kuclab.hertzchat.data.repository.P2pChatService
+import cz.kuclab.hertzchat.data.repository.SettingsRepository
 import cz.kuclab.hertzchat.media.MediaStorage
-import cz.kuclab.hertzchat.mistral.MISTRAL_ASSISTANT_CONTACT_ID
-import cz.kuclab.hertzchat.mistral.MistralKeyStore
+import cz.kuclab.hertzchat.ui.assistant.HERTZ_ASSISTANT_CONTACT_ID
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
 import kotlinx.coroutines.flow.SharingStarted
@@ -30,6 +31,8 @@ data class ChatListItem(
     val kind: ChatListItemKind = ChatListItemKind.CONTACT,
     /** True for the auto-added contact that is this device's own identity - see P2pChatService.ensureSelfContact(). */
     val isSelf: Boolean = false,
+    /** Incoming messages newer than the last-seen watermark - drives the unread dot. */
+    val unreadCount: Int = 0,
 )
 
 @HiltViewModel
@@ -37,22 +40,41 @@ class ChatListViewModel @Inject constructor(
     private val contactDao: ContactDao,
     private val messageDao: MessageDao,
     private val groupDao: GroupDao,
-    private val assistantConversationDao: AssistantConversationDao,
-    private val assistantMessageDao: AssistantMessageDao,
-    private val mistralKeyStore: MistralKeyStore,
+    private val readStateDao: ThreadReadStateDao,
+    private val settingsRepository: SettingsRepository,
+    private val p2pChatService: P2pChatService,
     private val identityKeyManager: IdentityKeyManager,
     private val mediaStorage: MediaStorage,
 ) : ViewModel() {
 
-    val mistralEnabled = mistralKeyStore.enabled
+    val i2pState = p2pChatService.i2pState.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
+    val bootstrapPercent = p2pChatService.bootstrapPercent.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 0)
+    val bootstrapLabel = p2pChatService.bootstrapLabel.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
+    val i2pError = p2pChatService.i2pError.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
+
+    fun retryI2p() = p2pChatService.retryI2p()
+
+    val incomingRequests = p2pChatService.incomingRequests
+
+    fun respond(request: IncomingFriendRequest, accept: Boolean) {
+        p2pChatService.respondFriendRequest(request, accept)
+    }
 
     val items = combine(
         contactDao.observeContacts(),
         groupDao.observeGroups(),
-        assistantConversationDao.observeConversations(),
-        mistralKeyStore.showAssistantContact,
-        mistralKeyStore.assistantPinned,
-    ) { contacts, groups, conversations, showAssistant, assistantPinned ->
+        settingsRepository.settings,
+        messageDao.observeRecentIncoming(),
+        readStateDao.observeAll(),
+    ) { contacts, groups, settings, recentIncoming, readStates ->
+        val showAssistant = settings.showAssistantContact
+        val assistantPinned = settings.assistantPinned
+        val seenByThread = readStates.associate { it.threadId to it.lastSeenAt }
+        val unreadByThread = recentIncoming
+            .filter { (seenByThread[it.contactId] ?: 0L) < it.timestamp }
+            .groupingBy { it.contactId }
+            .eachCount()
+
         val myContactId = identityKeyManager.contactId()
         val selfAvatarPath = mediaStorage.selfAvatarFile().takeIf { it.exists() }?.absolutePath
         val contactItems = contacts.map { contact ->
@@ -68,6 +90,7 @@ class ChatListViewModel @Inject constructor(
                 lastMessagePreview = last?.text,
                 lastMessageAt = last?.timestamp,
                 isSelf = isSelf,
+                unreadCount = unreadByThread[contact.contactId] ?: 0,
             )
         }
 
@@ -81,29 +104,28 @@ class ChatListViewModel @Inject constructor(
                 lastMessagePreview = last?.text,
                 lastMessageAt = last?.timestamp,
                 kind = ChatListItemKind.GROUP,
+                unreadCount = unreadByThread[group.groupId] ?: 0,
             )
         }
 
-        // Shown from a fresh install onward, not only once a conversation exists -
-        // otherwise the assistant is invisible to exactly the people who haven't set
-        // it up yet, which is who the entry point is for. Tapping it before it's
-        // configured routes to Settings (see ChatListScreen).
+        // The web assistant keeps no local history, so the row is a static entry
+        // point - always present from a fresh install onward unless hidden.
         val assistantItem = if (showAssistant) {
-            val latest = conversations.maxByOrNull { it.lastMessageAt }
-            val lastText = latest?.let { assistantMessageDao.recentForConversation(it.conversationId, 1).firstOrNull()?.text }
             ChatListItem(
-                contactId = MISTRAL_ASSISTANT_CONTACT_ID,
-                nickname = "Mistral AI",
+                contactId = HERTZ_ASSISTANT_CONTACT_ID,
+                nickname = "Hertz AI",
                 avatarPath = null,
                 pinned = assistantPinned,
-                lastMessagePreview = lastText ?: "Asistent appky - klepnutím nastavíš přístup",
-                lastMessageAt = latest?.lastMessageAt,
+                lastMessagePreview = "AI asistent KucLab Hertz",
+                lastMessageAt = null,
                 kind = ChatListItemKind.ASSISTANT,
             )
         } else {
             null
         }
 
+        // Pinned first, then most-recently-active (incoming or outgoing alike) -
+        // a new message always floats its thread to the top, just under pinned rows.
         (contactItems + groupItems + listOfNotNull(assistantItem))
             .sortedWith(compareByDescending<ChatListItem> { it.pinned }.thenByDescending { it.lastMessageAt ?: 0L })
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
@@ -112,7 +134,7 @@ class ChatListViewModel @Inject constructor(
         viewModelScope.launch {
             when (item.kind) {
                 ChatListItemKind.GROUP -> groupDao.setPinned(item.contactId, !item.pinned)
-                ChatListItemKind.ASSISTANT -> mistralKeyStore.setAssistantPinned(!item.pinned)
+                ChatListItemKind.ASSISTANT -> settingsRepository.setAssistantPinned(!item.pinned)
                 ChatListItemKind.CONTACT -> contactDao.setPinned(item.contactId, !item.pinned)
             }
         }
@@ -122,8 +144,8 @@ class ChatListViewModel @Inject constructor(
         viewModelScope.launch { contactDao.setBlocked(contactId, true) }
     }
 
-    /** Mistral has no "block" (there's no other party to block) - hiding removes its row instead, reversible in Settings. */
+    /** The assistant has no "block" (there's no other party to block) - hiding removes its row instead, reversible in Settings. */
     fun hideAssistant() {
-        mistralKeyStore.setShowAssistantContact(false)
+        viewModelScope.launch { settingsRepository.setShowAssistantContact(false) }
     }
 }

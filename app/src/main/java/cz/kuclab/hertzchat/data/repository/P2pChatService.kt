@@ -21,10 +21,6 @@ import cz.kuclab.hertzchat.data.model.ChatPayload
 import cz.kuclab.hertzchat.data.model.PayloadKind
 import cz.kuclab.hertzchat.media.MediaCrypto
 import cz.kuclab.hertzchat.media.MediaStorage
-import cz.kuclab.hertzchat.mistral.MISTRAL_ASSISTANT_CONTACT_ID
-import cz.kuclab.hertzchat.mistral.MistralApiClient
-import cz.kuclab.hertzchat.mistral.MistralKeyStore
-import cz.kuclab.hertzchat.mistral.MistralMessage
 import cz.kuclab.hertzchat.network.p2p.FriendRequestPayload
 import cz.kuclab.hertzchat.network.p2p.FriendResponsePayload
 import cz.kuclab.hertzchat.network.p2p.HertzId
@@ -63,12 +59,6 @@ private const val FRAME_FRIEND_RESPONSE: Byte = 5
 
 private const val RETRY_INTERVAL_MS = 60_000L
 
-/** `^@Mistral 5 what does everyone think?` - the number is how many recent thread messages to hand it as context. */
-private val MISTRAL_INVOKE_REGEX = Regex("""^@Mistral\s+(\d+)\s+(.+)$""", RegexOption.IGNORE_CASE)
-private const val MISTRAL_THREAD_SYSTEM_PROMPT = """Jsi AI asistent zabudovaný do KucLab Hertz Chat, vyvolaný pomocí @Mistral přímo v konverzaci mezi lidmi.
-Dostaneš posledních pár zpráv z konverzace (u skupin s uvedeným jménem odesílatele) a dotaz na konci. Odpověz stručně a věcně,
-v jazyce konverzace. Tvoje odpověď se pošle všem účastníkům vlákna jako zpráva od tebe."""
-
 data class IncomingFriendRequest(val contactId: String, val nickname: String, val request: FriendRequestPayload)
 
 sealed interface ChatServiceEvent {
@@ -95,8 +85,6 @@ class P2pChatService @Inject constructor(
     private val i2pTransport: I2pTransport,
     private val lanTransport: LanTransport,
     private val settingsRepository: SettingsRepository,
-    private val mistralKeyStore: MistralKeyStore,
-    private val mistralApiClient: MistralApiClient,
 ) {
     private val json = Json { ignoreUnknownKeys = true }
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
@@ -245,7 +233,6 @@ class P2pChatService @Inject constructor(
                 i2pDestination = me.i2pDestination,
                 preKeyBundle = identityKeyManager.currentPreKeyBundle().toWire(),
                 viaGroupId = viaGroupId,
-                allowsMistralAccess = settingsRepository.settings.first().allowMistralOnMyMessages,
             )
             val connection = dialAndRegister(target.contactId, target.i2pDestination)
             connection.send(frame(FRAME_FRIEND_REQUEST, json.encodeToString(payload).encodeToByteArray()))
@@ -271,7 +258,6 @@ class P2pChatService @Inject constructor(
                     request.nickname,
                     request.request.identityKeyBase64,
                     request.request.i2pDestination,
-                    request.request.allowsMistralAccess,
                 )
                 runCatching {
                     cipherFor(request.contactId).establishSessionFromBundle(request.request.preKeyBundle.toPreKeyBundle())
@@ -287,7 +273,6 @@ class P2pChatService @Inject constructor(
                 // The other half of the symmetric handshake described above - lets the
                 // original requester establish their own side of the session too.
                 preKeyBundle = if (accept) identityKeyManager.currentPreKeyBundle().toWire() else null,
-                allowsMistralAccess = settingsRepository.settings.first().allowMistralOnMyMessages,
             )
             runCatching {
                 val connection = dialAndRegister(request.contactId, request.request.i2pDestination)
@@ -296,7 +281,7 @@ class P2pChatService @Inject constructor(
         }
     }
 
-    private suspend fun addTrustedContact(contactId: String, nickname: String, identityKeyBase64: String, i2pDestination: String, allowsMistralAccess: Boolean = true) {
+    private suspend fun addTrustedContact(contactId: String, nickname: String, identityKeyBase64: String, i2pDestination: String) {
         run {
             contactDao.upsert(
                 ContactEntity(
@@ -305,7 +290,6 @@ class P2pChatService @Inject constructor(
                     identityKeyBytes = Base64.decode(identityKeyBase64, Base64.NO_WRAP),
                     i2pDestination = i2pDestination,
                     addedAt = System.currentTimeMillis(),
-                    allowsMistralAccess = allowsMistralAccess,
                 ),
             )
         }
@@ -457,20 +441,11 @@ class P2pChatService @Inject constructor(
         }
     }
 
-    /** Broadcasts the local "let others use @Mistral on my messages" preference to every existing contact. */
-    fun broadcastMistralPreference(allowed: Boolean) {
-        scope.launch {
-            val payload = ChatPayload(UUID.randomUUID().toString(), System.currentTimeMillis(), PayloadKind.PREFERENCE_UPDATE, allowsMistralAccess = allowed)
-            contactDao.observeContacts().first().forEach { trySendPayload(it.contactId, payload) }
-        }
-    }
-
     // --- @mentions ---
 
-    /** Resolves `@nickname` (and `@Mistral`) tokens in a group message to contactIds, purely for the "you were mentioned" notification - not sent over the wire, every member re-derives it locally from the same roster. */
+    /** Resolves `@nickname` tokens in a group message to contactIds, purely for the "you were mentioned" notification - not sent over the wire, every member re-derives it locally from the same roster. */
     suspend fun resolveMentions(groupId: String, text: String): List<String> {
         val ids = mutableListOf<String>()
-        if (Regex("(?i)@Mistral\\b").containsMatchIn(text)) ids += MISTRAL_ASSISTANT_CONTACT_ID
         groupMemberDao.findMembers(groupId).forEach { member ->
             if (Regex("@" + Regex.escape(member.nickname) + "\\b").containsMatchIn(text)) ids += member.contactId
         }
@@ -504,7 +479,6 @@ class P2pChatService @Inject constructor(
                 val delivered = trySendPayload(contactId, payload)
                 messageDao.updateState(payload.messageId, if (delivered) DeliveryState.SENT else DeliveryState.PENDING)
             }
-            maybeInvokeMistral(threadId = contactId, isGroup = false, text = text)
         }
     }
 
@@ -530,74 +504,6 @@ class P2pChatService @Inject constructor(
             val payload = ChatPayload(messageId, now, PayloadKind.TEXT, text = text, groupId = groupId)
             val delivered = members.map { trySendPayload(it.contactId, payload) }.any { it }
             messageDao.updateState(messageId, if (delivered) DeliveryState.SENT else DeliveryState.PENDING)
-            maybeInvokeMistral(threadId = groupId, isGroup = true, text = text)
-        }
-    }
-
-    // --- @Mistral invocation ---
-
-    private suspend fun maybeInvokeMistral(threadId: String, isGroup: Boolean, text: String) {
-        if (!mistralKeyStore.enabled.value) return
-        val match = MISTRAL_INVOKE_REGEX.find(text) ?: return
-        val historyLimit = match.groupValues[1].toIntOrNull()?.coerceIn(1, 100) ?: return
-        val question = match.groupValues[2]
-
-        val allowedSenderIds: Set<String>
-        if (isGroup) {
-            val members = groupMemberDao.findMembers(threadId)
-            val allowed = members.filter { contactDao.find(it.contactId)?.allowsMistralAccess != false }
-            if (allowed.isEmpty()) return // nobody else in the group allows it - refuse, per spec
-            allowedSenderIds = allowed.map { it.contactId }.toSet()
-        } else {
-            val contact = contactDao.find(threadId) ?: return
-            if (!contact.allowsMistralAccess) return
-            allowedSenderIds = setOf(threadId)
-        }
-
-        val nicknames = if (isGroup) groupMemberDao.findMembers(threadId).associate { it.contactId to it.nickname } else emptyMap()
-        val recent = messageDao.recentForThread(threadId, historyLimit).reversed()
-            .filter { it.fromMe || it.senderContactId == null || it.senderContactId in allowedSenderIds }
-
-        val history = buildList {
-            add(MistralMessage("system", MISTRAL_THREAD_SYSTEM_PROMPT))
-            recent.forEach { m ->
-                val role = if (m.fromAssistant) "assistant" else "user"
-                val content = m.text ?: return@forEach
-                val labeled = if (isGroup && !m.fromMe && !m.fromAssistant) {
-                    "${nicknames[m.senderContactId] ?: "?"}: $content"
-                } else {
-                    content
-                }
-                add(MistralMessage(role, labeled))
-            }
-            add(MistralMessage("user", question))
-        }
-
-        val reply = mistralApiClient.chat(history).getOrNull() ?: return
-        relayAssistantReply(threadId, isGroup, reply)
-    }
-
-    private suspend fun relayAssistantReply(threadId: String, isGroup: Boolean, text: String) {
-        val messageId = UUID.randomUUID().toString()
-        val now = System.currentTimeMillis()
-        val entity = MessageEntity(
-            messageId = messageId,
-            contactId = threadId,
-            fromMe = false,
-            type = MessageType.TEXT,
-            text = text,
-            timestamp = now,
-            deliveryState = DeliveryState.DELIVERED,
-            fromAssistant = true,
-        )
-        messageDao.upsert(entity)
-        _events.tryEmit(ChatServiceEvent.MessageReceived(threadId, entity))
-
-        val payload = ChatPayload(messageId, now, PayloadKind.TEXT, text = text, groupId = if (isGroup) threadId else null, fromAssistant = true)
-        if (isGroup) {
-            groupMemberDao.findMembers(threadId).forEach { trySendPayload(it.contactId, payload) }
-        } else {
-            trySendPayload(threadId, payload)
         }
     }
 
@@ -1038,7 +944,6 @@ class P2pChatService @Inject constructor(
             PayloadKind.IMAGE, PayloadKind.VIDEO, PayloadKind.VOICE, PayloadKind.FILE, PayloadKind.AVATAR -> beginIncomingTransfer(contactId, payload)
             PayloadKind.GROUP_INVITE -> scope.launch { handleGroupInvite(contactId, payload) }
             PayloadKind.GROUP_ROSTER_UPDATE -> scope.launch { handleGroupRosterUpdate(contactId, payload) }
-            PayloadKind.PREFERENCE_UPDATE -> scope.launch { contactDao.setAllowsMistralAccess(contactId, payload.allowsMistralAccess ?: true) }
             PayloadKind.TEXT -> {
                 val threadId = payload.groupId ?: contactId
                 scope.launch {
@@ -1052,7 +957,6 @@ class P2pChatService @Inject constructor(
                         timestamp = payload.sentAt,
                         deliveryState = DeliveryState.DELIVERED,
                         senderContactId = if (payload.groupId != null) contactId else null,
-                        fromAssistant = payload.fromAssistant,
                         mentionedContactIds = mentions.takeIf { it.isNotEmpty() }?.joinToString(","),
                     )
                     messageDao.upsert(entity)
@@ -1090,7 +994,7 @@ class P2pChatService @Inject constructor(
         if (!response.accepted) return
         val senderContactId = identityKeyManager.contactIdFor(Base64.decode(response.identityKeyBase64, Base64.NO_WRAP))
         scope.launch {
-            addTrustedContact(senderContactId, response.nickname, response.identityKeyBase64, response.i2pDestination, response.allowsMistralAccess)
+            addTrustedContact(senderContactId, response.nickname, response.identityKeyBase64, response.i2pDestination)
             // Mirrors what the accepter did with our bundle in respondFriendRequest - without
             // this, we (the original requester) would have no session and encrypt() to this
             // contact would throw NoSessionException on the very first message we sent.

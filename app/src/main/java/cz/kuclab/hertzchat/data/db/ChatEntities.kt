@@ -23,7 +23,7 @@ data class ContactEntity(
     val blocked: Boolean = false,
     val addedAt: Long,
     val lastSeenOnlineAt: Long? = null,
-    /** Their broadcasted preference (as last told to us), gating whether @Mistral can read their messages - see P2pChatService group/AI logic. Defaults to true until we hear otherwise. */
+    /** Legacy "@Mistral may read my messages" preference from the removed Mistral assistant - column kept for schema stability (see MIGRATION_8_9), never read or written. */
     val allowsMistralAccess: Boolean = true,
 )
 
@@ -62,9 +62,9 @@ data class MessageEntity(
     val deliveryState: DeliveryState,
     /** Who actually authored this in a group thread - null for 1:1 messages (the thread's contactId already says who) and for our own outgoing messages. */
     val senderContactId: String? = null,
-    /** True if this message is Mistral's reply (relayed into the thread by whoever invoked @Mistral), rendered with the assistant's identity instead of any human sender's. */
+    /** Legacy marker from the removed @Mistral invocation - old rows may still have it set, but every message now renders as a normal human message. Column kept for schema stability (see MIGRATION_8_9). */
     val fromAssistant: Boolean = false,
-    /** Comma-separated contactIds (or the assistant's synthetic id) that got @mentioned in this message, for notification purposes. */
+    /** Comma-separated contactIds that got @mentioned in this message, for notification purposes. */
     val mentionedContactIds: String? = null,
 )
 
@@ -90,9 +90,6 @@ interface ContactDao {
 
     @Query("UPDATE contacts SET blocked = :blocked WHERE contactId = :id")
     suspend fun setBlocked(id: String, blocked: Boolean)
-
-    @Query("UPDATE contacts SET allowsMistralAccess = :allowed WHERE contactId = :id")
-    suspend fun setAllowsMistralAccess(id: String, allowed: Boolean)
 
     @Query("DELETE FROM contacts WHERE contactId = :id")
     suspend fun delete(id: String)
@@ -144,6 +141,9 @@ interface MessageDao {
     @Query("SELECT * FROM messages WHERE contactId = :threadId ORDER BY timestamp ASC")
     fun observeMessages(threadId: String): Flow<List<MessageEntity>>
 
+    @Query("SELECT * FROM messages WHERE messageId = :id")
+    suspend fun find(id: String): MessageEntity?
+
     @Query(
         "SELECT * FROM messages WHERE contactId = :threadId ORDER BY timestamp DESC LIMIT 1",
     )
@@ -160,6 +160,14 @@ interface MessageDao {
 
     @Query("SELECT * FROM messages WHERE fromMe = 1 AND deliveryState = 'PENDING' ORDER BY timestamp ASC")
     suspend fun findAllPending(): List<MessageEntity>
+
+    /** Recent incoming messages across all threads - the chat list diffs these against [ThreadReadState] to compute unread dots. Capped, so a huge history can't stall the list. */
+    @Query("SELECT * FROM messages WHERE fromMe = 0 ORDER BY timestamp DESC LIMIT 500")
+    fun observeRecentIncoming(): Flow<List<MessageEntity>>
+
+    /** Case-insensitive substring search within one thread, for in-chat find. */
+    @Query("SELECT * FROM messages WHERE contactId = :threadId AND text LIKE '%' || :query || '%' ESCAPE '\\' ORDER BY timestamp ASC")
+    suspend fun searchInThread(threadId: String, query: String): List<MessageEntity>
 
     @Query("DELETE FROM messages WHERE contactId = :threadId")
     suspend fun deleteAllForContact(threadId: String)

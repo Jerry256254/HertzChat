@@ -4,7 +4,6 @@ import android.Manifest
 import android.content.pm.PackageManager
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -18,64 +17,79 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.AttachFile
 import androidx.compose.material.icons.automirrored.filled.ExitToApp
+import androidx.compose.material.icons.filled.AttachFile
+import androidx.compose.material.icons.filled.DeleteSweep
 import androidx.compose.material.icons.filled.Groups
-import androidx.compose.material.icons.filled.Mic
+import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.PersonAdd
 import androidx.compose.material.icons.filled.PersonRemove
-import androidx.compose.material.icons.automirrored.filled.Send
-import androidx.compose.material.icons.filled.Stop
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.CenterAlignedTopAppBar
 import androidx.compose.material3.Checkbox
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SmallFloatingActionButton
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.platform.LocalContext
 import androidx.core.content.ContextCompat
 import androidx.hilt.navigation.compose.hiltViewModel
 import coil.compose.AsyncImage
-import cz.kuclab.hertzchat.R
 import cz.kuclab.hertzchat.data.db.MessageEntity
 import cz.kuclab.hertzchat.data.db.MessageType
+import cz.kuclab.hertzchat.data.model.PayloadKind
 import cz.kuclab.hertzchat.media.VoiceRecorder
 import cz.kuclab.hertzchat.ui.chat.FileBubble
 import cz.kuclab.hertzchat.ui.chat.ImageBubble
-import cz.kuclab.hertzchat.ui.chat.ImageEditorDialog
+import cz.kuclab.hertzchat.ui.chat.PhotoEditorDialog
+import cz.kuclab.hertzchat.ui.chat.PhotoSource
 import cz.kuclab.hertzchat.ui.chat.VideoBubble
 import cz.kuclab.hertzchat.ui.chat.VoiceBubble
 import cz.kuclab.hertzchat.ui.common.ActionMenu
 import cz.kuclab.hertzchat.ui.common.ActionMenuItem
 import cz.kuclab.hertzchat.ui.common.AttachmentMenu
-import cz.kuclab.hertzchat.ui.common.ChatInputAccentButton
-import cz.kuclab.hertzchat.ui.common.ChatInputBar
 import cz.kuclab.hertzchat.ui.common.ChatInputPillIcon
+import cz.kuclab.hertzchat.ui.common.ChatSearchBar
+import cz.kuclab.hertzchat.ui.common.HoldToRecordButton
 import cz.kuclab.hertzchat.ui.common.MarkdownText
+import cz.kuclab.hertzchat.ui.common.ThreadInputBar
+import cz.kuclab.hertzchat.ui.common.highlightQuery
+import cz.kuclab.hertzchat.ui.theme.HertzShapes
 import java.io.File
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun GroupChatScreen(groupId: String, onBack: () -> Unit, onLeft: () -> Unit, viewModel: GroupChatViewModel = hiltViewModel()) {
+fun GroupChatScreen(groupId: String, onBack: () -> Unit, onLeft: () -> Unit, onOpenCamera: () -> Unit, onOpenFile: (String) -> Unit, viewModel: GroupChatViewModel = hiltViewModel()) {
     val groupName by viewModel.groupName.collectAsState()
     val members by viewModel.members.collectAsState()
     val membersUi by viewModel.membersUi.collectAsState()
@@ -83,41 +97,79 @@ fun GroupChatScreen(groupId: String, onBack: () -> Unit, onLeft: () -> Unit, vie
     val addableContacts by viewModel.addableContacts.collectAsState()
     val messages by viewModel.messages.collectAsState()
     val draft by viewModel.draft.collectAsState()
+    val pending by viewModel.pending.collectAsState()
     val mentionQuery by viewModel.mentionQuery.collectAsState()
     var menuOpen by remember { mutableStateOf(false) }
     var membersDialogOpen by remember { mutableStateOf(false) }
     var addMembersOpen by remember { mutableStateOf(false) }
     var confirmLeave by remember { mutableStateOf(false) }
+    var confirmClear by remember { mutableStateOf(false) }
+    var searchOpen by remember { mutableStateOf(false) }
+    var searchQuery by remember { mutableStateOf("") }
+    var matchIds by remember { mutableStateOf<List<String>>(emptyList()) }
+    var matchPos by remember { mutableStateOf(0) }
     var attachMenuOpen by remember { mutableStateOf(false) }
+
     var isRecording by remember { mutableStateOf(false) }
+    var recordStartedAt by remember { mutableLongStateOf(0L) }
+    var recordElapsed by remember { mutableLongStateOf(0L) }
+    var pendingVoice by remember { mutableStateOf<Pair<File, Long>?>(null) }
 
     val context = LocalContext.current
     val voiceRecorder = remember { VoiceRecorder(context) }
+    val listState = rememberLazyListState()
+    val showScrollDown by remember { derivedStateOf { listState.firstVisibleItemIndex > 2 } }
+    val snackbar = remember { SnackbarHostState() }
+    val scope = rememberCoroutineScope()
+
+    LaunchedEffect(isRecording) {
+        while (isRecording) {
+            recordElapsed = System.currentTimeMillis() - recordStartedAt
+            delay(250)
+        }
+    }
+
+    LaunchedEffect(Unit) {
+        viewModel.userNotice.collect { snackbar.showSnackbar(it) }
+    }
+
+    LaunchedEffect(searchQuery, searchOpen) {
+        if (!searchOpen || searchQuery.isBlank()) {
+            matchIds = emptyList()
+            return@LaunchedEffect
+        }
+        delay(300)
+        matchIds = viewModel.searchInChat(searchQuery).map { it.messageId }
+        matchPos = 0
+    }
+
+    LaunchedEffect(matchIds, matchPos) {
+        val id = matchIds.getOrNull(matchPos) ?: return@LaunchedEffect
+        val ascendingIndex = messages.indexOfFirst { it.messageId == id }
+        if (ascendingIndex != -1) listState.animateScrollToItem(messages.size - 1 - ascendingIndex)
+    }
+
     var editingImageUri by remember { mutableStateOf<android.net.Uri?>(null) }
     val pickImage = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
         editingImageUri = uri
     }
     val pickVideo = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
-        uri?.let(viewModel::sendVideo)
+        uri?.let { viewModel.stageAttachmentUri(it, PayloadKind.VIDEO) }
     }
     val pickFile = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
-        uri?.let(viewModel::sendFile)
+        uri?.let { viewModel.stageAttachmentUri(it, PayloadKind.FILE) }
     }
-    val micPermissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
-        if (granted) {
-            isRecording = true
-            voiceRecorder.start()
-        }
-    }
+    val micPermissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { }
 
     val nicknamesById = remember(members) { members.associate { it.contactId to it.nickname } }
     val avatarsById = remember(membersUi) { membersUi.associate { it.contactId to it.avatarPath } }
 
     Scaffold(
+        snackbarHost = { SnackbarHost(snackbar) },
         topBar = {
-            TopAppBar(
+            CenterAlignedTopAppBar(
                 title = {
-                    Column {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
                         Text(groupName.ifBlank { "Skupina" })
                         Text("${members.size + 1} členů", style = MaterialTheme.typography.labelSmall)
                     }
@@ -125,25 +177,38 @@ fun GroupChatScreen(groupId: String, onBack: () -> Unit, onLeft: () -> Unit, vie
                 navigationIcon = { IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Zpět") } },
                 actions = {
                     IconButton(onClick = { membersDialogOpen = true }) { Icon(Icons.Filled.Groups, contentDescription = "Členové") }
-                    IconButton(onClick = { menuOpen = true }) { Icon(Icons.AutoMirrored.Filled.ExitToApp, contentDescription = "Možnosti") }
-                    ActionMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
-                        ActionMenuItem(
-                            text = "Opustit skupinu",
-                            icon = Icons.AutoMirrored.Filled.ExitToApp,
-                            destructive = true,
-                            onClick = { menuOpen = false; confirmLeave = true },
-                        )
+                    Box {
+                        IconButton(onClick = { menuOpen = true }) { Icon(Icons.Filled.MoreVert, contentDescription = "Možnosti") }
+                        ActionMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
+                            ActionMenuItem(
+                                text = "Hledat v konverzaci",
+                                icon = Icons.Filled.Search,
+                                onClick = { menuOpen = false; searchOpen = true },
+                            )
+                            ActionMenuItem(
+                                text = "Vyčistit konverzaci",
+                                icon = Icons.Filled.DeleteSweep,
+                                destructive = true,
+                                onClick = { menuOpen = false; confirmClear = true },
+                            )
+                            ActionMenuItem(
+                                text = "Opustit skupinu",
+                                icon = Icons.AutoMirrored.Filled.ExitToApp,
+                                destructive = true,
+                                onClick = { menuOpen = false; confirmLeave = true },
+                            )
+                        }
                     }
                 },
             )
         },
         bottomBar = {
             Column {
-                if (mentionQuery != null) {
+                if (mentionQuery != null && !isRecording && pendingVoice == null) {
                     val suggestions = viewModel.mentionSuggestions()
                     if (suggestions.isNotEmpty()) {
                         androidx.compose.material3.Surface(
-                            shape = RoundedCornerShape(12.dp),
+                            shape = HertzShapes.Card,
                             tonalElevation = 4.dp,
                             modifier = Modifier
                                 .padding(horizontal = 12.dp)
@@ -163,10 +228,10 @@ fun GroupChatScreen(groupId: String, onBack: () -> Unit, onLeft: () -> Unit, vie
                         }
                     }
                 }
-                ChatInputBar(
-                    value = draft,
-                    onValueChange = viewModel::onDraftChange,
-                    placeholder = "Zpráva, nebo @jméno / @Mistral N dotaz",
+                ThreadInputBar(
+                    draft = draft,
+                    onDraftChange = viewModel::onDraftChange,
+                    placeholder = "Zpráva, nebo @jméno",
                     leading = {
                         Box {
                             ChatInputPillIcon(
@@ -180,53 +245,102 @@ fun GroupChatScreen(groupId: String, onBack: () -> Unit, onLeft: () -> Unit, vie
                                 onPickImage = { pickImage.launch("image/*") },
                                 onPickVideo = { pickVideo.launch("video/*") },
                                 onPickFile = { pickFile.launch("*/*") },
+                                onTakePhoto = onOpenCamera,
                             )
                         }
                     },
-                    trailingButton = {
-                        ChatInputAccentButton(
-                            onClick = {
-                                if (isRecording) {
-                                    isRecording = false
-                                    voiceRecorder.stop()?.let { (file, durationMs) ->
-                                        if (durationMs > 400) viewModel.sendVoice(file, durationMs) else file.delete()
-                                    }
-                                } else if (draft.isNotBlank()) {
-                                    viewModel.send()
+                    attachments = pending,
+                    onRemoveAttachment = viewModel::removePending,
+                    isRecording = isRecording,
+                    recordElapsedMs = recordElapsed,
+                    pendingVoice = pendingVoice,
+                    onDeleteVoice = {
+                        pendingVoice?.first?.delete()
+                        pendingVoice = null
+                    },
+                    onSend = {
+                        pendingVoice?.let { (file, duration) ->
+                            viewModel.sendVoice(file, duration)
+                            pendingVoice = null
+                        } ?: viewModel.send()
+                    },
+                    micButton = {
+                        HoldToRecordButton(
+                            onPressStart = {
+                                val granted = ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED
+                                if (!granted) {
+                                    micPermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
+                                    return@HoldToRecordButton false
+                                }
+                                val started = runCatching { voiceRecorder.start() }.isSuccess
+                                if (started) {
+                                    recordStartedAt = System.currentTimeMillis()
+                                    recordElapsed = 0
+                                    isRecording = true
+                                }
+                                started
+                            },
+                            onPressEnd = {
+                                isRecording = false
+                                val clip = voiceRecorder.stop()
+                                if (clip != null && clip.second > 400) {
+                                    pendingVoice = clip
                                 } else {
-                                    val hasPermission = ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED
-                                    if (hasPermission) {
-                                        isRecording = true
-                                        voiceRecorder.start()
-                                    } else {
-                                        micPermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
-                                    }
+                                    clip?.first?.delete()
                                 }
                             },
-                            icon = when {
-                                isRecording -> Icons.Filled.Stop
-                                draft.isNotBlank() -> Icons.AutoMirrored.Filled.Send
-                                else -> Icons.Filled.Mic
-                            },
-                            contentDescription = if (isRecording) "Zastavit nahrávání" else if (draft.isNotBlank()) "Odeslat" else "Nahrát hlasovku",
-                            containerColor = if (isRecording) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary,
                         )
                     },
                 )
             }
         },
     ) { padding ->
-        LazyColumn(
-            modifier = Modifier.fillMaxWidth().padding(padding),
-            contentPadding = PaddingValues(12.dp),
-            verticalArrangement = Arrangement.spacedBy(6.dp),
-        ) {
-            items(messages, key = { it.messageId }) { message ->
-                GroupMessageBubble(
-                    message,
-                    senderNickname = message.senderContactId?.let { nicknamesById[it] },
-                    senderAvatarPath = message.senderContactId?.let { avatarsById[it] },
+        Column(modifier = Modifier.fillMaxWidth().padding(padding)) {
+            if (searchOpen) {
+                ChatSearchBar(
+                    query = searchQuery,
+                    onQueryChange = { searchQuery = it },
+                    matchIndex = matchPos,
+                    matchCount = matchIds.size,
+                    onPrev = { if (matchIds.isNotEmpty()) matchPos = (matchPos - 1 + matchIds.size) % matchIds.size },
+                    onNext = { if (matchIds.isNotEmpty()) matchPos = (matchPos + 1) % matchIds.size },
+                    onClose = { searchOpen = false; searchQuery = "" },
                 )
+            }
+            val threadMedia = remember(messages) {
+                messages.filter { it.type == MessageType.IMAGE || it.type == MessageType.VIDEO }
+            }
+            Box(modifier = Modifier.weight(1f)) {
+                LazyColumn(
+                    state = listState,
+                    reverseLayout = true,
+                    modifier = Modifier.fillMaxWidth(),
+                    contentPadding = PaddingValues(12.dp),
+                    verticalArrangement = Arrangement.spacedBy(6.dp),
+                ) {
+                    items(messages.reversed(), key = { it.messageId }) { message ->
+                        GroupMessageBubble(
+                            message,
+                            senderNickname = message.senderContactId?.let { nicknamesById[it] },
+                            senderAvatarPath = message.senderContactId?.let { avatarsById[it] },
+                            searchQuery = if (searchOpen) searchQuery else "",
+                            isCurrentMatch = searchOpen && matchIds.getOrNull(matchPos) == message.messageId,
+                            threadMedia = threadMedia,
+                            onDownload = viewModel::downloadMessage,
+                            onOpenFile = { onOpenFile(it.messageId) },
+                        )
+                    }
+                }
+                if (showScrollDown && !searchOpen) {
+                    SmallFloatingActionButton(
+                        onClick = { scope.launch { listState.animateScrollToItem(0) } },
+                        modifier = Modifier.align(Alignment.BottomEnd).padding(end = 12.dp, bottom = 8.dp),
+                        containerColor = MaterialTheme.colorScheme.primaryContainer,
+                        contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
+                    ) {
+                        Icon(Icons.Filled.KeyboardArrowDown, contentDescription = "Sjet dolů")
+                    }
+                }
             }
         }
     }
@@ -317,15 +431,48 @@ fun GroupChatScreen(groupId: String, onBack: () -> Unit, onLeft: () -> Unit, vie
         )
     }
 
+    var editingBytes by remember { mutableStateOf<ByteArray?>(null) }
+    val capture by viewModel.cameraCapture.collectAsState()
+    LaunchedEffect(capture) {
+        capture?.let {
+            editingBytes = it.bytes
+            viewModel.consumeCapture()
+        }
+    }
+
     editingImageUri?.let { uri ->
-        ImageEditorDialog(
-            uri = uri,
+        PhotoEditorDialog(
+            source = PhotoSource.UriSource(uri),
             jpegQuality = 85,
             onCancel = { editingImageUri = null },
             onConfirm = { bytes ->
-                viewModel.sendImageBytes(bytes)
+                viewModel.stageAttachment(bytes, "image/jpeg", PayloadKind.IMAGE, fileName = null)
                 editingImageUri = null
             },
+        )
+    }
+
+    editingBytes?.let { bytes ->
+        PhotoEditorDialog(
+            source = PhotoSource.BytesSource(bytes),
+            jpegQuality = 85,
+            onCancel = { editingBytes = null },
+            onConfirm = { edited ->
+                viewModel.stageAttachment(edited, "image/jpeg", PayloadKind.IMAGE, fileName = null)
+                editingBytes = null
+            },
+        )
+    }
+
+    if (confirmClear) {
+        AlertDialog(
+            onDismissRequest = { confirmClear = false },
+            title = { Text("Vyčistit konverzaci?") },
+            text = { Text("Smaže se celá historie zpráv v této skupině na tomto zařízení. Členství ve skupině zůstane.") },
+            confirmButton = {
+                TextButton(onClick = { confirmClear = false; viewModel.clearChat() }) { Text("Vyčistit") }
+            },
+            dismissButton = { TextButton(onClick = { confirmClear = false }) { Text("Zrušit") } },
         )
     }
 
@@ -343,35 +490,32 @@ fun GroupChatScreen(groupId: String, onBack: () -> Unit, onLeft: () -> Unit, vie
 }
 
 @Composable
-private fun GroupMessageBubble(message: MessageEntity, senderNickname: String?, senderAvatarPath: String?) {
-    val isAssistant = message.fromAssistant
+private fun GroupMessageBubble(
+    message: MessageEntity,
+    senderNickname: String?,
+    senderAvatarPath: String?,
+    searchQuery: String = "",
+    isCurrentMatch: Boolean = false,
+    threadMedia: List<MessageEntity> = emptyList(),
+    onDownload: (MessageEntity) -> Unit = {},
+    onOpenFile: (MessageEntity) -> Unit = {},
+) {
     val bubbleColor = when {
-        isAssistant -> MaterialTheme.colorScheme.tertiaryContainer
+        isCurrentMatch -> MaterialTheme.colorScheme.primaryContainer
         message.fromMe -> MaterialTheme.colorScheme.primary
         else -> MaterialTheme.colorScheme.surfaceVariant
     }
     val textColor = when {
-        isAssistant -> MaterialTheme.colorScheme.onTertiaryContainer
+        isCurrentMatch -> MaterialTheme.colorScheme.onPrimaryContainer
         message.fromMe -> MaterialTheme.colorScheme.onPrimary
         else -> MaterialTheme.colorScheme.onSurfaceVariant
     }
-    val alignment = if (message.fromMe && !isAssistant) Alignment.CenterEnd else Alignment.CenterStart
+    val alignment = if (message.fromMe) Alignment.CenterEnd else Alignment.CenterStart
 
-    Column(modifier = Modifier.fillMaxWidth(), horizontalAlignment = if (message.fromMe && !isAssistant) Alignment.End else Alignment.Start) {
+    Column(modifier = Modifier.fillMaxWidth(), horizontalAlignment = if (message.fromMe) Alignment.End else Alignment.Start) {
         Box(modifier = Modifier.fillMaxWidth(), contentAlignment = alignment) {
             Row(verticalAlignment = Alignment.Bottom) {
-                if (isAssistant) {
-                    Image(
-                        painter = painterResource(R.drawable.mistral_avatar),
-                        contentDescription = null,
-                        contentScale = ContentScale.Crop,
-                        // padding must come before size/clip, not after: applied to an
-                        // already-20dp circle it shrinks and re-centres the drawn content
-                        // inside that same fixed circle instead of adding space around it -
-                        // the image reads as squeezed into one side of the circle.
-                        modifier = Modifier.padding(end = 4.dp).size(20.dp).clip(CircleShape),
-                    )
-                } else if (!message.fromMe) {
+                if (!message.fromMe) {
                     Box(
                         modifier = Modifier.padding(end = 4.dp).size(20.dp).clip(CircleShape).background(MaterialTheme.colorScheme.primaryContainer),
                         contentAlignment = Alignment.Center,
@@ -393,30 +537,37 @@ private fun GroupMessageBubble(message: MessageEntity, senderNickname: String?, 
                     }
                 }
                 Column {
-                    val label = if (isAssistant) "Mistral AI" else if (!message.fromMe) senderNickname else null
+                    val label = if (!message.fromMe) senderNickname else null
                     label?.let {
                         Text(it, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(start = 4.dp, bottom = 2.dp))
                     }
+                    val bubbleShape = if (message.fromMe) HertzShapes.BubbleMine else HertzShapes.BubbleTheirs
+                    val gallery = threadMedia.ifEmpty { listOf(message) }
+                    val galleryIndex = threadMedia.indexOfFirst { it.messageId == message.messageId }.coerceAtLeast(0)
                     when (message.type) {
-                        MessageType.IMAGE -> ImageBubble(message)
-                        MessageType.VIDEO -> VideoBubble(message)
+                        MessageType.IMAGE -> ImageBubble(message = message, threadMedia = gallery, mediaIndex = galleryIndex, onDownload = onDownload)
+                        MessageType.VIDEO -> VideoBubble(message = message, threadMedia = gallery, mediaIndex = galleryIndex, onDownload = onDownload)
                         MessageType.VOICE -> Box(
-                            modifier = Modifier.clip(RoundedCornerShape(16.dp)).background(bubbleColor),
+                            modifier = Modifier.clip(bubbleShape).background(bubbleColor),
                         ) {
-                            VoiceBubble(message, onSurface = textColor, accent = textColor)
+                            VoiceBubble(message, onSurface = textColor, accent = textColor, onDownload = onDownload)
                         }
                         MessageType.FILE -> Box(
-                            modifier = Modifier.clip(RoundedCornerShape(16.dp)).background(bubbleColor),
+                            modifier = Modifier.clip(bubbleShape).background(bubbleColor),
                         ) {
-                            FileBubble(message, onSurface = textColor)
+                            FileBubble(message, onSurface = textColor, onOpenFile = onOpenFile, onDownload = onDownload)
                         }
                         else -> Box(
                             modifier = Modifier
-                                .clip(RoundedCornerShape(16.dp))
+                                .clip(bubbleShape)
                                 .background(bubbleColor)
                                 .padding(horizontal = 14.dp, vertical = 8.dp),
                         ) {
-                            MarkdownText(message.text.orEmpty(), color = textColor)
+                            if (searchQuery.isBlank()) {
+                                MarkdownText(message.text.orEmpty(), color = textColor)
+                            } else {
+                                Text(highlightQuery(message.text.orEmpty(), searchQuery), color = textColor)
+                            }
                         }
                     }
                 }

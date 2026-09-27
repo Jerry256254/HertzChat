@@ -11,7 +11,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.shape.RoundedCornerShape
+import cz.kuclab.hertzchat.ui.theme.HertzShapes
 import androidx.camera.view.PreviewView
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -21,7 +21,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
-import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.CenterAlignedTopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -47,7 +47,7 @@ fun QrExportScreen(onDone: () -> Unit, viewModel: QrMigrationViewModel = hiltVie
 
     Scaffold(
         topBar = {
-            TopAppBar(
+            CenterAlignedTopAppBar(
                 title = { Text("Přenos identity") },
                 navigationIcon = { IconButton(onClick = onDone) { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Zpět") } },
             )
@@ -99,7 +99,7 @@ fun QrImportScreen(onDone: () -> Unit, viewModel: QrMigrationViewModel = hiltVie
 
     Scaffold(
         topBar = {
-            TopAppBar(
+            CenterAlignedTopAppBar(
                 title = { Text("Naskenovat identitu") },
                 navigationIcon = { IconButton(onClick = onDone) { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Zpět") } },
             )
@@ -116,7 +116,7 @@ fun QrImportScreen(onDone: () -> Unit, viewModel: QrMigrationViewModel = hiltVie
                         .fillMaxWidth()
                         .weight(1f)
                         .padding(horizontal = 16.dp)
-                        .clip(RoundedCornerShape(20.dp)),
+                        .clip(HertzShapes.Media),
                     factory = { ctx ->
                         val previewView = PreviewView(ctx)
                         val executor = Executors.newSingleThreadExecutor()

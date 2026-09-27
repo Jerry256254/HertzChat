@@ -2,9 +2,9 @@
 schema_version: 1
 app_name: Hertz Chat
 package_id: cz.kuclab.hertzchat
-version_name: "0.25.0"
-version_code: 32
-last_updated: 2026-08-14
+version_name: "0.27.0"
+version_code: 34
+last_updated: 2026-09-27
 license: MIT
 category: Komunikace
 short_description: >-
@@ -33,6 +33,24 @@ download_url: https://github.com/Jerry256254/HertzChat/releases/latest
 logo: store/logo.png
 screenshots: []
 changelog:
+  - version: "0.27.0"
+    date: 2026-09-27
+    notes:
+      - "Nový sjednocený design: všechno zaoblené, vycentrované, matně průhledné povrchy."
+      - "Stav připojení „Connecting to I2P - x %“ je teď na hlavní obrazovce a po připojení sám zmizí; žádosti o přátelství se přesunuly nad seznam chatů."
+      - "Nepřečtené zprávy mají tečku s počtem, chaty se řadí podle poslední aktivity pod připnuté."
+      - "Chat se otevírá dole, při scrollu nahoru se objeví tlačítko pro sjetí dolů; pod zprávami už nejsou stavy doručení, jen kolečko u neodeslaných."
+      - "Menu chatu: hledání v konverzaci a lokální vyčištění historie."
+      - "Hlasovky se nahrávají přidržením a před odesláním jdou poslechnout nebo smazat."
+      - "Focení přímo v appce, editor fotek (ořez, kreslení, mozaiková cenzura) a připínání více příloh do rozepsané zprávy."
+      - "Galerie médií s listováním, náhledy videí, stahování příloh a vestavěný prohlížeč souborů (text, markdown, PDF)."
+      - "APK je výrazně menší: pryč jsou torové binárky a desktopové knihovny, které do něj nepatřily."
+  - version: "0.26.0"
+    date: 2026-09-27
+    notes:
+      - "AI asistent je teď Hertz od KucLabu (kuclab.org/hertz) zabudovaný přímo v appce - přihlásíš se svým KucLab účtem a všechno zůstává uvnitř appky, nic se neotevírá v prohlížeči."
+      - "Mistral AI je pryč včetně API klíčů, výběru modelu a souhlasu v Nastavení - uložené klíče appka při aktualizaci smaže."
+      - "Pryč je i @Mistral v běžných a skupinových chatech a nastavení „Povolit ostatním @Mistral u mých zpráv". @zmiňování lidí ve skupinách zůstává."
   - version: "0.25.0"
     date: 2026-08-14
     notes:

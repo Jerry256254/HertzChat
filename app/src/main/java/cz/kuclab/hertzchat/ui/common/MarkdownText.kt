@@ -5,7 +5,6 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.LocalTextStyle
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -18,6 +17,7 @@ import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontFamily
+import cz.kuclab.hertzchat.ui.theme.HertzShapes
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextDecoration
@@ -144,7 +144,7 @@ private fun MarkdownTable(table: MdBlock.Table, color: Color) {
 
     Surface(
         modifier = Modifier.padding(vertical = 4.dp),
-        shape = RoundedCornerShape(8.dp),
+        shape = HertzShapes.Small,
         color = color.copy(alpha = 0.08f),
     ) {
         Column(modifier = Modifier.horizontalScroll(rememberScrollState()).padding(8.dp)) {

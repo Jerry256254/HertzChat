@@ -29,6 +29,61 @@ class MediaStorage @Inject constructor(@ApplicationContext private val context: 
     /** Total bytes used by received/sent media (not counting avatars, which are tiny). */
     fun mediaStorageBytes(): Long = root.listFiles()?.sumOf { it.length() } ?: 0L
 
+    /**
+     * Copies a private attachment into shared storage (Gallery/Downloads) so the user can
+     * keep it outside the app. Returns the display location on success. MediaStore on
+     * API 29+ needs no permission; on older devices it falls back to the app-specific
+     * external Downloads dir, which is visible over USB but needs no permission either.
+     */
+    fun saveToPublic(src: File, mimeType: String?, displayName: String): Result<String> = runCatching {
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) {
+            saveViaMediaStore(src, mimeType, displayName)
+        } else {
+            val dir = File(context.getExternalFilesDir(android.os.Environment.DIRECTORY_DOWNLOADS), "HertzChat").apply { mkdirs() }
+            val dest = File(dir, displayName)
+            src.copyTo(dest, overwrite = true)
+            dest.absolutePath
+        }
+    }
+
+    @androidx.annotation.RequiresApi(android.os.Build.VERSION_CODES.Q)
+    private fun saveViaMediaStore(src: File, mimeType: String?, displayName: String): String {
+        val resolver = context.contentResolver
+        val volume = android.provider.MediaStore.VOLUME_EXTERNAL_PRIMARY
+        val collection: android.net.Uri
+        val relativePath: String
+        if (mimeType != null && mimeType.startsWith("image/")) {
+            collection = android.provider.MediaStore.Images.Media.getContentUri(volume)
+            relativePath = "Pictures/HertzChat"
+        } else if (mimeType != null && mimeType.startsWith("video/")) {
+            collection = android.provider.MediaStore.Video.Media.getContentUri(volume)
+            relativePath = "Movies/HertzChat"
+        } else if (mimeType != null && mimeType.startsWith("audio/")) {
+            collection = android.provider.MediaStore.Audio.Media.getContentUri(volume)
+            relativePath = "Music/HertzChat"
+        } else {
+            collection = android.provider.MediaStore.Downloads.getContentUri(volume)
+            relativePath = "Download/HertzChat"
+        }
+        val values = android.content.ContentValues()
+        values.put(android.provider.MediaStore.MediaColumns.DISPLAY_NAME, displayName)
+        values.put(android.provider.MediaStore.MediaColumns.MIME_TYPE, mimeType ?: "application/octet-stream")
+        values.put(android.provider.MediaStore.MediaColumns.RELATIVE_PATH, relativePath)
+        values.put(android.provider.MediaStore.MediaColumns.IS_PENDING, 1)
+        val uri = resolver.insert(collection, values) ?: error("MediaStore insert failed")
+        try {
+            val out = resolver.openOutputStream(uri) ?: error("MediaStore write failed")
+            out.use { output -> src.inputStream().use { input -> input.copyTo(output) } }
+            val done = android.content.ContentValues()
+            done.put(android.provider.MediaStore.MediaColumns.IS_PENDING, 0)
+            resolver.update(uri, done, null, null)
+        } catch (e: Exception) {
+            runCatching { resolver.delete(uri, null, null) }
+            throw e
+        }
+        return relativePath
+    }
+
     /** Deletes locally cached media files - the messages that referenced them remain, just without a viewable attachment anymore. */
     fun clearMedia() {
         root.listFiles()?.forEach { it.delete() }
