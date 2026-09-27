@@ -62,19 +62,23 @@ class QrCodeScannerAnalyzer(private val onDecoded: (String) -> Unit) : ImageAnal
         // longer line up and nothing ever decodes on the devices that pad. rowStride is the
         // buffer's real row width; the crop rectangle is what limits it to actual pixels.
         val rowStride = plane.rowStride.takeIf { it >= image.width } ?: image.width
-        val rows = minOf(image.height, data.size / rowStride)
-        if (rows <= 0) {
+        // ...and usually rotated: a portrait-held phone delivers landscape sensor data
+        // with rotationDegrees saying how to stand it upright. Decoding the buffer as if
+        // it were already upright shears every frame the same way padding does - on those
+        // phones nothing ever scanned at all. Rotate first, then decode.
+        val upright = rotateYuvUpright(data, image.width, minOf(image.height, data.size / rowStride), rowStride, image.imageInfo.rotationDegrees)
+        if (upright == null) {
             image.close()
             return
         }
         val source = PlanarYUVLuminanceSource(
-            data,
-            rowStride,
-            rows,
+            upright.bytes,
+            upright.width,
+            upright.height,
             0,
             0,
-            image.width,
-            rows,
+            upright.width,
+            upright.height,
             false,
         )
         try {

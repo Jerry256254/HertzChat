@@ -8,8 +8,6 @@ import cz.kuclab.hertzchat.media.MediaStorage
 import dagger.hilt.android.lifecycle.HiltViewModel
 import java.io.File
 import javax.inject.Inject
-import kotlinx.coroutines.Job
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
@@ -34,18 +32,23 @@ class ProfileViewModel @Inject constructor(
     private val _avatarVersion = MutableStateFlow(0)
     val avatarVersion: StateFlow<Int> = _avatarVersion
 
-    private var nicknameBroadcastJob: Job? = null
+    /** Last saved nickname - the draft in [_nickname] only commits on explicit save. */
+    private val _committedNickname = MutableStateFlow(identityKeyManager.nickname)
+    val committedNickname: StateFlow<String> = _committedNickname
 
+    /** Draft only - typing never writes through, so half-typed names can't leak to contacts. */
     fun onNicknameChange(value: String) {
         _nickname.value = value
+    }
+
+    /** Commits the draft locally and pushes it to every contact in one sync. */
+    fun saveNickname() {
+        val value = _nickname.value.trim()
+        if (value.isEmpty() || value == _committedNickname.value) return
         identityKeyManager.nickname = value
-        // Keystroke-level saves, but the network push waits until typing settles,
-        // so every contact's copy of our nickname follows without per-letter spam.
-        nicknameBroadcastJob?.cancel()
-        nicknameBroadcastJob = viewModelScope.launch {
-            delay(2000)
-            if (value.isNotBlank()) p2pChatService.broadcastProfile()
-        }
+        _nickname.value = value
+        _committedNickname.value = value
+        viewModelScope.launch { p2pChatService.broadcastProfile() }
     }
 
     fun onAvatarPicked(jpegBytes: ByteArray) {

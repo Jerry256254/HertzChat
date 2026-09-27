@@ -20,8 +20,8 @@ val HertzBlue = Color(0xFF0B84FE)
 val HertzBlueDark = Color(0xFF0662C7)
 val HertzGreen = Color(0xFF25D07A)
 val HertzBgLight = Color(0xFFF7F8FA)
-val HertzBgDark = Color(0xFF0E1116)
-val HertzSurfaceDark = Color(0xFF161A21)
+val HertzBgDark = Color(0xFF050506)
+val HertzSurfaceDark = Color(0xFF0E0E10)
 
 private val LightColors = lightColorScheme(
     primary = HertzBlue,
@@ -37,6 +37,14 @@ private val DarkColors = darkColorScheme(
     secondary = HertzGreen,
     background = HertzBgDark,
     surface = HertzSurfaceDark,
+    // Near-black containers instead of Material's default greys - the dark theme
+    // is black glass, not grey plastic.
+    surfaceContainerLowest = Color(0xFF050506),
+    surfaceContainerLow = Color(0xFF0B0B0D),
+    surfaceContainer = Color(0xFF121215),
+    surfaceContainerHigh = Color(0xFF17171B),
+    surfaceContainerHighest = Color(0xFF1E1E23),
+    surfaceVariant = Color(0xFF1A1A1F),
 )
 
 @Composable

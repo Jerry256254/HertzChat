@@ -53,4 +53,4 @@ data class ChatPayload(
 // (unknown fields via ignoreUnknownKeys, unknown kinds via the runCatching around decode).
 
 @Serializable
-enum class PayloadKind { TEXT, IMAGE, VIDEO, VOICE, FILE, AVATAR, DELIVERED_ACK, READ_ACK, TYPING, GROUP_INVITE, GROUP_ROSTER_UPDATE, PROFILE_UPDATE }
+enum class PayloadKind { TEXT, IMAGE, VIDEO, VOICE, FILE, AVATAR, DELIVERED_ACK, READ_ACK, TYPING, GROUP_INVITE, GROUP_ROSTER_UPDATE, PROFILE_UPDATE, PROFILE_REQUEST }

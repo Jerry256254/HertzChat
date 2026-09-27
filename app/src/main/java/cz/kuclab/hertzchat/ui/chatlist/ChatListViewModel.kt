@@ -14,6 +14,7 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
@@ -50,6 +51,11 @@ class ChatListViewModel @Inject constructor(
     val i2pError = p2pChatService.i2pError.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
 
     fun retryI2p() = p2pChatService.retryI2p()
+
+    /** Own photo for the profile button - re-read whenever contacts change so a new avatar appears without restart. */
+    val myAvatarPath = contactDao.observeContacts()
+        .map { mediaStorage.selfAvatarFile().takeIf { it.exists() }?.absolutePath }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), mediaStorage.selfAvatarFile().takeIf { it.exists() }?.absolutePath)
 
     val incomingRequests = p2pChatService.incomingRequests
 

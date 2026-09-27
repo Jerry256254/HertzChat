@@ -40,6 +40,13 @@ class ChatPayloadCompatTest {
     }
 
     @Test
+    fun `profile request kind round-trips`() {
+        val request = ChatPayload("m6", 1L, PayloadKind.PROFILE_REQUEST)
+        val decoded = json.decodeFromString(ChatPayload.serializer(), json.encodeToString(ChatPayload.serializer(), request))
+        assertEquals(PayloadKind.PROFILE_REQUEST, decoded.kind)
+    }
+
+    @Test
     fun `payloads without new fields default them to null`() {
         val minimal = """{"messageId":"m5","sentAt":1,"kind":"TEXT","text":"x"}"""
         val decoded = json.decodeFromString(ChatPayload.serializer(), minimal)

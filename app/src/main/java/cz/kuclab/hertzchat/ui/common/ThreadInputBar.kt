@@ -58,6 +58,7 @@ fun ThreadInputBar(
             modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp).padding(bottom = 12.dp),
             verticalAlignment = Alignment.Bottom,
         ) {
+            val inTextMode = pendingVoice == null && !isRecording
             Box(modifier = Modifier.weight(1f)) {
                 when {
                     pendingVoice != null -> VoicePreviewBar(
@@ -66,9 +67,11 @@ fun ThreadInputBar(
                         onDelete = onDeleteVoice,
                     )
                     isRecording -> VoiceRecordingIndicator(elapsedMs = recordElapsedMs)
+                    // One connected pill: attach, text, and the send/mic action all
+                    // live inside the same rounded surface, not as separate buttons.
                     else -> Surface(shape = HertzShapes.Pill, color = HertzMatte.input()) {
                         Row(
-                            modifier = Modifier.heightIn(min = 52.dp).padding(horizontal = 6.dp),
+                            modifier = Modifier.heightIn(min = 56.dp).padding(horizontal = 6.dp, vertical = 4.dp),
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
                             if (leading != null) {
@@ -97,20 +100,34 @@ fun ThreadInputBar(
                                     },
                                 )
                             }
-                            Box(modifier = Modifier.size(6.dp))
+                            Box(modifier = Modifier.padding(start = 4.dp)) {
+                                if (canSend) {
+                                    ChatInputAccentButton(
+                                        onClick = onSend,
+                                        icon = androidx.compose.material.icons.Icons.AutoMirrored.Filled.Send,
+                                        contentDescription = "Odeslat",
+                                    )
+                                } else {
+                                    micButton()
+                                }
+                            }
                         }
                     }
                 }
             }
-            Box(modifier = Modifier.padding(start = 8.dp, bottom = 2.dp)) {
-                if (canSend) {
-                    ChatInputAccentButton(
-                        onClick = onSend,
-                        icon = androidx.compose.material.icons.Icons.AutoMirrored.Filled.Send,
-                        contentDescription = "Odeslat",
-                    )
-                } else {
-                    micButton()
+            // Recording/preview modes keep their own full-width surfaces, so the
+            // action sits beside them - including the mic button being held.
+            if (!inTextMode) {
+                Box(modifier = Modifier.padding(start = 8.dp, bottom = 2.dp)) {
+                    if (canSend) {
+                        ChatInputAccentButton(
+                            onClick = onSend,
+                            icon = androidx.compose.material.icons.Icons.AutoMirrored.Filled.Send,
+                            contentDescription = "Odeslat",
+                        )
+                    } else {
+                        micButton()
+                    }
                 }
             }
         }

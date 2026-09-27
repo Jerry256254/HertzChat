@@ -77,7 +77,7 @@ fun HertzNavHost(viewModel: RootViewModel = hiltViewModel()) {
             )
         }
         composable(Routes.SETTINGS) {
-            SettingsScreen(onOpenAssistant = { navController.navigate(Routes.ASSISTANT_CHAT) })
+            SettingsScreen()
         }
         composable(Routes.ASSISTANT_CHAT) {
             HertzAssistantScreen(onBack = { navController.popBackStack() })

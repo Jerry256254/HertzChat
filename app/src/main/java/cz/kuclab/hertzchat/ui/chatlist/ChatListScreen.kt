@@ -2,6 +2,7 @@ package cz.kuclab.hertzchat.ui.chatlist
 
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.layout.Arrangement
@@ -14,6 +15,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -31,13 +33,11 @@ import androidx.compose.material.icons.filled.SmartToy
 import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material.icons.filled.Wifi
 import androidx.compose.material3.Button
-import androidx.compose.material3.CenterAlignedTopAppBar
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
@@ -63,6 +63,9 @@ import cz.kuclab.hertzchat.network.p2p.I2pState
 import cz.kuclab.hertzchat.ui.common.ActionMenu
 import cz.kuclab.hertzchat.ui.common.ActionMenuItem
 import cz.kuclab.hertzchat.ui.common.AppCard
+import cz.kuclab.hertzchat.ui.common.ChatDoodleBackground
+import cz.kuclab.hertzchat.ui.common.FloatingCircleButton
+import cz.kuclab.hertzchat.ui.common.TelegramFloat
 import cz.kuclab.hertzchat.ui.theme.HertzMatte
 import cz.kuclab.hertzchat.ui.theme.HertzShapes
 
@@ -83,24 +86,9 @@ fun ChatListScreen(
     val bootstrapLabel by viewModel.bootstrapLabel.collectAsState()
     val i2pError by viewModel.i2pError.collectAsState()
     val requests by viewModel.incomingRequests.collectAsState()
+    val myAvatarPath by viewModel.myAvatarPath.collectAsState()
 
     Scaffold(
-        topBar = {
-            CenterAlignedTopAppBar(
-                title = { Text("Hertz Chat", fontWeight = FontWeight.Bold) },
-                navigationIcon = {
-                    IconButton(onClick = onOpenProfile) {
-                        Icon(Icons.Filled.Person, contentDescription = "Profil")
-                    }
-                },
-                actions = {
-                    IconButton(onClick = onOpenSettings) {
-                        Icon(Icons.Filled.Settings, contentDescription = "Nastavení")
-                    }
-                },
-                colors = HertzMatte.topBarColors(),
-            )
-        },
         floatingActionButton = {
             Column(
                 horizontalAlignment = Alignment.End,
@@ -124,12 +112,14 @@ fun ChatListScreen(
             }
         },
     ) { padding ->
-        if (items.isEmpty() && requests.isEmpty() && i2pState == I2pState.CONNECTED) {
-            Column(
-                modifier = Modifier.fillMaxSize().padding(padding).padding(32.dp),
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.Center,
-            ) {
+        Box(modifier = Modifier.fillMaxSize().padding(padding)) {
+            ChatDoodleBackground()
+            if (items.isEmpty() && requests.isEmpty() && i2pState == I2pState.CONNECTED) {
+                Column(
+                    modifier = Modifier.fillMaxSize().padding(top = 76.dp).padding(horizontal = 32.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.Center,
+                ) {
                 Box(
                     modifier = Modifier
                         .size(88.dp)
@@ -157,12 +147,12 @@ fun ChatListScreen(
                     modifier = Modifier.padding(top = 8.dp),
                 )
             }
-        } else {
-            LazyColumn(
-                modifier = Modifier.fillMaxSize(),
-                contentPadding = PaddingValues(start = 12.dp, end = 12.dp, top = padding.calculateTopPadding() + 8.dp, bottom = 96.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
+            } else {
+                LazyColumn(
+                    modifier = Modifier.fillMaxSize(),
+                    contentPadding = PaddingValues(start = 12.dp, end = 12.dp, top = 76.dp, bottom = 96.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
                 item {
                     AnimatedVisibility(visible = i2pState != I2pState.CONNECTED) {
                         I2pConnectBanner(
@@ -216,7 +206,68 @@ fun ChatListScreen(
                     )
                 }
             }
+            }
+            FloatingHomeBar(
+                myAvatarPath = myAvatarPath,
+                onOpenProfile = onOpenProfile,
+                onOpenSettings = onOpenSettings,
+                modifier = Modifier.align(Alignment.TopCenter),
+            )
         }
+    }
+}
+
+@Composable
+private fun FloatingHomeBar(
+    myAvatarPath: String?,
+    onOpenProfile: () -> Unit,
+    onOpenSettings: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Row(
+        modifier = modifier.fillMaxWidth().statusBarsPadding().padding(horizontal = 12.dp, vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Box(
+            modifier = Modifier
+                .size(44.dp)
+                .clip(CircleShape)
+                .background(TelegramFloat.copy(alpha = 0.85f))
+                .clickable(onClick = onOpenProfile),
+            contentAlignment = Alignment.Center,
+        ) {
+            if (myAvatarPath != null) {
+                AsyncImage(
+                    model = java.io.File(myAvatarPath),
+                    contentDescription = "Profil",
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier.size(44.dp).clip(CircleShape),
+                )
+            } else {
+                Icon(Icons.Filled.Person, contentDescription = "Profil", tint = androidx.compose.ui.graphics.Color.White)
+            }
+        }
+        Box(
+            modifier = Modifier
+                .weight(1f)
+                .padding(horizontal = 8.dp)
+                .clip(HertzShapes.Pill)
+                .background(TelegramFloat.copy(alpha = 0.85f))
+                .padding(vertical = 11.dp),
+            contentAlignment = Alignment.Center,
+        ) {
+            Text(
+                "Hertz Chat",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold,
+                color = androidx.compose.ui.graphics.Color.White,
+            )
+        }
+        FloatingCircleButton(
+            icon = Icons.Filled.Settings,
+            contentDescription = "Nastavení",
+            onClick = onOpenSettings,
+        )
     }
 }
 

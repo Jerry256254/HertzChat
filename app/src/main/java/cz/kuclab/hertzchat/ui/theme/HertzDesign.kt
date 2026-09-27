@@ -52,27 +52,27 @@ val HertzThemeShapes = Shapes(
 object HertzMatte {
     /** Default card/row surface. */
     @Composable
-    fun card(): Color = MaterialTheme.colorScheme.surfaceContainer.copy(alpha = 0.94f)
+    fun card(): Color = MaterialTheme.colorScheme.surfaceContainer.copy(alpha = 0.72f)
 
     /** Raised card surface (highlighted rows, assistant card, banners). */
     @Composable
-    fun cardRaised(): Color = MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.94f)
+    fun cardRaised(): Color = MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.75f)
 
     /** Chat input pill and search fields. */
     @Composable
-    fun input(): Color = MaterialTheme.colorScheme.surfaceContainerHighest.copy(alpha = 0.96f)
+    fun input(): Color = MaterialTheme.colorScheme.surfaceContainerHighest.copy(alpha = 0.78f)
 
     /** Pinned-row tint. */
     @Composable
-    fun pinned(): Color = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.9f)
+    fun pinned(): Color = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.7f)
 
     /** Top app bars - the same matte tone on every screen. */
     @Composable
-    fun bar(): Color = MaterialTheme.colorScheme.surfaceContainer.copy(alpha = 0.94f)
+    fun bar(): Color = MaterialTheme.colorScheme.surfaceContainer.copy(alpha = 0.72f)
 
     /** Incoming message bubbles. */
     @Composable
-    fun bubbleTheirs(): Color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.94f)
+    fun bubbleTheirs(): Color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.78f)
 
     /** Shared palette for every CenterAlignedTopAppBar so bars never drift apart again. */
     @OptIn(ExperimentalMaterial3Api::class)

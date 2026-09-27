@@ -17,6 +17,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CameraAlt
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Person
+import androidx.compose.material3.Button
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -48,7 +49,9 @@ import cz.kuclab.hertzchat.ui.theme.HertzMatte
 @Composable
 fun ProfileScreen(onOpenQrExport: () -> Unit, viewModel: ProfileViewModel = hiltViewModel()) {
     val nickname by viewModel.nickname.collectAsState()
+    val committedNickname by viewModel.committedNickname.collectAsState()
     val avatarVersion by viewModel.avatarVersion.collectAsState()
+    val canSave = nickname.trim().isNotEmpty() && nickname.trim() != committedNickname
     val clipboard = LocalClipboardManager.current
 
     var editingUri by remember { mutableStateOf<android.net.Uri?>(null) }
@@ -108,8 +111,16 @@ fun ProfileScreen(onOpenQrExport: () -> Unit, viewModel: ProfileViewModel = hilt
                         value = nickname,
                         onValueChange = viewModel::onNicknameChange,
                         label = { Text("Přezdívka") },
+                        singleLine = true,
                         modifier = Modifier.fillMaxWidth(),
                     )
+                    Button(
+                        onClick = viewModel::saveNickname,
+                        enabled = canSave,
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Text("Uložit")
+                    }
                     Column {
                         Text("Moje ID", style = MaterialTheme.typography.labelSmall)
                         Row(verticalAlignment = Alignment.CenterVertically) {

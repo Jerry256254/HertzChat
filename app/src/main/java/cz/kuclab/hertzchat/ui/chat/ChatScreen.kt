@@ -12,9 +12,11 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
@@ -30,7 +32,6 @@ import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.CenterAlignedTopAppBar
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -40,6 +41,7 @@ import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SmallFloatingActionButton
+import androidx.compose.material3.Surface
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
@@ -77,12 +79,20 @@ import cz.kuclab.hertzchat.ui.common.ActionMenuItem
 import cz.kuclab.hertzchat.ui.common.AttachmentMenu
 import cz.kuclab.hertzchat.ui.common.ChatInputPillIcon
 import cz.kuclab.hertzchat.ui.common.ChatSearchBar
+import cz.kuclab.hertzchat.ui.common.ChatDisplayItem
+import cz.kuclab.hertzchat.ui.common.ChatDoodleBackground
+import cz.kuclab.hertzchat.ui.common.DayChip
+import cz.kuclab.hertzchat.ui.common.FloatingCircleButton
 import cz.kuclab.hertzchat.ui.common.HoldToRecordButton
 import cz.kuclab.hertzchat.ui.common.MarkdownText
+import cz.kuclab.hertzchat.ui.common.MediaTimeChip
+import cz.kuclab.hertzchat.ui.common.MessageMetaRow
+import cz.kuclab.hertzchat.ui.common.TelegramFloat
+import cz.kuclab.hertzchat.ui.common.TelegramMine
+import cz.kuclab.hertzchat.ui.common.TelegramTheirs
+import cz.kuclab.hertzchat.ui.common.buildChatDisplayItems
 import cz.kuclab.hertzchat.ui.common.ThreadInputBar
 import cz.kuclab.hertzchat.ui.common.highlightQuery
-import cz.kuclab.hertzchat.ui.theme.HertzGreen
-import cz.kuclab.hertzchat.ui.theme.HertzMatte
 import cz.kuclab.hertzchat.ui.theme.HertzShapes
 import java.io.File
 import kotlinx.coroutines.delay
@@ -140,10 +150,19 @@ fun ChatScreen(contactId: String, onBack: () -> Unit, onOpenFile: (String) -> Un
         matchPos = 0
     }
 
+    val displayItems = remember(state.messages) { buildChatDisplayItems(state.messages) }
+
     LaunchedEffect(matchIds, matchPos) {
         val id = matchIds.getOrNull(matchPos) ?: return@LaunchedEffect
-        val ascendingIndex = state.messages.indexOfFirst { it.messageId == id }
-        if (ascendingIndex != -1) listState.animateScrollToItem(state.messages.size - 1 - ascendingIndex)
+        val displayIndex = displayItems.indexOfFirst { it is ChatDisplayItem.Msg && it.message.messageId == id }
+        if (displayIndex != -1) listState.animateScrollToItem(displayIndex)
+    }
+
+    // Stick to the bottom while new messages land - sent or received - but only
+    // when already there: index 0/1 means the newest message is on screen (a fresh
+    // insert shifts the previous bottom to 1), anything further up stays put.
+    LaunchedEffect(state.messages.size) {
+        if (listState.firstVisibleItemIndex <= 1) listState.animateScrollToItem(0)
     }
 
     var editingImageUri by remember { mutableStateOf<android.net.Uri?>(null) }
@@ -171,61 +190,16 @@ fun ChatScreen(contactId: String, onBack: () -> Unit, onOpenFile: (String) -> Un
 
     Scaffold(
         snackbarHost = { SnackbarHost(snackbar) },
-        topBar = {
-            CenterAlignedTopAppBar(
-                colors = HertzMatte.topBarColors(),
-                navigationIcon = { IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Zpět") } },
-                title = {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier.clickable { detailsOpen = true },
-                    ) {
-                        Box(
-                            modifier = Modifier
-                                .size(38.dp)
-                                .clip(CircleShape)
-                                .background(MaterialTheme.colorScheme.primaryContainer),
-                            contentAlignment = Alignment.Center,
-                        ) {
-                            if (avatarPath != null) {
-                                AsyncImage(
-                                    model = File(avatarPath!!),
-                                    contentDescription = null,
-                                    contentScale = ContentScale.Crop,
-                                    modifier = Modifier.fillMaxWidth().size(38.dp).clip(CircleShape),
-                                )
-                            } else {
-                                Text(nickname.take(1).uppercase(), color = MaterialTheme.colorScheme.onPrimaryContainer)
-                            }
-                        }
-                        Text(
-                            if (viewModel.isSelf) "$nickname (Ty)" else nickname,
-                            modifier = Modifier.padding(start = 12.dp),
-                            style = MaterialTheme.typography.titleMedium,
-                        )
-                    }
-                },
-                actions = {
-                    Box {
-                        IconButton(onClick = { overflowOpen = true }) {
-                            Icon(Icons.Filled.MoreVert, contentDescription = "Možnosti konverzace")
-                        }
-                        ActionMenu(expanded = overflowOpen, onDismissRequest = { overflowOpen = false }) {
-                            ActionMenuItem(
-                                text = "Hledat v konverzaci",
-                                icon = Icons.Filled.Search,
-                                onClick = { overflowOpen = false; searchOpen = true },
-                            )
-                            ActionMenuItem(
-                                text = "Vyčistit konverzaci",
-                                icon = Icons.Filled.DeleteSweep,
-                                destructive = true,
-                                onClick = { overflowOpen = false; confirmClear = true },
-                            )
-                        }
-                    }
-                },
-            )
+        floatingActionButton = {
+            if (showScrollDown && !searchOpen) {
+                SmallFloatingActionButton(
+                    onClick = { scope.launch { listState.animateScrollToItem(0) } },
+                    containerColor = TelegramFloat.copy(alpha = 0.9f),
+                    contentColor = androidx.compose.ui.graphics.Color.White,
+                ) {
+                    Icon(Icons.Filled.KeyboardArrowDown, contentDescription = "Sjet dolů")
+                }
+            }
         },
         bottomBar = {
             ThreadInputBar(
@@ -300,7 +274,40 @@ fun ChatScreen(contactId: String, onBack: () -> Unit, onOpenFile: (String) -> Un
             )
         },
     ) { padding ->
-        Column(modifier = Modifier.fillMaxWidth().padding(padding)) {
+        val threadMedia = remember(state.messages) {
+            state.messages.filter { it.type == MessageType.IMAGE || it.type == MessageType.VIDEO }
+        }
+        Box(modifier = Modifier.fillMaxSize().padding(padding)) {
+            ChatDoodleBackground()
+            // Reversed so the thread opens at the newest message and sticks there -
+            // index 0 is always the bottom, which is also what the scroll-down
+            // button and search jumps animate to.
+            LazyColumn(
+                state = listState,
+                reverseLayout = true,
+                modifier = Modifier.fillMaxSize(),
+                contentPadding = PaddingValues(start = 12.dp, end = 12.dp, top = 76.dp, bottom = 12.dp),
+                verticalArrangement = Arrangement.spacedBy(4.dp),
+            ) {
+                items(displayItems, key = { item -> if (item is ChatDisplayItem.Msg) item.message.messageId else (item as ChatDisplayItem.Day).key }) { item ->
+                    when (item) {
+                        is ChatDisplayItem.Day -> Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+                            DayChip(label = item.label)
+                        }
+                        is ChatDisplayItem.Msg -> {
+                            val message = item.message
+                            MessageBubble(
+                                message = message,
+                                searchQuery = if (searchOpen) searchQuery else "",
+                                isCurrentMatch = searchOpen && matchIds.getOrNull(matchPos) == message.messageId,
+                                threadMedia = threadMedia,
+                                onDownload = viewModel::downloadMessage,
+                                onOpenFile = { onOpenFile(it.messageId) },
+                            )
+                        }
+                    }
+                }
+            }
             if (searchOpen) {
                 ChatSearchBar(
                     query = searchQuery,
@@ -310,43 +317,20 @@ fun ChatScreen(contactId: String, onBack: () -> Unit, onOpenFile: (String) -> Un
                     onPrev = { if (matchIds.isNotEmpty()) matchPos = (matchPos - 1 + matchIds.size) % matchIds.size },
                     onNext = { if (matchIds.isNotEmpty()) matchPos = (matchPos + 1) % matchIds.size },
                     onClose = { searchOpen = false; searchQuery = "" },
+                    modifier = Modifier.align(Alignment.TopCenter).statusBarsPadding().padding(top = 8.dp),
                 )
-            }
-            val threadMedia = remember(state.messages) {
-                state.messages.filter { it.type == MessageType.IMAGE || it.type == MessageType.VIDEO }
-            }
-            Box(modifier = Modifier.weight(1f)) {
-                // Reversed so the thread opens at the newest message and sticks there -
-                // index 0 is always the bottom, which is also what the scroll-down
-                // button and search jumps animate to.
-                LazyColumn(
-                    state = listState,
-                    reverseLayout = true,
-                    modifier = Modifier.fillMaxWidth(),
-                    contentPadding = PaddingValues(12.dp),
-                    verticalArrangement = Arrangement.spacedBy(6.dp),
-                ) {
-                    items(state.messages.reversed(), key = { it.messageId }) { message ->
-                        MessageBubble(
-                            message = message,
-                            searchQuery = if (searchOpen) searchQuery else "",
-                            isCurrentMatch = searchOpen && matchIds.getOrNull(matchPos) == message.messageId,
-                            threadMedia = threadMedia,
-                            onDownload = viewModel::downloadMessage,
-                            onOpenFile = { onOpenFile(it.messageId) },
-                        )
-                    }
-                }
-                if (showScrollDown && !searchOpen) {
-                    SmallFloatingActionButton(
-                        onClick = { scope.launch { listState.animateScrollToItem(0) } },
-                        modifier = Modifier.align(Alignment.BottomEnd).padding(end = 12.dp, bottom = 8.dp),
-                        containerColor = MaterialTheme.colorScheme.primaryContainer,
-                        contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
-                    ) {
-                        Icon(Icons.Filled.KeyboardArrowDown, contentDescription = "Sjet dolů")
-                    }
-                }
+            } else {
+                FloatingChatBar(
+                    nickname = if (viewModel.isSelf) "$nickname (Ty)" else nickname,
+                    avatarPath = avatarPath,
+                    onBack = onBack,
+                    onOpenDetails = { detailsOpen = true },
+                    overflowOpen = overflowOpen,
+                    onOverflowChange = { overflowOpen = it },
+                    onSearch = { searchOpen = true },
+                    onClear = { confirmClear = true },
+                    modifier = Modifier.align(Alignment.TopCenter),
+                )
             }
         }
     }
@@ -396,6 +380,92 @@ fun ChatScreen(contactId: String, onBack: () -> Unit, onOpenFile: (String) -> Un
 }
 
 @Composable
+private fun FloatingChatBar(
+    nickname: String,
+    avatarPath: String?,
+    onBack: () -> Unit,
+    onOpenDetails: () -> Unit,
+    overflowOpen: Boolean,
+    onOverflowChange: (Boolean) -> Unit,
+    onSearch: () -> Unit,
+    onClear: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Row(
+        modifier = modifier.fillMaxWidth().statusBarsPadding().padding(horizontal = 12.dp, vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        FloatingCircleButton(
+            icon = Icons.AutoMirrored.Filled.ArrowBack,
+            contentDescription = "Zpět",
+            onClick = onBack,
+        )
+        Row(
+            modifier = Modifier
+                .weight(1f)
+                .padding(horizontal = 8.dp)
+                .clip(HertzShapes.Pill)
+                .background(TelegramFloat.copy(alpha = 0.85f))
+                .clickable(onClick = onOpenDetails)
+                .padding(horizontal = 6.dp, vertical = 5.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(34.dp)
+                    .clip(CircleShape)
+                    .background(MaterialTheme.colorScheme.primaryContainer),
+                contentAlignment = Alignment.Center,
+            ) {
+                if (avatarPath != null) {
+                    AsyncImage(
+                        model = File(avatarPath),
+                        contentDescription = null,
+                        contentScale = ContentScale.Crop,
+                        modifier = Modifier.size(34.dp).clip(CircleShape),
+                    )
+                } else {
+                    Text(
+                        nickname.take(1).uppercase(),
+                        color = MaterialTheme.colorScheme.onPrimaryContainer,
+                        style = MaterialTheme.typography.labelLarge,
+                        fontWeight = FontWeight.Bold,
+                    )
+                }
+            }
+            Text(
+                nickname,
+                modifier = Modifier.weight(1f).padding(start = 10.dp),
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.SemiBold,
+                color = androidx.compose.ui.graphics.Color.White,
+                maxLines = 1,
+            )
+        }
+        Box {
+            FloatingCircleButton(
+                icon = Icons.Filled.MoreVert,
+                contentDescription = "Možnosti konverzace",
+                onClick = { onOverflowChange(true) },
+            )
+            ActionMenu(expanded = overflowOpen, onDismissRequest = { onOverflowChange(false) }) {
+                ActionMenuItem(
+                    text = "Hledat v konverzaci",
+                    icon = Icons.Filled.Search,
+                    onClick = { onOverflowChange(false); onSearch() },
+                )
+                ActionMenuItem(
+                    text = "Vyčistit konverzaci",
+                    icon = Icons.Filled.DeleteSweep,
+                    destructive = true,
+                    onClick = { onOverflowChange(false); onClear() },
+                )
+            }
+        }
+    }
+}
+
+@Composable
 private fun MessageBubble(
     message: MessageEntity,
     searchQuery: String = "",
@@ -406,13 +476,12 @@ private fun MessageBubble(
 ) {
     val bubbleColor = when {
         isCurrentMatch -> MaterialTheme.colorScheme.primaryContainer
-        message.fromMe -> HertzGreen.copy(alpha = 0.92f)
-        else -> HertzMatte.bubbleTheirs()
+        message.fromMe -> TelegramMine.copy(alpha = 0.93f)
+        else -> TelegramTheirs.copy(alpha = 0.9f)
     }
     val textColor = when {
         isCurrentMatch -> MaterialTheme.colorScheme.onPrimaryContainer
-        message.fromMe -> androidx.compose.ui.graphics.Color.White
-        else -> MaterialTheme.colorScheme.onSurfaceVariant
+        else -> androidx.compose.ui.graphics.Color.White
     }
     val alignedRight = message.fromMe
     val alignment = if (alignedRight) Alignment.CenterEnd else Alignment.CenterStart
@@ -421,66 +490,78 @@ private fun MessageBubble(
     androidx.compose.foundation.layout.Column(modifier = Modifier.fillMaxWidth(), horizontalAlignment = if (alignedRight) Alignment.End else Alignment.Start) {
         Box(modifier = Modifier.fillMaxWidth(), contentAlignment = alignment) {
             when (message.type) {
-                MessageType.TEXT -> Box(
+                MessageType.TEXT -> androidx.compose.foundation.layout.Column(
                     modifier = Modifier
                         .clip(bubbleShape)
                         .background(bubbleColor)
-                        .padding(horizontal = 14.dp, vertical = 10.dp),
+                        .padding(horizontal = 12.dp, vertical = 8.dp),
+                    horizontalAlignment = Alignment.End,
                 ) {
                     if (searchQuery.isBlank()) {
                         MarkdownText(message.text.orEmpty(), color = textColor)
                     } else {
                         Text(highlightQuery(message.text.orEmpty(), searchQuery), color = textColor)
                     }
+                    MessageMetaRow(
+                        timestamp = message.timestamp,
+                        fromMe = message.fromMe,
+                        deliveryState = message.deliveryState.takeIf { message.fromMe },
+                        modifier = Modifier.padding(top = 2.dp),
+                    )
                 }
-                MessageType.IMAGE -> ImageBubble(
-                    message = message,
-                    threadMedia = threadMedia.ifEmpty { listOf(message) },
-                    mediaIndex = threadMedia.indexOfFirst { it.messageId == message.messageId }.coerceAtLeast(0),
-                    onDownload = onDownload,
-                )
-                MessageType.VIDEO -> VideoBubble(
-                    message = message,
-                    threadMedia = threadMedia.ifEmpty { listOf(message) },
-                    mediaIndex = threadMedia.indexOfFirst { it.messageId == message.messageId }.coerceAtLeast(0),
-                    onDownload = onDownload,
-                )
+                MessageType.IMAGE -> Box {
+                    ImageBubble(
+                        message = message,
+                        threadMedia = threadMedia.ifEmpty { listOf(message) },
+                        mediaIndex = threadMedia.indexOfFirst { it.messageId == message.messageId }.coerceAtLeast(0),
+                        onDownload = onDownload,
+                    )
+                    MediaTimeChip(message = message, modifier = Modifier.align(Alignment.BottomStart))
+                }
+                MessageType.VIDEO -> Box {
+                    VideoBubble(
+                        message = message,
+                        threadMedia = threadMedia.ifEmpty { listOf(message) },
+                        mediaIndex = threadMedia.indexOfFirst { it.messageId == message.messageId }.coerceAtLeast(0),
+                        onDownload = onDownload,
+                    )
+                    MediaTimeChip(message = message, modifier = Modifier.align(Alignment.BottomStart))
+                }
                 MessageType.VOICE -> Box(
                     modifier = Modifier
                         .clip(bubbleShape)
                         .background(bubbleColor),
                 ) {
-                    VoiceBubble(message, onSurface = textColor, accent = textColor, onDownload = onDownload)
+                    androidx.compose.foundation.layout.Column(horizontalAlignment = Alignment.End) {
+                        VoiceBubble(message, onSurface = textColor, accent = textColor, onDownload = onDownload)
+                        MessageMetaRow(
+                            timestamp = message.timestamp,
+                            fromMe = message.fromMe,
+                            deliveryState = message.deliveryState.takeIf { message.fromMe },
+                            modifier = Modifier.padding(end = 12.dp, bottom = 8.dp),
+                        )
+                    }
                 }
                 MessageType.FILE -> Box(
                     modifier = Modifier
                         .clip(bubbleShape)
                         .background(bubbleColor),
                 ) {
-                    FileBubble(message, onSurface = textColor, onOpenFile = onOpenFile, onDownload = onDownload)
+                    androidx.compose.foundation.layout.Column(horizontalAlignment = Alignment.End) {
+                        FileBubble(message, onSurface = textColor, onOpenFile = onOpenFile, onDownload = onDownload)
+                        MessageMetaRow(
+                            timestamp = message.timestamp,
+                            fromMe = message.fromMe,
+                            deliveryState = message.deliveryState.takeIf { message.fromMe },
+                            modifier = Modifier.padding(end = 12.dp, bottom = 8.dp),
+                        )
+                    }
                 }
-            }
-        }
-        // No delivery receipts under messages anymore: a small spinner until the peer
-        // confirms receipt (SENT only means the bytes left this device), an error
-        // mark if it failed for good.
-        if (message.fromMe) {
-            when (message.deliveryState) {
-                DeliveryState.PENDING, DeliveryState.SENDING, DeliveryState.SENT -> CircularProgressIndicator(
-                    modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp).size(12.dp),
-                    strokeWidth = 2.dp,
-                )
-                DeliveryState.FAILED -> Icon(
-                    Icons.Filled.ErrorOutline,
-                    contentDescription = "Nepodařilo se odeslat",
-                    tint = MaterialTheme.colorScheme.error,
-                    modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp).size(14.dp),
-                )
-                else -> Unit
             }
         }
     }
 }
+
 
 @Composable
 private fun ContactDetailsSheet(

@@ -59,7 +59,7 @@ import cz.kuclab.hertzchat.ui.common.AppCard
 import cz.kuclab.hertzchat.ui.common.LanguagePickerRow
 
 @Composable
-fun SettingsScreen(onOpenAssistant: () -> Unit, viewModel: SettingsViewModel = hiltViewModel()) {
+fun SettingsScreen(viewModel: SettingsViewModel = hiltViewModel()) {
     val settings by viewModel.settings.collectAsState()
     val mediaBytes by viewModel.mediaBytes.collectAsState()
     val updateCheckState by viewModel.updateCheckState.collectAsState()
@@ -115,21 +115,6 @@ fun SettingsScreen(onOpenAssistant: () -> Unit, viewModel: SettingsViewModel = h
                         checked = settings.autoAcceptFriendRequests,
                         onCheckedChange = viewModel::setAutoAcceptFriendRequests,
                     )
-                }
-            }
-
-            item { SectionTitle(Icons.Filled.SmartToy, stringResource(R.string.settings_section_assistant)) }
-            item {
-                SettingsCard {
-                    Text(
-                        stringResource(R.string.settings_assistant_about),
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.padding(top = 12.dp),
-                    )
-                    TextButton(onClick = onOpenAssistant, modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
-                        Text(stringResource(R.string.settings_assistant_open))
-                    }
                 }
             }
 

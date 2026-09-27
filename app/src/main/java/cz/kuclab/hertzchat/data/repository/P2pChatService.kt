@@ -269,7 +269,10 @@ class P2pChatService @Inject constructor(
                 runCatching {
                     cipherFor(request.contactId).establishSessionFromBundle(request.request.preKeyBundle.toPreKeyBundle())
                 }
-                mediaStorage.selfAvatarFile().takeIf { it.exists() }?.let { sendAvatarTo(request.contactId, it.readBytes()) }
+                // Push mine and pull theirs: either direction alone can miss while
+                // the fresh session settles, together the photos land on both sides.
+                sendProfileTo(request.contactId)
+                requestProfile(request.contactId)
             }
             val me = myHertzId() ?: return@launch
             val response = FriendResponsePayload(
@@ -714,17 +717,38 @@ class P2pChatService @Inject constructor(
     fun broadcastProfile() {
         scope.launch {
             val myId = identityKeyManager.contactId()
-            val nickname = identityKeyManager.nickname
-            val avatarBytes = mediaStorage.selfAvatarFile().takeIf { it.exists() }?.readBytes()
             contactDao.observeContacts().first().forEach { contact ->
                 if (contact.contactId == myId) return@forEach
-                runCatching {
-                    trySendPayload(
-                        contact.contactId,
-                        ChatPayload(UUID.randomUUID().toString(), System.currentTimeMillis(), PayloadKind.PROFILE_UPDATE, profileNickname = nickname),
-                    )
-                }
-                if (avatarBytes != null) sendAvatarTo(contact.contactId, avatarBytes)
+                sendProfileTo(contact.contactId)
+            }
+        }
+    }
+
+    /** Pushes our current nickname and avatar to one contact - accept-time sync, profile pulls, broadcasts. */
+    fun sendProfileTo(contactId: String) {
+        scope.launch {
+            runCatching {
+                trySendPayload(
+                    contactId,
+                    ChatPayload(UUID.randomUUID().toString(), System.currentTimeMillis(), PayloadKind.PROFILE_UPDATE, profileNickname = identityKeyManager.nickname),
+                )
+            }
+            mediaStorage.selfAvatarFile().takeIf { it.exists() }?.let { sendAvatarTo(contactId, it.readBytes()) }
+        }
+    }
+
+    /**
+     * Asks a contact to push their current profile back. Accept-time pushes alone
+     * miss whenever the other side's session isn't usable yet - the pull closes the
+     * loop, so a new contact's photo appears without them having to re-save it.
+     */
+    fun requestProfile(contactId: String) {
+        scope.launch {
+            runCatching {
+                trySendPayload(
+                    contactId,
+                    ChatPayload(UUID.randomUUID().toString(), System.currentTimeMillis(), PayloadKind.PROFILE_REQUEST),
+                )
             }
         }
     }
@@ -1042,6 +1066,7 @@ class P2pChatService @Inject constructor(
                     contactDao.find(contactId)?.let { contactDao.update(it.copy(nickname = nickname)) }
                 }
             }
+            PayloadKind.PROFILE_REQUEST -> sendProfileTo(contactId)
             PayloadKind.TEXT -> {
                 val threadId = payload.groupId ?: contactId
                 scope.launch {
@@ -1103,7 +1128,8 @@ class P2pChatService @Inject constructor(
             response.preKeyBundle?.let { bundle ->
                 runCatching { cipherFor(senderContactId).establishSessionFromBundle(bundle.toPreKeyBundle()) }
             }
-            mediaStorage.selfAvatarFile().takeIf { it.exists() }?.let { sendAvatarTo(senderContactId, it.readBytes()) }
+            sendProfileTo(senderContactId)
+            requestProfile(senderContactId)
         }
     }
 

@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
@@ -31,7 +32,6 @@ import androidx.compose.material.icons.filled.PersonAdd
 import androidx.compose.material.icons.filled.PersonRemove
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.CenterAlignedTopAppBar
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -77,12 +77,22 @@ import cz.kuclab.hertzchat.ui.common.ActionMenu
 import cz.kuclab.hertzchat.ui.common.ActionMenuItem
 import cz.kuclab.hertzchat.ui.common.AttachmentMenu
 import cz.kuclab.hertzchat.ui.common.ChatInputPillIcon
+import cz.kuclab.hertzchat.ui.common.ChatDisplayItem
+import cz.kuclab.hertzchat.ui.common.ChatDoodleBackground
 import cz.kuclab.hertzchat.ui.common.ChatSearchBar
+import cz.kuclab.hertzchat.ui.common.DayChip
+import cz.kuclab.hertzchat.ui.common.FloatingCircleButton
 import cz.kuclab.hertzchat.ui.common.HoldToRecordButton
 import cz.kuclab.hertzchat.ui.common.MarkdownText
+import cz.kuclab.hertzchat.ui.common.MediaTimeChip
+import cz.kuclab.hertzchat.ui.common.MessageMetaRow
+import cz.kuclab.hertzchat.ui.common.TelegramFloat
+import cz.kuclab.hertzchat.ui.common.TelegramMine
+import cz.kuclab.hertzchat.ui.common.TelegramReadTicks
+import cz.kuclab.hertzchat.ui.common.TelegramTheirs
 import cz.kuclab.hertzchat.ui.common.ThreadInputBar
+import cz.kuclab.hertzchat.ui.common.buildChatDisplayItems
 import cz.kuclab.hertzchat.ui.common.highlightQuery
-import cz.kuclab.hertzchat.ui.theme.HertzMatte
 import cz.kuclab.hertzchat.ui.theme.HertzShapes
 import java.io.File
 import kotlinx.coroutines.delay
@@ -144,10 +154,19 @@ fun GroupChatScreen(groupId: String, onBack: () -> Unit, onLeft: () -> Unit, onO
         matchPos = 0
     }
 
+    val displayItems = remember(messages) { buildChatDisplayItems(messages) }
+
     LaunchedEffect(matchIds, matchPos) {
         val id = matchIds.getOrNull(matchPos) ?: return@LaunchedEffect
-        val ascendingIndex = messages.indexOfFirst { it.messageId == id }
-        if (ascendingIndex != -1) listState.animateScrollToItem(messages.size - 1 - ascendingIndex)
+        val displayIndex = displayItems.indexOfFirst { it is ChatDisplayItem.Msg && it.message.messageId == id }
+        if (displayIndex != -1) listState.animateScrollToItem(displayIndex)
+    }
+
+    // Stick to the bottom while new messages land - sent or received - but only
+    // when already there: index 0/1 means the newest message is on screen (a fresh
+    // insert shifts the previous bottom to 1), anything further up stays put.
+    LaunchedEffect(messages.size) {
+        if (listState.firstVisibleItemIndex <= 1) listState.animateScrollToItem(0)
     }
 
     var editingImageUri by remember { mutableStateOf<android.net.Uri?>(null) }
@@ -178,42 +197,16 @@ fun GroupChatScreen(groupId: String, onBack: () -> Unit, onLeft: () -> Unit, onO
 
     Scaffold(
         snackbarHost = { SnackbarHost(snackbar) },
-        topBar = {
-            CenterAlignedTopAppBar(
-                colors = HertzMatte.topBarColors(),
-                title = {
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Text(groupName.ifBlank { "Skupina" })
-                        Text("${members.size + 1} členů", style = MaterialTheme.typography.labelSmall)
-                    }
-                },
-                navigationIcon = { IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Zpět") } },
-                actions = {
-                    IconButton(onClick = { membersDialogOpen = true }) { Icon(Icons.Filled.Groups, contentDescription = "Členové") }
-                    Box {
-                        IconButton(onClick = { menuOpen = true }) { Icon(Icons.Filled.MoreVert, contentDescription = "Možnosti") }
-                        ActionMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
-                            ActionMenuItem(
-                                text = "Hledat v konverzaci",
-                                icon = Icons.Filled.Search,
-                                onClick = { menuOpen = false; searchOpen = true },
-                            )
-                            ActionMenuItem(
-                                text = "Vyčistit konverzaci",
-                                icon = Icons.Filled.DeleteSweep,
-                                destructive = true,
-                                onClick = { menuOpen = false; confirmClear = true },
-                            )
-                            ActionMenuItem(
-                                text = "Opustit skupinu",
-                                icon = Icons.AutoMirrored.Filled.ExitToApp,
-                                destructive = true,
-                                onClick = { menuOpen = false; confirmLeave = true },
-                            )
-                        }
-                    }
-                },
-            )
+        floatingActionButton = {
+            if (showScrollDown && !searchOpen) {
+                SmallFloatingActionButton(
+                    onClick = { scope.launch { listState.animateScrollToItem(0) } },
+                    containerColor = TelegramFloat.copy(alpha = 0.9f),
+                    contentColor = androidx.compose.ui.graphics.Color.White,
+                ) {
+                    Icon(Icons.Filled.KeyboardArrowDown, contentDescription = "Sjet dolů")
+                }
+            }
         },
         bottomBar = {
             Column {
@@ -314,7 +307,39 @@ fun GroupChatScreen(groupId: String, onBack: () -> Unit, onLeft: () -> Unit, onO
             }
         },
     ) { padding ->
-        Column(modifier = Modifier.fillMaxWidth().padding(padding)) {
+        val threadMedia = remember(messages) {
+            messages.filter { it.type == MessageType.IMAGE || it.type == MessageType.VIDEO }
+        }
+        Box(modifier = Modifier.fillMaxSize().padding(padding)) {
+            ChatDoodleBackground()
+            LazyColumn(
+                state = listState,
+                reverseLayout = true,
+                modifier = Modifier.fillMaxSize(),
+                contentPadding = PaddingValues(start = 12.dp, end = 12.dp, top = 76.dp, bottom = 12.dp),
+                verticalArrangement = Arrangement.spacedBy(4.dp),
+            ) {
+                items(displayItems, key = { item -> if (item is ChatDisplayItem.Msg) item.message.messageId else (item as ChatDisplayItem.Day).key }) { item ->
+                    when (item) {
+                        is ChatDisplayItem.Day -> Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+                            DayChip(label = item.label)
+                        }
+                        is ChatDisplayItem.Msg -> {
+                            val message = item.message
+                            GroupMessageBubble(
+                                message,
+                                senderNickname = message.senderContactId?.let { nicknamesById[it] },
+                                senderAvatarPath = message.senderContactId?.let { avatarsById[it] },
+                                searchQuery = if (searchOpen) searchQuery else "",
+                                isCurrentMatch = searchOpen && matchIds.getOrNull(matchPos) == message.messageId,
+                                threadMedia = threadMedia,
+                                onDownload = viewModel::downloadMessage,
+                                onOpenFile = { onOpenFile(it.messageId) },
+                            )
+                        }
+                    }
+                }
+            }
             if (searchOpen) {
                 ChatSearchBar(
                     query = searchQuery,
@@ -324,42 +349,21 @@ fun GroupChatScreen(groupId: String, onBack: () -> Unit, onLeft: () -> Unit, onO
                     onPrev = { if (matchIds.isNotEmpty()) matchPos = (matchPos - 1 + matchIds.size) % matchIds.size },
                     onNext = { if (matchIds.isNotEmpty()) matchPos = (matchPos + 1) % matchIds.size },
                     onClose = { searchOpen = false; searchQuery = "" },
+                    modifier = Modifier.align(Alignment.TopCenter).statusBarsPadding().padding(top = 8.dp),
                 )
-            }
-            val threadMedia = remember(messages) {
-                messages.filter { it.type == MessageType.IMAGE || it.type == MessageType.VIDEO }
-            }
-            Box(modifier = Modifier.weight(1f)) {
-                LazyColumn(
-                    state = listState,
-                    reverseLayout = true,
-                    modifier = Modifier.fillMaxWidth(),
-                    contentPadding = PaddingValues(12.dp),
-                    verticalArrangement = Arrangement.spacedBy(6.dp),
-                ) {
-                    items(messages.reversed(), key = { it.messageId }) { message ->
-                        GroupMessageBubble(
-                            message,
-                            senderNickname = message.senderContactId?.let { nicknamesById[it] },
-                            senderAvatarPath = message.senderContactId?.let { avatarsById[it] },
-                            searchQuery = if (searchOpen) searchQuery else "",
-                            isCurrentMatch = searchOpen && matchIds.getOrNull(matchPos) == message.messageId,
-                            threadMedia = threadMedia,
-                            onDownload = viewModel::downloadMessage,
-                            onOpenFile = { onOpenFile(it.messageId) },
-                        )
-                    }
-                }
-                if (showScrollDown && !searchOpen) {
-                    SmallFloatingActionButton(
-                        onClick = { scope.launch { listState.animateScrollToItem(0) } },
-                        modifier = Modifier.align(Alignment.BottomEnd).padding(end = 12.dp, bottom = 8.dp),
-                        containerColor = MaterialTheme.colorScheme.primaryContainer,
-                        contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
-                    ) {
-                        Icon(Icons.Filled.KeyboardArrowDown, contentDescription = "Sjet dolů")
-                    }
-                }
+            } else {
+                FloatingGroupBar(
+                    groupName = groupName,
+                    memberCount = members.size + 1,
+                    onBack = onBack,
+                    onMembers = { membersDialogOpen = true },
+                    overflowOpen = menuOpen,
+                    onOverflowChange = { menuOpen = it },
+                    onSearch = { searchOpen = true },
+                    onClear = { confirmClear = true },
+                    onLeave = { confirmLeave = true },
+                    modifier = Modifier.align(Alignment.TopCenter),
+                )
             }
         }
     }
@@ -488,6 +492,87 @@ fun GroupChatScreen(groupId: String, onBack: () -> Unit, onLeft: () -> Unit, onO
 }
 
 @Composable
+private fun FloatingGroupBar(
+    groupName: String,
+    memberCount: Int,
+    onBack: () -> Unit,
+    onMembers: () -> Unit,
+    overflowOpen: Boolean,
+    onOverflowChange: (Boolean) -> Unit,
+    onSearch: () -> Unit,
+    onClear: () -> Unit,
+    onLeave: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Row(
+        modifier = modifier.fillMaxWidth().statusBarsPadding().padding(horizontal = 12.dp, vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        FloatingCircleButton(
+            icon = Icons.AutoMirrored.Filled.ArrowBack,
+            contentDescription = "Zpět",
+            onClick = onBack,
+        )
+        Row(
+            modifier = Modifier
+                .weight(1f)
+                .padding(horizontal = 8.dp)
+                .clip(HertzShapes.Pill)
+                .background(TelegramFloat.copy(alpha = 0.85f))
+                .clickable(onClick = onMembers)
+                .padding(horizontal = 16.dp, vertical = 7.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    groupName.ifBlank { "Skupina" },
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.SemiBold,
+                    color = androidx.compose.ui.graphics.Color.White,
+                    maxLines = 1,
+                )
+                Text(
+                    "$memberCount členů",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = androidx.compose.ui.graphics.Color.White.copy(alpha = 0.7f),
+                )
+            }
+        }
+        Box {
+            FloatingCircleButton(
+                icon = Icons.Filled.MoreVert,
+                contentDescription = "Možnosti",
+                onClick = { onOverflowChange(true) },
+            )
+            ActionMenu(expanded = overflowOpen, onDismissRequest = { onOverflowChange(false) }) {
+                ActionMenuItem(
+                    text = "Členové skupiny",
+                    icon = Icons.Filled.Groups,
+                    onClick = { onOverflowChange(false); onMembers() },
+                )
+                ActionMenuItem(
+                    text = "Hledat v konverzaci",
+                    icon = Icons.Filled.Search,
+                    onClick = { onOverflowChange(false); onSearch() },
+                )
+                ActionMenuItem(
+                    text = "Vyčistit konverzaci",
+                    icon = Icons.Filled.DeleteSweep,
+                    destructive = true,
+                    onClick = { onOverflowChange(false); onClear() },
+                )
+                ActionMenuItem(
+                    text = "Opustit skupinu",
+                    icon = Icons.AutoMirrored.Filled.ExitToApp,
+                    destructive = true,
+                    onClick = { onOverflowChange(false); onLeave() },
+                )
+            }
+        }
+    }
+}
+
+@Composable
 private fun GroupMessageBubble(
     message: MessageEntity,
     senderNickname: String?,
@@ -500,13 +585,12 @@ private fun GroupMessageBubble(
 ) {
     val bubbleColor = when {
         isCurrentMatch -> MaterialTheme.colorScheme.primaryContainer
-        message.fromMe -> MaterialTheme.colorScheme.primary.copy(alpha = 0.92f)
-        else -> HertzMatte.bubbleTheirs()
+        message.fromMe -> TelegramMine.copy(alpha = 0.93f)
+        else -> TelegramTheirs.copy(alpha = 0.9f)
     }
     val textColor = when {
         isCurrentMatch -> MaterialTheme.colorScheme.onPrimaryContainer
-        message.fromMe -> MaterialTheme.colorScheme.onPrimary
-        else -> MaterialTheme.colorScheme.onSurfaceVariant
+        else -> androidx.compose.ui.graphics.Color.White
     }
     val alignment = if (message.fromMe) Alignment.CenterEnd else Alignment.CenterStart
 
@@ -537,35 +621,70 @@ private fun GroupMessageBubble(
                 Column {
                     val label = if (!message.fromMe) senderNickname else null
                     label?.let {
-                        Text(it, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(start = 4.dp, bottom = 2.dp))
+                        Text(
+                            it,
+                            style = MaterialTheme.typography.labelSmall,
+                            fontWeight = FontWeight.SemiBold,
+                            color = TelegramReadTicks,
+                            modifier = Modifier.padding(start = 4.dp, bottom = 2.dp),
+                        )
                     }
                     val bubbleShape = if (message.fromMe) HertzShapes.BubbleMine else HertzShapes.BubbleTheirs
                     val gallery = threadMedia.ifEmpty { listOf(message) }
                     val galleryIndex = threadMedia.indexOfFirst { it.messageId == message.messageId }.coerceAtLeast(0)
                     when (message.type) {
-                        MessageType.IMAGE -> ImageBubble(message = message, threadMedia = gallery, mediaIndex = galleryIndex, onDownload = onDownload)
-                        MessageType.VIDEO -> VideoBubble(message = message, threadMedia = gallery, mediaIndex = galleryIndex, onDownload = onDownload)
+                        MessageType.IMAGE -> Box {
+                            ImageBubble(message = message, threadMedia = gallery, mediaIndex = galleryIndex, onDownload = onDownload)
+                            MediaTimeChip(message = message, modifier = Modifier.align(Alignment.BottomStart))
+                        }
+                        MessageType.VIDEO -> Box {
+                            VideoBubble(message = message, threadMedia = gallery, mediaIndex = galleryIndex, onDownload = onDownload)
+                            MediaTimeChip(message = message, modifier = Modifier.align(Alignment.BottomStart))
+                        }
                         MessageType.VOICE -> Box(
                             modifier = Modifier.clip(bubbleShape).background(bubbleColor),
                         ) {
-                            VoiceBubble(message, onSurface = textColor, accent = textColor, onDownload = onDownload)
+                            Column(horizontalAlignment = Alignment.End) {
+                                VoiceBubble(message, onSurface = textColor, accent = textColor, onDownload = onDownload)
+                                MessageMetaRow(
+                                    timestamp = message.timestamp,
+                                    fromMe = message.fromMe,
+                                    deliveryState = message.deliveryState.takeIf { message.fromMe },
+                                    modifier = Modifier.padding(end = 12.dp, bottom = 8.dp),
+                                )
+                            }
                         }
                         MessageType.FILE -> Box(
                             modifier = Modifier.clip(bubbleShape).background(bubbleColor),
                         ) {
-                            FileBubble(message, onSurface = textColor, onOpenFile = onOpenFile, onDownload = onDownload)
+                            Column(horizontalAlignment = Alignment.End) {
+                                FileBubble(message, onSurface = textColor, onOpenFile = onOpenFile, onDownload = onDownload)
+                                MessageMetaRow(
+                                    timestamp = message.timestamp,
+                                    fromMe = message.fromMe,
+                                    deliveryState = message.deliveryState.takeIf { message.fromMe },
+                                    modifier = Modifier.padding(end = 12.dp, bottom = 8.dp),
+                                )
+                            }
                         }
-                        else -> Box(
+                        else -> Column(
                             modifier = Modifier
                                 .clip(bubbleShape)
                                 .background(bubbleColor)
-                                .padding(horizontal = 14.dp, vertical = 8.dp),
+                                .padding(horizontal = 12.dp, vertical = 8.dp),
+                            horizontalAlignment = Alignment.End,
                         ) {
                             if (searchQuery.isBlank()) {
                                 MarkdownText(message.text.orEmpty(), color = textColor)
                             } else {
                                 Text(highlightQuery(message.text.orEmpty(), searchQuery), color = textColor)
                             }
+                            MessageMetaRow(
+                                timestamp = message.timestamp,
+                                fromMe = message.fromMe,
+                                deliveryState = message.deliveryState.takeIf { message.fromMe },
+                                modifier = Modifier.padding(top = 2.dp),
+                            )
                         }
                     }
                 }
