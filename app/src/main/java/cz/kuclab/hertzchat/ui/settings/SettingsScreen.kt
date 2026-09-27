@@ -12,7 +12,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Block
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.DarkMode
 import androidx.compose.material.icons.filled.Delete
@@ -55,18 +54,18 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import cz.kuclab.hertzchat.BuildConfig
 import cz.kuclab.hertzchat.R
 import cz.kuclab.hertzchat.ui.common.AppDropdownMenu
+import cz.kuclab.hertzchat.ui.theme.HertzMatte
 import cz.kuclab.hertzchat.ui.common.AppCard
 import cz.kuclab.hertzchat.ui.common.LanguagePickerRow
 
 @Composable
 fun SettingsScreen(onOpenAssistant: () -> Unit, viewModel: SettingsViewModel = hiltViewModel()) {
     val settings by viewModel.settings.collectAsState()
-    val blocked by viewModel.blockedContacts.collectAsState()
     val mediaBytes by viewModel.mediaBytes.collectAsState()
     val updateCheckState by viewModel.updateCheckState.collectAsState()
     val context = LocalContext.current
 
-    Scaffold(topBar = { CenterAlignedTopAppBar(title = { Text(stringResource(R.string.settings_title)) }) }) { padding ->
+    Scaffold(topBar = { CenterAlignedTopAppBar(title = { Text(stringResource(R.string.settings_title)) }, colors = HertzMatte.topBarColors()) }) { padding ->
         LazyColumn(
             modifier = Modifier.fillMaxSize().padding(padding).padding(horizontal = 16.dp),
             verticalArrangement = Arrangement.spacedBy(4.dp),
@@ -128,14 +127,6 @@ fun SettingsScreen(onOpenAssistant: () -> Unit, viewModel: SettingsViewModel = h
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.padding(top = 12.dp),
                     )
-                    SettingsSwitchRow(
-                        icon = Icons.Filled.Visibility,
-                        title = stringResource(R.string.settings_assistant_show_title),
-                        subtitle = stringResource(R.string.settings_assistant_show_subtitle),
-                        checked = settings.showAssistantContact,
-                        onCheckedChange = viewModel::setShowAssistantContact,
-                    )
-                    HorizontalDivider()
                     TextButton(onClick = onOpenAssistant, modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
                         Text(stringResource(R.string.settings_assistant_open))
                     }
@@ -148,25 +139,6 @@ fun SettingsScreen(onOpenAssistant: () -> Unit, viewModel: SettingsViewModel = h
                     MediaQualityRow(current = settings.mediaQuality, onChange = viewModel::setMediaQuality)
                     HorizontalDivider()
                     StorageRow(bytes = mediaBytes, onClear = viewModel::clearMediaCache)
-                }
-            }
-
-            if (blocked.isNotEmpty()) {
-                item { SectionTitle(Icons.Filled.Block, stringResource(R.string.settings_section_blocked)) }
-                item {
-                    SettingsCard {
-                        blocked.forEachIndexed { index, contact ->
-                            Row(
-                                modifier = Modifier.fillMaxWidth().padding(vertical = 12.dp),
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = Alignment.CenterVertically,
-                            ) {
-                                Text(contact.nickname)
-                                TextButton(onClick = { viewModel.unblock(contact.contactId) }) { Text(stringResource(R.string.settings_unblock)) }
-                            }
-                            if (index != blocked.lastIndex) HorizontalDivider()
-                        }
-                    }
                 }
             }
 

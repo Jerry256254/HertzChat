@@ -35,13 +35,13 @@ import androidx.compose.material3.CenterAlignedTopAppBar
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExtendedFloatingActionButton
+import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -64,6 +64,7 @@ import cz.kuclab.hertzchat.ui.common.ActionMenu
 import cz.kuclab.hertzchat.ui.common.ActionMenuItem
 import cz.kuclab.hertzchat.ui.common.AppCard
 import cz.kuclab.hertzchat.ui.theme.HertzMatte
+import cz.kuclab.hertzchat.ui.theme.HertzShapes
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -97,23 +98,33 @@ fun ChatListScreen(
                         Icon(Icons.Filled.Settings, contentDescription = "Nastavení")
                     }
                 },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.surface),
+                colors = HertzMatte.topBarColors(),
             )
         },
         floatingActionButton = {
-            ExtendedFloatingActionButton(
-                onClick = onOpenContacts,
-                containerColor = MaterialTheme.colorScheme.primary,
-                contentColor = MaterialTheme.colorScheme.onPrimary,
-                icon = { Icon(Icons.Filled.Add, contentDescription = null) },
-                text = { Text("Nový chat") },
-            )
+            Column(
+                horizontalAlignment = Alignment.End,
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                FilledTonalButton(
+                    onClick = onOpenAssistant,
+                    shape = HertzShapes.Pill,
+                    contentPadding = PaddingValues(horizontal = 16.dp, vertical = 10.dp),
+                ) {
+                    Icon(Icons.Filled.SmartToy, contentDescription = null, modifier = Modifier.size(18.dp))
+                    Text("  Hertz Agent", style = MaterialTheme.typography.labelLarge)
+                }
+                ExtendedFloatingActionButton(
+                    onClick = onOpenContacts,
+                    containerColor = MaterialTheme.colorScheme.primary,
+                    contentColor = MaterialTheme.colorScheme.onPrimary,
+                    icon = { Icon(Icons.Filled.Add, contentDescription = null) },
+                    text = { Text("Nový chat") },
+                )
+            }
         },
     ) { padding ->
-        // The assistant row is always present now, so "no chats yet" has to mean
-        // "no real conversations yet" rather than "nothing in the list".
-        val hasRealChats = items.any { it.kind != ChatListItemKind.ASSISTANT }
-        if (!hasRealChats && items.isEmpty() && requests.isEmpty() && i2pState == I2pState.CONNECTED) {
+        if (items.isEmpty() && requests.isEmpty() && i2pState == I2pState.CONNECTED) {
             Column(
                 modifier = Modifier.fillMaxSize().padding(padding).padding(32.dp),
                 horizontalAlignment = Alignment.CenterHorizontally,
@@ -180,7 +191,7 @@ fun ChatListScreen(
                         )
                     }
                 }
-                if (!hasRealChats && requests.isEmpty()) {
+                if (items.isEmpty() && requests.isEmpty()) {
                     item {
                         Text(
                             "Zatím tu nemáš žádné chaty - přidej si přátele tlačítkem dole (sdílej nebo naskenuj Hertz ID).",
@@ -198,12 +209,10 @@ fun ChatListScreen(
                             when (item.kind) {
                                 ChatListItemKind.CONTACT -> onOpenChat(item.contactId)
                                 ChatListItemKind.GROUP -> onOpenGroup(item.contactId)
-                                ChatListItemKind.ASSISTANT -> onOpenAssistant()
                             }
                         },
                         onTogglePin = { viewModel.togglePin(item) },
                         onBlock = { viewModel.block(item.contactId) },
-                        onHideAssistant = { viewModel.hideAssistant() },
                     )
                 }
             }
@@ -313,10 +322,8 @@ private fun ChatListRow(
     onClick: () -> Unit,
     onTogglePin: () -> Unit,
     onBlock: () -> Unit,
-    onHideAssistant: () -> Unit,
 ) {
     var menuOpen by remember { mutableStateOf(false) }
-    val isAssistant = item.kind == ChatListItemKind.ASSISTANT
     val isGroup = item.kind == ChatListItemKind.GROUP
 
     AppCard(
@@ -336,13 +343,7 @@ private fun ChatListRow(
                     icon = if (item.pinned) Icons.Filled.PushPin else Icons.Outlined.PushPin,
                     onClick = { menuOpen = false; onTogglePin() },
                 )
-                if (isAssistant) {
-                    ActionMenuItem(
-                        text = "Skrýt asistenta",
-                        icon = Icons.Filled.VisibilityOff,
-                        onClick = { menuOpen = false; onHideAssistant() },
-                    )
-                } else if (!item.isSelf) {
+                if (!item.isSelf) {
                     ActionMenuItem(
                         text = "Blokovat",
                         icon = Icons.Filled.Block,
@@ -358,9 +359,7 @@ private fun ChatListRow(
                     .background(MaterialTheme.colorScheme.primaryContainer),
                 contentAlignment = Alignment.Center,
             ) {
-                if (isAssistant) {
-                    Icon(Icons.Filled.SmartToy, contentDescription = null, tint = MaterialTheme.colorScheme.onPrimaryContainer, modifier = Modifier.size(28.dp))
-                } else if (isGroup) {
+                if (isGroup) {
                     Icon(Icons.Filled.Groups, contentDescription = null, tint = MaterialTheme.colorScheme.onPrimaryContainer)
                 } else if (item.avatarPath != null) {
                     AsyncImage(

@@ -1,6 +1,7 @@
 package cz.kuclab.hertzchat.ui.common
 
 import android.media.MediaPlayer
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Box
@@ -9,6 +10,9 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Mic
@@ -48,10 +52,16 @@ fun HoldToRecordButton(
     modifier: Modifier = Modifier,
 ) {
     var held by remember { mutableStateOf(false) }
-    IconButton(
-        onClick = {},
+    val haptics = LocalHapticFeedback.current
+    val scale by animateFloatAsState(if (held) 1.18f else 1f, label = "micHeldScale")
+    // A plain Box on purpose: nesting detectTapGestures around IconButton's own
+    // clickable lets the inner clickable swallow the press, so holding the mic
+    // silently did nothing. The single pointerInput here is the only consumer.
+    Box(
+        contentAlignment = Alignment.Center,
         modifier = modifier
             .size(48.dp)
+            .graphicsLayer { scaleX = scale; scaleY = scale }
             .clip(CircleShape)
             .background(if (held) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary)
             .pointerInput(Unit) {
@@ -59,6 +69,7 @@ fun HoldToRecordButton(
                     onPress = {
                         if (onPressStart()) {
                             held = true
+                            haptics.performHapticFeedback(HapticFeedbackType.LongPress)
                             tryAwaitRelease()
                             held = false
                             onPressEnd()

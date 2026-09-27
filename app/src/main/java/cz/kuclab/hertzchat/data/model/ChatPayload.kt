@@ -42,6 +42,10 @@ data class ChatPayload(
      * this one; if its own contactId is missing, that's how it learns it was removed.
      */
     val groupRoster: List<HertzId>? = null,
+    /** Only set for [PayloadKind.DELIVERED_ACK] - the messageId this receipt confirms. */
+    val ackForMessageId: String? = null,
+    /** Only set for [PayloadKind.PROFILE_UPDATE] - the sender's current nickname; the avatar (if any) follows separately through the AVATAR media flow. */
+    val profileNickname: String? = null,
 )
 
 // Note: older peers may still send `fromAssistant`, `allowsMistralAccess` or a
@@ -49,4 +53,4 @@ data class ChatPayload(
 // (unknown fields via ignoreUnknownKeys, unknown kinds via the runCatching around decode).
 
 @Serializable
-enum class PayloadKind { TEXT, IMAGE, VIDEO, VOICE, FILE, AVATAR, DELIVERED_ACK, READ_ACK, TYPING, GROUP_INVITE, GROUP_ROSTER_UPDATE }
+enum class PayloadKind { TEXT, IMAGE, VIDEO, VOICE, FILE, AVATAR, DELIVERED_ACK, READ_ACK, TYPING, GROUP_INVITE, GROUP_ROSTER_UPDATE, PROFILE_UPDATE }

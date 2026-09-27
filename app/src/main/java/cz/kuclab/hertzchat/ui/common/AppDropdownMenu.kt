@@ -5,6 +5,7 @@ import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
+import cz.kuclab.hertzchat.ui.theme.HertzMatte
 import cz.kuclab.hertzchat.ui.theme.HertzShapes
 
 /**
@@ -23,7 +24,7 @@ fun AppDropdownMenu(
     // The rounding has to be applied to the menu's own container shape - see
     // RoundedMenuSurface in ActionMenu.kt for why a Modifier can't do it.
     MaterialTheme(
-        colorScheme = MaterialTheme.colorScheme,
+        colorScheme = MaterialTheme.colorScheme.copy(surfaceContainer = HertzMatte.cardRaised()),
         shapes = MaterialTheme.shapes.copy(extraSmall = HertzShapes.Card),
         typography = MaterialTheme.typography,
     ) {

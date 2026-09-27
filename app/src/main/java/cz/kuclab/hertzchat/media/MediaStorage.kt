@@ -26,6 +26,14 @@ class MediaStorage @Inject constructor(@ApplicationContext private val context: 
 
     fun contactAvatarFile(contactId: String): File = File(avatarsRoot, "$contactId.jpg")
 
+    /**
+     * A fresh path for every incoming avatar update: the path changing is what pushes
+     * the new photo through every observing UI and past Coil's path-keyed caches.
+     * The caller deletes the previous file once the contact row points at the new one.
+     */
+    fun newContactAvatarFile(contactId: String): File =
+        File(avatarsRoot, "$contactId-${System.currentTimeMillis()}.jpg")
+
     /** Total bytes used by received/sent media (not counting avatars, which are tiny). */
     fun mediaStorageBytes(): Long = root.listFiles()?.sumOf { it.length() } ?: 0L
 

@@ -20,7 +20,6 @@ import cz.kuclab.hertzchat.data.model.PayloadKind
 import cz.kuclab.hertzchat.data.repository.DraftStore
 import cz.kuclab.hertzchat.data.repository.P2pChatService
 import cz.kuclab.hertzchat.media.MediaStorage
-import cz.kuclab.hertzchat.media.PendingCaptureStore
 import cz.kuclab.hertzchat.network.p2p.I2pState
 import cz.kuclab.hertzchat.p2p.ActiveChatTracker
 import cz.kuclab.hertzchat.ui.common.PendingAttachment
@@ -58,7 +57,6 @@ class GroupChatViewModel @Inject constructor(
     private val activeChatTracker: ActiveChatTracker,
     private val p2pChatService: P2pChatService,
     private val draftStore: DraftStore,
-    private val captureStore: PendingCaptureStore,
     @ApplicationContext private val context: Context,
 ) : ViewModel() {
 
@@ -73,11 +71,6 @@ class GroupChatViewModel @Inject constructor(
     /** Attachments staged in the input tray - sent together with the message, never alone. */
     private val _pending = MutableStateFlow<List<PendingAttachment>>(emptyList())
     val pending: StateFlow<List<PendingAttachment>> = _pending
-
-    /** A photo fresh from the in-app camera, waiting to be opened in the editor. */
-    val cameraCapture = captureStore.pendingCapture
-
-    fun consumeCapture() = captureStore.consume()
 
     init {
         activeChatTracker.activeThreadId.value = groupId
@@ -161,8 +154,11 @@ class GroupChatViewModel @Inject constructor(
         if (text.isEmpty() && staged.isEmpty()) return
         warnIfOffline()
         if (text.isNotEmpty()) p2pChatService.sendGroupText(groupId, text)
-        staged.forEach { p2pChatService.sendGroupMedia(groupId, it.file.readBytes(), it.mimeType, it.kind, it.fileName) }
-        clearPending()
+        // Reading staged files is disk I/O - a video would freeze the UI for seconds.
+        viewModelScope.launch(Dispatchers.IO) {
+            staged.forEach { p2pChatService.sendGroupMedia(groupId, it.file.readBytes(), it.mimeType, it.kind, it.fileName) }
+            clearPending()
+        }
         _draft.value = ""
         draftStore.clear(groupId)
     }

@@ -82,6 +82,7 @@ import cz.kuclab.hertzchat.ui.common.HoldToRecordButton
 import cz.kuclab.hertzchat.ui.common.MarkdownText
 import cz.kuclab.hertzchat.ui.common.ThreadInputBar
 import cz.kuclab.hertzchat.ui.common.highlightQuery
+import cz.kuclab.hertzchat.ui.theme.HertzMatte
 import cz.kuclab.hertzchat.ui.theme.HertzShapes
 import java.io.File
 import kotlinx.coroutines.delay
@@ -89,7 +90,7 @@ import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun GroupChatScreen(groupId: String, onBack: () -> Unit, onLeft: () -> Unit, onOpenCamera: () -> Unit, onOpenFile: (String) -> Unit, viewModel: GroupChatViewModel = hiltViewModel()) {
+fun GroupChatScreen(groupId: String, onBack: () -> Unit, onLeft: () -> Unit, onOpenFile: (String) -> Unit, viewModel: GroupChatViewModel = hiltViewModel()) {
     val groupName by viewModel.groupName.collectAsState()
     val members by viewModel.members.collectAsState()
     val membersUi by viewModel.membersUi.collectAsState()
@@ -150,6 +151,15 @@ fun GroupChatScreen(groupId: String, onBack: () -> Unit, onLeft: () -> Unit, onO
     }
 
     var editingImageUri by remember { mutableStateOf<android.net.Uri?>(null) }
+    var cameraOutputUri by remember { mutableStateOf<android.net.Uri?>(null) }
+    val takePhoto = rememberLauncherForActivityResult(ActivityResultContracts.TakePicture()) { success ->
+        if (success) {
+            cameraOutputUri?.let { editingImageUri = it }
+        } else {
+            cameraOutputUri?.let { uri -> runCatching { context.contentResolver.delete(uri, null, null) } }
+        }
+        cameraOutputUri = null
+    }
     val pickImage = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
         editingImageUri = uri
     }
@@ -159,7 +169,9 @@ fun GroupChatScreen(groupId: String, onBack: () -> Unit, onLeft: () -> Unit, onO
     val pickFile = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
         uri?.let { viewModel.stageAttachmentUri(it, PayloadKind.FILE) }
     }
-    val micPermissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { }
+    val micPermissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+        if (!granted) scope.launch { snackbar.showSnackbar("Hlasové zprávy potřebují oprávnění k mikrofonu.") }
+    }
 
     val nicknamesById = remember(members) { members.associate { it.contactId to it.nickname } }
     val avatarsById = remember(membersUi) { membersUi.associate { it.contactId to it.avatarPath } }
@@ -168,6 +180,7 @@ fun GroupChatScreen(groupId: String, onBack: () -> Unit, onLeft: () -> Unit, onO
         snackbarHost = { SnackbarHost(snackbar) },
         topBar = {
             CenterAlignedTopAppBar(
+                colors = HertzMatte.topBarColors(),
                 title = {
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
                         Text(groupName.ifBlank { "Skupina" })
@@ -245,7 +258,11 @@ fun GroupChatScreen(groupId: String, onBack: () -> Unit, onLeft: () -> Unit, onO
                                 onPickImage = { pickImage.launch("image/*") },
                                 onPickVideo = { pickVideo.launch("video/*") },
                                 onPickFile = { pickFile.launch("*/*") },
-                                onTakePhoto = onOpenCamera,
+                                onTakePhoto = {
+                                    val uri = cz.kuclab.hertzchat.media.newCameraPhotoUri(context)
+                                    cameraOutputUri = uri
+                                    takePhoto.launch(uri)
+                                },
                             )
                         }
                     },
@@ -277,6 +294,8 @@ fun GroupChatScreen(groupId: String, onBack: () -> Unit, onLeft: () -> Unit, onO
                                     recordStartedAt = System.currentTimeMillis()
                                     recordElapsed = 0
                                     isRecording = true
+                                } else {
+                                    scope.launch { snackbar.showSnackbar("Nahrávání se nezdařilo.") }
                                 }
                                 started
                             },
@@ -431,15 +450,6 @@ fun GroupChatScreen(groupId: String, onBack: () -> Unit, onLeft: () -> Unit, onO
         )
     }
 
-    var editingBytes by remember { mutableStateOf<ByteArray?>(null) }
-    val capture by viewModel.cameraCapture.collectAsState()
-    LaunchedEffect(capture) {
-        capture?.let {
-            editingBytes = it.bytes
-            viewModel.consumeCapture()
-        }
-    }
-
     editingImageUri?.let { uri ->
         PhotoEditorDialog(
             source = PhotoSource.UriSource(uri),
@@ -448,18 +458,6 @@ fun GroupChatScreen(groupId: String, onBack: () -> Unit, onLeft: () -> Unit, onO
             onConfirm = { bytes ->
                 viewModel.stageAttachment(bytes, "image/jpeg", PayloadKind.IMAGE, fileName = null)
                 editingImageUri = null
-            },
-        )
-    }
-
-    editingBytes?.let { bytes ->
-        PhotoEditorDialog(
-            source = PhotoSource.BytesSource(bytes),
-            jpegQuality = 85,
-            onCancel = { editingBytes = null },
-            onConfirm = { edited ->
-                viewModel.stageAttachment(edited, "image/jpeg", PayloadKind.IMAGE, fileName = null)
-                editingBytes = null
             },
         )
     }
@@ -502,8 +500,8 @@ private fun GroupMessageBubble(
 ) {
     val bubbleColor = when {
         isCurrentMatch -> MaterialTheme.colorScheme.primaryContainer
-        message.fromMe -> MaterialTheme.colorScheme.primary
-        else -> MaterialTheme.colorScheme.surfaceVariant
+        message.fromMe -> MaterialTheme.colorScheme.primary.copy(alpha = 0.92f)
+        else -> HertzMatte.bubbleTheirs()
     }
     val textColor = when {
         isCurrentMatch -> MaterialTheme.colorScheme.onPrimaryContainer

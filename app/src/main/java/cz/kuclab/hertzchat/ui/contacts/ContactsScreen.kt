@@ -36,6 +36,7 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -68,6 +69,7 @@ import androidx.core.content.ContextCompat
 import androidx.hilt.navigation.compose.hiltViewModel
 import cz.kuclab.hertzchat.ui.common.AppCard
 import cz.kuclab.hertzchat.ui.migration.QrCodeScannerAnalyzer
+import cz.kuclab.hertzchat.ui.theme.HertzMatte
 import cz.kuclab.hertzchat.ui.theme.HertzShapes
 import cz.kuclab.hertzchat.ui.migration.generateQrBitmap
 import java.util.concurrent.Executors
@@ -76,15 +78,14 @@ import kotlinx.coroutines.delay
 @Composable
 fun ContactsScreen(
     onOpenChat: (String) -> Unit,
-    onOpenAssistant: () -> Unit,
     viewModel: ContactsViewModel = hiltViewModel(),
 ) {
     val i2pError by viewModel.i2pError.collectAsState()
     val addError by viewModel.addError.collectAsState()
     val addSuccess by viewModel.addSuccess.collectAsState()
     val myQrText by viewModel.myHertzIdQrText.collectAsState()
-    val showAssistantContact by viewModel.showAssistantContact.collectAsState()
     val contacts by viewModel.contacts.collectAsState()
+    val blocked by viewModel.blockedContacts.collectAsState()
     val clipboard = LocalClipboardManager.current
 
     var pastedId by remember { mutableStateOf("") }
@@ -98,17 +99,12 @@ fun ContactsScreen(
         }
     }
 
-    Scaffold(topBar = { CenterAlignedTopAppBar(title = { Text("Kontakty") }) }) { padding ->
+    Scaffold(topBar = { CenterAlignedTopAppBar(title = { Text("Kontakty") }, colors = HertzMatte.topBarColors()) }) { padding ->
         LazyColumn(
             modifier = Modifier.fillMaxWidth().padding(padding),
             contentPadding = PaddingValues(16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            if (showAssistantContact) {
-                item {
-                    HertzAssistantCard(onClick = onOpenAssistant)
-                }
-            }
             item {
                 AppCard {
                     Column(
@@ -209,6 +205,27 @@ fun ContactsScreen(
                 }
             }
 
+            if (blocked.isNotEmpty()) {
+                item {
+                    AppCard {
+                        Column(modifier = Modifier.padding(20.dp)) {
+                            Text("Blokované kontakty", fontWeight = FontWeight.SemiBold)
+                            blocked.forEachIndexed { index, contact ->
+                                Row(
+                                    modifier = Modifier.fillMaxWidth().padding(vertical = 12.dp),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically,
+                                ) {
+                                    Text(contact.nickname)
+                                    TextButton(onClick = { viewModel.unblock(contact.contactId) }) { Text("Odblokovat") }
+                                }
+                                if (index != blocked.lastIndex) HorizontalDivider()
+                            }
+                        }
+                    }
+                }
+            }
+
         }
     }
 
@@ -225,45 +242,6 @@ fun ContactsScreen(
             onDismiss = { createGroupOpen = false },
             onCreate = { name, ids -> viewModel.createGroup(name, ids); createGroupOpen = false },
         )
-    }
-}
-
-@Composable
-private fun HertzAssistantCard(onClick: () -> Unit) {
-    AppCard(
-        modifier = Modifier.fillMaxWidth(),
-        containerColor = MaterialTheme.colorScheme.secondaryContainer,
-    ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .clickable(onClick = onClick)
-                .padding(16.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Box(
-                modifier = Modifier
-                    .size(48.dp)
-                    .clip(androidx.compose.foundation.shape.CircleShape)
-                    .background(MaterialTheme.colorScheme.primaryContainer),
-                contentAlignment = Alignment.Center,
-            ) {
-                Icon(
-                    Icons.Filled.SmartToy,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.onPrimaryContainer,
-                    modifier = Modifier.size(26.dp),
-                )
-            }
-            Column(modifier = Modifier.weight(1f).padding(start = 12.dp)) {
-                Text("Hertz AI", fontWeight = FontWeight.SemiBold)
-                Text(
-                    "AI asistent KucLab Hertz - klepnutím otevřeš",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSecondaryContainer,
-                )
-            }
-        }
     }
 }
 

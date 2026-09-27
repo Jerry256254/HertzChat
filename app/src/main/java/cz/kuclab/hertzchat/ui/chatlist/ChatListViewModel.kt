@@ -9,9 +9,7 @@ import cz.kuclab.hertzchat.data.db.MessageDao
 import cz.kuclab.hertzchat.data.db.ThreadReadStateDao
 import cz.kuclab.hertzchat.data.repository.IncomingFriendRequest
 import cz.kuclab.hertzchat.data.repository.P2pChatService
-import cz.kuclab.hertzchat.data.repository.SettingsRepository
 import cz.kuclab.hertzchat.media.MediaStorage
-import cz.kuclab.hertzchat.ui.assistant.HERTZ_ASSISTANT_CONTACT_ID
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
 import kotlinx.coroutines.flow.SharingStarted
@@ -19,7 +17,7 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
-enum class ChatListItemKind { CONTACT, GROUP, ASSISTANT }
+enum class ChatListItemKind { CONTACT, GROUP }
 
 data class ChatListItem(
     val contactId: String,
@@ -41,7 +39,6 @@ class ChatListViewModel @Inject constructor(
     private val messageDao: MessageDao,
     private val groupDao: GroupDao,
     private val readStateDao: ThreadReadStateDao,
-    private val settingsRepository: SettingsRepository,
     private val p2pChatService: P2pChatService,
     private val identityKeyManager: IdentityKeyManager,
     private val mediaStorage: MediaStorage,
@@ -63,12 +60,9 @@ class ChatListViewModel @Inject constructor(
     val items = combine(
         contactDao.observeContacts(),
         groupDao.observeGroups(),
-        settingsRepository.settings,
         messageDao.observeRecentIncoming(),
         readStateDao.observeAll(),
-    ) { contacts, groups, settings, recentIncoming, readStates ->
-        val showAssistant = settings.showAssistantContact
-        val assistantPinned = settings.assistantPinned
+    ) { contacts, groups, recentIncoming, readStates ->
         val seenByThread = readStates.associate { it.threadId to it.lastSeenAt }
         val unreadByThread = recentIncoming
             .filter { (seenByThread[it.contactId] ?: 0L) < it.timestamp }
@@ -108,25 +102,10 @@ class ChatListViewModel @Inject constructor(
             )
         }
 
-        // The web assistant keeps no local history, so the row is a static entry
-        // point - always present from a fresh install onward unless hidden.
-        val assistantItem = if (showAssistant) {
-            ChatListItem(
-                contactId = HERTZ_ASSISTANT_CONTACT_ID,
-                nickname = "Hertz AI",
-                avatarPath = null,
-                pinned = assistantPinned,
-                lastMessagePreview = "AI asistent KucLab Hertz",
-                lastMessageAt = null,
-                kind = ChatListItemKind.ASSISTANT,
-            )
-        } else {
-            null
-        }
-
         // Pinned first, then most-recently-active (incoming or outgoing alike) -
         // a new message always floats its thread to the top, just under pinned rows.
-        (contactItems + groupItems + listOfNotNull(assistantItem))
+        // (The Hertz Agent lives in its own button above "Nový chat", not as a row.)
+        (contactItems + groupItems)
             .sortedWith(compareByDescending<ChatListItem> { it.pinned }.thenByDescending { it.lastMessageAt ?: 0L })
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
@@ -134,7 +113,6 @@ class ChatListViewModel @Inject constructor(
         viewModelScope.launch {
             when (item.kind) {
                 ChatListItemKind.GROUP -> groupDao.setPinned(item.contactId, !item.pinned)
-                ChatListItemKind.ASSISTANT -> settingsRepository.setAssistantPinned(!item.pinned)
                 ChatListItemKind.CONTACT -> contactDao.setPinned(item.contactId, !item.pinned)
             }
         }
@@ -142,10 +120,5 @@ class ChatListViewModel @Inject constructor(
 
     fun block(contactId: String) {
         viewModelScope.launch { contactDao.setBlocked(contactId, true) }
-    }
-
-    /** The assistant has no "block" (there's no other party to block) - hiding removes its row instead, reversible in Settings. */
-    fun hideAssistant() {
-        viewModelScope.launch { settingsRepository.setShowAssistantContact(false) }
     }
 }

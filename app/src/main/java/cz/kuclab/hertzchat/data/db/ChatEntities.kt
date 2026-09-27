@@ -79,6 +79,10 @@ interface ContactDao {
     @Query("SELECT * FROM contacts WHERE contactId = :id")
     suspend fun find(id: String): ContactEntity?
 
+    /** Live row for an open chat - nickname/avatar/QR refresh when the peer's PROFILE_UPDATE or AVATAR lands. */
+    @Query("SELECT * FROM contacts WHERE contactId = :id")
+    fun observeContact(id: String): Flow<ContactEntity?>
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun upsert(contact: ContactEntity)
 
@@ -158,8 +162,9 @@ interface MessageDao {
     @Query("UPDATE messages SET deliveryState = :state WHERE messageId = :id")
     suspend fun updateState(id: String, state: DeliveryState)
 
-    @Query("SELECT * FROM messages WHERE fromMe = 1 AND deliveryState = 'PENDING' ORDER BY timestamp ASC")
-    suspend fun findAllPending(): List<MessageEntity>
+    /** Everything still awaiting a delivery receipt - never-sent PENDING plus SENT-but-unacked. */
+    @Query("SELECT * FROM messages WHERE fromMe = 1 AND deliveryState IN ('PENDING', 'SENT') ORDER BY timestamp ASC")
+    suspend fun findUnsent(): List<MessageEntity>
 
     /** Recent incoming messages across all threads - the chat list diffs these against [ThreadReadState] to compute unread dots. Capped, so a huge history can't stall the list. */
     @Query("SELECT * FROM messages WHERE fromMe = 0 ORDER BY timestamp DESC LIMIT 500")

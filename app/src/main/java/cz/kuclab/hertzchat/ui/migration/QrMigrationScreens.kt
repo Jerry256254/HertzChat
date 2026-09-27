@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import cz.kuclab.hertzchat.ui.theme.HertzMatte
 import cz.kuclab.hertzchat.ui.theme.HertzShapes
 import androidx.camera.view.PreviewView
 import androidx.compose.material.icons.Icons
@@ -50,6 +51,7 @@ fun QrExportScreen(onDone: () -> Unit, viewModel: QrMigrationViewModel = hiltVie
             CenterAlignedTopAppBar(
                 title = { Text("Přenos identity") },
                 navigationIcon = { IconButton(onClick = onDone) { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Zpět") } },
+                colors = HertzMatte.topBarColors(),
             )
         },
     ) { padding ->
@@ -102,6 +104,7 @@ fun QrImportScreen(onDone: () -> Unit, viewModel: QrMigrationViewModel = hiltVie
             CenterAlignedTopAppBar(
                 title = { Text("Naskenovat identitu") },
                 navigationIcon = { IconButton(onClick = onDone) { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Zpět") } },
+                colors = HertzMatte.topBarColors(),
             )
         },
     ) { padding ->

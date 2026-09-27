@@ -43,6 +43,7 @@ import coil.compose.AsyncImage
 import cz.kuclab.hertzchat.ui.chat.PhotoEditorDialog
 import cz.kuclab.hertzchat.ui.chat.PhotoSource
 import cz.kuclab.hertzchat.ui.common.AppCard
+import cz.kuclab.hertzchat.ui.theme.HertzMatte
 
 @Composable
 fun ProfileScreen(onOpenQrExport: () -> Unit, viewModel: ProfileViewModel = hiltViewModel()) {
@@ -53,7 +54,7 @@ fun ProfileScreen(onOpenQrExport: () -> Unit, viewModel: ProfileViewModel = hilt
     var editingUri by remember { mutableStateOf<android.net.Uri?>(null) }
     val pickImage = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri -> editingUri = uri }
 
-    Scaffold(topBar = { CenterAlignedTopAppBar(title = { Text("Profil") }) }) { padding ->
+    Scaffold(topBar = { CenterAlignedTopAppBar(title = { Text("Profil") }, colors = HertzMatte.topBarColors()) }) { padding ->
         Column(
             modifier = Modifier.fillMaxSize().padding(padding).padding(24.dp),
             verticalArrangement = Arrangement.spacedBy(20.dp),

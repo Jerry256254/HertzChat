@@ -4,6 +4,7 @@ import android.Manifest
 import android.content.pm.PackageManager
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -52,6 +53,7 @@ import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -80,6 +82,7 @@ import cz.kuclab.hertzchat.ui.common.MarkdownText
 import cz.kuclab.hertzchat.ui.common.ThreadInputBar
 import cz.kuclab.hertzchat.ui.common.highlightQuery
 import cz.kuclab.hertzchat.ui.theme.HertzGreen
+import cz.kuclab.hertzchat.ui.theme.HertzMatte
 import cz.kuclab.hertzchat.ui.theme.HertzShapes
 import java.io.File
 import kotlinx.coroutines.delay
@@ -87,11 +90,12 @@ import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun ChatScreen(contactId: String, onBack: () -> Unit, onOpenCamera: () -> Unit, onOpenFile: (String) -> Unit, viewModel: ChatViewModel = hiltViewModel()) {
+fun ChatScreen(contactId: String, onBack: () -> Unit, onOpenFile: (String) -> Unit, viewModel: ChatViewModel = hiltViewModel()) {
     val state by viewModel.uiState.collectAsState()
     val draft by viewModel.draft.collectAsState()
     val nickname by viewModel.contactNickname.collectAsState()
     val avatarPath by viewModel.contactAvatarPath.collectAsState()
+    val contactQrText by viewModel.contactQrText.collectAsState()
     val pending by viewModel.pending.collectAsState()
     val context = LocalContext.current
 
@@ -143,6 +147,15 @@ fun ChatScreen(contactId: String, onBack: () -> Unit, onOpenCamera: () -> Unit, 
     }
 
     var editingImageUri by remember { mutableStateOf<android.net.Uri?>(null) }
+    var cameraOutputUri by remember { mutableStateOf<android.net.Uri?>(null) }
+    val takePhoto = rememberLauncherForActivityResult(ActivityResultContracts.TakePicture()) { success ->
+        if (success) {
+            cameraOutputUri?.let { editingImageUri = it }
+        } else {
+            cameraOutputUri?.let { uri -> runCatching { context.contentResolver.delete(uri, null, null) } }
+        }
+        cameraOutputUri = null
+    }
     val pickImage = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
         editingImageUri = uri
     }
@@ -152,12 +165,15 @@ fun ChatScreen(contactId: String, onBack: () -> Unit, onOpenCamera: () -> Unit, 
     val pickFile = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
         uri?.let { viewModel.stageAttachmentUri(it, PayloadKind.FILE) }
     }
-    val micPermissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { }
+    val micPermissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+        if (!granted) scope.launch { snackbar.showSnackbar("Hlasové zprávy potřebují oprávnění k mikrofonu.") }
+    }
 
     Scaffold(
         snackbarHost = { SnackbarHost(snackbar) },
         topBar = {
             CenterAlignedTopAppBar(
+                colors = HertzMatte.topBarColors(),
                 navigationIcon = { IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Zpět") } },
                 title = {
                     Row(
@@ -229,7 +245,11 @@ fun ChatScreen(contactId: String, onBack: () -> Unit, onOpenCamera: () -> Unit, 
                             onPickImage = { pickImage.launch("image/*") },
                             onPickVideo = { pickVideo.launch("video/*") },
                             onPickFile = { pickFile.launch("*/*") },
-                            onTakePhoto = onOpenCamera,
+                            onTakePhoto = {
+                                val uri = cz.kuclab.hertzchat.media.newCameraPhotoUri(context)
+                                cameraOutputUri = uri
+                                takePhoto.launch(uri)
+                            },
                         )
                     }
                 },
@@ -261,6 +281,8 @@ fun ChatScreen(contactId: String, onBack: () -> Unit, onOpenCamera: () -> Unit, 
                                 recordStartedAt = System.currentTimeMillis()
                                 recordElapsed = 0
                                 isRecording = true
+                            } else {
+                                scope.launch { snackbar.showSnackbar("Nahrávání se nezdařilo.") }
                             }
                             started
                         },
@@ -329,15 +351,6 @@ fun ChatScreen(contactId: String, onBack: () -> Unit, onOpenCamera: () -> Unit, 
         }
     }
 
-    var editingBytes by remember { mutableStateOf<ByteArray?>(null) }
-    val capture by viewModel.cameraCapture.collectAsState()
-    LaunchedEffect(capture) {
-        capture?.let {
-            editingBytes = it.bytes
-            viewModel.consumeCapture()
-        }
-    }
-
     editingImageUri?.let { uri ->
         val quality by viewModel.imageJpegQuality.collectAsState()
         PhotoEditorDialog(
@@ -347,19 +360,6 @@ fun ChatScreen(contactId: String, onBack: () -> Unit, onOpenCamera: () -> Unit, 
             onConfirm = { bytes ->
                 viewModel.stageAttachment(bytes, "image/jpeg", PayloadKind.IMAGE, fileName = null)
                 editingImageUri = null
-            },
-        )
-    }
-
-    editingBytes?.let { bytes ->
-        val quality by viewModel.imageJpegQuality.collectAsState()
-        PhotoEditorDialog(
-            source = PhotoSource.BytesSource(bytes),
-            jpegQuality = quality,
-            onCancel = { editingBytes = null },
-            onConfirm = { edited ->
-                viewModel.stageAttachment(edited, "image/jpeg", PayloadKind.IMAGE, fileName = null)
-                editingBytes = null
             },
         )
     }
@@ -383,6 +383,7 @@ fun ChatScreen(contactId: String, onBack: () -> Unit, onOpenCamera: () -> Unit, 
             nickname = if (viewModel.isSelf) "$nickname (Ty)" else nickname,
             avatarPath = avatarPath,
             hertzId = viewModel.contactId,
+            qrText = contactQrText,
             isSelf = viewModel.isSelf,
             onDismiss = { detailsOpen = false },
             onBlock = {
@@ -405,8 +406,8 @@ private fun MessageBubble(
 ) {
     val bubbleColor = when {
         isCurrentMatch -> MaterialTheme.colorScheme.primaryContainer
-        message.fromMe -> HertzGreen
-        else -> MaterialTheme.colorScheme.surfaceVariant
+        message.fromMe -> HertzGreen.copy(alpha = 0.92f)
+        else -> HertzMatte.bubbleTheirs()
     }
     val textColor = when {
         isCurrentMatch -> MaterialTheme.colorScheme.onPrimaryContainer
@@ -460,11 +461,12 @@ private fun MessageBubble(
                 }
             }
         }
-        // No delivery receipts under messages anymore: a small spinner only while the
-        // message hasn't left the device yet, an error mark if it failed for good.
+        // No delivery receipts under messages anymore: a small spinner until the peer
+        // confirms receipt (SENT only means the bytes left this device), an error
+        // mark if it failed for good.
         if (message.fromMe) {
             when (message.deliveryState) {
-                DeliveryState.PENDING, DeliveryState.SENDING -> CircularProgressIndicator(
+                DeliveryState.PENDING, DeliveryState.SENDING, DeliveryState.SENT -> CircularProgressIndicator(
                     modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp).size(12.dp),
                     strokeWidth = 2.dp,
                 )
@@ -485,6 +487,7 @@ private fun ContactDetailsSheet(
     nickname: String,
     avatarPath: String?,
     hertzId: String,
+    qrText: String?,
     isSelf: Boolean,
     onDismiss: () -> Unit,
     onBlock: () -> Unit,
@@ -532,6 +535,20 @@ private fun ContactDetailsSheet(
             TextButton(onClick = { clipboard.setText(AnnotatedString(hertzId)) }) {
                 Icon(Icons.Filled.ContentCopy, contentDescription = null, modifier = Modifier.size(18.dp))
                 Text("  Zkopírovat Hertz ID")
+            }
+            if (qrText != null) {
+                val bitmap = remember(qrText) { cz.kuclab.hertzchat.ui.migration.generateQrBitmap(qrText) }
+                Image(
+                    bitmap = bitmap.asImageBitmap(),
+                    contentDescription = "QR kód kontaktu",
+                    modifier = Modifier.size(180.dp).padding(top = 8.dp),
+                )
+                Text(
+                    "Naskenuj pro přidání kontaktu",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(top = 4.dp),
+                )
             }
             if (!isSelf) {
                 OutlinedButton(

@@ -17,7 +17,6 @@ import cz.kuclab.hertzchat.data.repository.DraftStore
 import cz.kuclab.hertzchat.data.repository.P2pChatService
 import cz.kuclab.hertzchat.data.repository.SettingsRepository
 import cz.kuclab.hertzchat.media.MediaStorage
-import cz.kuclab.hertzchat.media.PendingCaptureStore
 import cz.kuclab.hertzchat.network.p2p.I2pState
 import cz.kuclab.hertzchat.p2p.ActiveChatTracker
 import cz.kuclab.hertzchat.ui.common.PendingAttachment
@@ -27,6 +26,7 @@ import java.io.File
 import javax.inject.Inject
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.serialization.encodeToString
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -49,7 +49,6 @@ class ChatViewModel @Inject constructor(
     identityKeyManager: IdentityKeyManager,
     private val mediaStorage: MediaStorage,
     private val activeChatTracker: ActiveChatTracker,
-    private val captureStore: PendingCaptureStore,
     @ApplicationContext private val context: Context,
 ) : ViewModel() {
 
@@ -84,6 +83,11 @@ class ChatViewModel @Inject constructor(
     private val _contactAvatarPath = MutableStateFlow<String?>(null)
     val contactAvatarPath: StateFlow<String?> = _contactAvatarPath
 
+    /** The add-friend QR payload for this contact (HertzId JSON, the same shape the scanner parses) - ours when this is the self chat. */
+    private val _contactQrText = MutableStateFlow<String?>(null)
+    val contactQrText: StateFlow<String?> = _contactQrText
+    private val qrJson = kotlinx.serialization.json.Json { ignoreUnknownKeys = true }
+
     private val _imageJpegQuality = MutableStateFlow(95)
     val imageJpegQuality: StateFlow<Int> = _imageJpegQuality
 
@@ -96,21 +100,39 @@ class ChatViewModel @Inject constructor(
     private val _pending = MutableStateFlow<List<PendingAttachment>>(emptyList())
     val pending: StateFlow<List<PendingAttachment>> = _pending
 
-    /** A photo fresh from the in-app camera, waiting to be opened in the editor. */
-    val cameraCapture = captureStore.pendingCapture
-
-    fun consumeCapture() = captureStore.consume()
-
     init {
         viewModelScope.launch {
-            val contact = contactDao.find(contactId)
-            _contactNickname.value = contact?.nickname.orEmpty()
-            // Own photo is already on this device - showing it never depends on I2P
-            // round-tripping an AVATAR transfer to yourself.
-            _contactAvatarPath.value = if (isSelf) {
-                mediaStorage.selfAvatarFile().takeIf { it.exists() }?.absolutePath
-            } else {
-                contact?.avatarPath
+            // Observed, not one-shot: the header/details refresh live when the peer's
+            // PROFILE_UPDATE or AVATAR transfer lands while the chat is open.
+            contactDao.observeContact(contactId).collect { contact ->
+                _contactNickname.value = contact?.nickname.orEmpty()
+                // Own photo is already on this device - showing it never depends on I2P
+                // round-tripping an AVATAR transfer to yourself.
+                _contactAvatarPath.value = if (isSelf) {
+                    mediaStorage.selfAvatarFile().takeIf { it.exists() }?.absolutePath
+                } else {
+                    contact?.avatarPath
+                }
+                if (!isSelf) {
+                    _contactQrText.value = contact?.let {
+                        qrJson.encodeToString(
+                            cz.kuclab.hertzchat.network.p2p.HertzId.serializer(),
+                            cz.kuclab.hertzchat.network.p2p.HertzId(
+                                contactId = it.contactId,
+                                nickname = it.nickname,
+                                identityKeyBase64 = android.util.Base64.encodeToString(it.identityKeyBytes, android.util.Base64.NO_WRAP),
+                                i2pDestination = it.i2pDestination,
+                            ),
+                        )
+                    }
+                }
+            }
+        }
+        if (isSelf) {
+            viewModelScope.launch {
+                p2pChatService.i2pDestination.collect { address ->
+                    _contactQrText.value = address?.let { p2pChatService.myHertzId()?.let { id -> qrJson.encodeToString(cz.kuclab.hertzchat.network.p2p.HertzId.serializer(), id) } }
+                }
             }
         }
         viewModelScope.launch {
@@ -137,8 +159,11 @@ class ChatViewModel @Inject constructor(
         if (text.isEmpty() && staged.isEmpty()) return
         warnIfOffline()
         if (text.isNotEmpty()) p2pChatService.sendText(contactId, text)
-        staged.forEach { p2pChatService.sendMedia(contactId, it.file.readBytes(), it.mimeType, it.kind, it.fileName) }
-        clearPending()
+        // Reading staged files is disk I/O - a video would freeze the UI for seconds.
+        viewModelScope.launch(Dispatchers.IO) {
+            staged.forEach { p2pChatService.sendMedia(contactId, it.file.readBytes(), it.mimeType, it.kind, it.fileName) }
+            clearPending()
+        }
         _draft.value = ""
         draftStore.clear(contactId)
     }

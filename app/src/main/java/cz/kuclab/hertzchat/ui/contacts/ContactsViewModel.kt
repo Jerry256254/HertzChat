@@ -5,7 +5,6 @@ import androidx.lifecycle.viewModelScope
 import cz.kuclab.hertzchat.crypto.IdentityKeyManager
 import cz.kuclab.hertzchat.data.db.ContactDao
 import cz.kuclab.hertzchat.data.repository.P2pChatService
-import cz.kuclab.hertzchat.data.repository.SettingsRepository
 import cz.kuclab.hertzchat.network.p2p.HertzId
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
@@ -21,16 +20,11 @@ import kotlinx.serialization.json.Json
 @HiltViewModel
 class ContactsViewModel @Inject constructor(
     private val p2pChatService: P2pChatService,
-    contactDao: ContactDao,
-    settingsRepository: SettingsRepository,
+    private val contactDao: ContactDao,
     identityKeyManager: IdentityKeyManager,
 ) : ViewModel() {
 
     private val json = Json { ignoreUnknownKeys = true }
-
-    val showAssistantContact = settingsRepository.settings
-        .map { it.showAssistantContact }
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), true)
 
     // Excludes the self contact: it exists so "message yourself" has a normal-looking
     // chat row, but it never has a real Signal session (self-messages are delivered
@@ -49,6 +43,11 @@ class ContactsViewModel @Inject constructor(
     val i2pError = p2pChatService.i2pError.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
 
     fun retryI2p() = p2pChatService.retryI2p()
+
+    val blockedContacts = contactDao.observeBlocked()
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    fun unblock(contactId: String) = viewModelScope.launch { contactDao.setBlocked(contactId, false) }
 
     /** Null until I2P has opened our destination - the QR/ID isn't shareable before that. */
     val myHertzIdQrText: StateFlow<String?> = p2pChatService.i2pDestination

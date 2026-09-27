@@ -34,6 +34,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import cz.kuclab.hertzchat.ui.theme.HertzGreen
+import cz.kuclab.hertzchat.ui.theme.HertzMatte
 
 /**
  * Replacement for stock `DropdownMenu` used for short action lists (chat-row long-press,
@@ -54,7 +55,9 @@ import cz.kuclab.hertzchat.ui.theme.HertzGreen
 @Composable
 private fun RoundedMenuSurface(radius: Dp, content: @Composable () -> Unit) {
     MaterialTheme(
-        colorScheme = MaterialTheme.colorScheme,
+        // This M3's DropdownMenu takes no containerColor - its container is
+        // surfaceContainer, so the matte tone goes in through the local scheme.
+        colorScheme = MaterialTheme.colorScheme.copy(surfaceContainer = HertzMatte.cardRaised()),
         shapes = MaterialTheme.shapes.copy(extraSmall = RoundedCornerShape(radius)),
         typography = MaterialTheme.typography,
         content = content,

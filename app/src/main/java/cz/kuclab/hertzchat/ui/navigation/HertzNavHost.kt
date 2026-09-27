@@ -15,7 +15,6 @@ import cz.kuclab.hertzchat.ui.contacts.ContactsScreen
 import cz.kuclab.hertzchat.ui.file.FileViewerScreen
 import cz.kuclab.hertzchat.ui.groupchat.GroupChatScreen
 import cz.kuclab.hertzchat.ui.assistant.HertzAssistantScreen
-import cz.kuclab.hertzchat.ui.camera.CameraScreen
 import cz.kuclab.hertzchat.ui.migration.QrExportScreen
 import cz.kuclab.hertzchat.ui.migration.QrImportScreen
 import cz.kuclab.hertzchat.ui.onboarding.OnboardingScreen
@@ -57,7 +56,6 @@ fun HertzNavHost(viewModel: RootViewModel = hiltViewModel()) {
             ChatScreen(
                 contactId = contactId,
                 onBack = { navController.popBackStack() },
-                onOpenCamera = { navController.navigate(Routes.CAMERA) },
                 onOpenFile = { messageId -> navController.navigate(Routes.fileViewer(messageId)) },
             )
         }
@@ -70,14 +68,12 @@ fun HertzNavHost(viewModel: RootViewModel = hiltViewModel()) {
                 groupId = groupId,
                 onBack = { navController.popBackStack() },
                 onLeft = { navController.popBackStack() },
-                onOpenCamera = { navController.navigate(Routes.CAMERA) },
                 onOpenFile = { messageId -> navController.navigate(Routes.fileViewer(messageId)) },
             )
         }
         composable(Routes.CONTACTS) {
             ContactsScreen(
                 onOpenChat = { contactId -> navController.navigate(Routes.chat(contactId)) },
-                onOpenAssistant = { navController.navigate(Routes.ASSISTANT_CHAT) },
             )
         }
         composable(Routes.SETTINGS) {
@@ -85,9 +81,6 @@ fun HertzNavHost(viewModel: RootViewModel = hiltViewModel()) {
         }
         composable(Routes.ASSISTANT_CHAT) {
             HertzAssistantScreen(onBack = { navController.popBackStack() })
-        }
-        composable(Routes.CAMERA) {
-            CameraScreen(onDone = { navController.popBackStack() })
         }
         composable(
             route = Routes.FILE_VIEWER,

@@ -252,12 +252,17 @@ private fun MediaViewerDialog(
 
 @Composable
 private fun ViewerImagePage(path: String?) {
+    val context = LocalContext.current
     var scale by remember { mutableFloatStateOf(1f) }
     var offsetX by remember { mutableFloatStateOf(0f) }
     var offsetY by remember { mutableFloatStateOf(0f) }
 
+    // Full resolution, not screen size: zooming a screen-sized decode turns to mush.
+    val request = remember(path) {
+        coil.request.ImageRequest.Builder(context).data(path).size(coil.size.Size.ORIGINAL).build()
+    }
     AsyncImage(
-        model = path,
+        model = request,
         contentDescription = "Obrázek na celou obrazovku",
         contentScale = ContentScale.Fit,
         modifier = Modifier
@@ -314,7 +319,12 @@ private fun ViewerVideoPage(path: String?, active: Boolean) {
     )
 }
 
-/** First frame of a local video file, decoded once per bubble for the thumbnail. */
+/**
+ * A representative frame of a local video file, decoded once per bubble for the
+ * thumbnail. One second in, not at zero - time-zero is a black/blank frame on most
+ * encodings. Capped at 720px wide: plenty sharp for a 220dp thumbnail, far lighter
+ * than a full 4K frame.
+ */
 @Composable
 private fun rememberVideoFrame(path: String?): ImageBitmap? {
     return remember(path) {
@@ -322,7 +332,16 @@ private fun rememberVideoFrame(path: String?): ImageBitmap? {
         runCatching {
             MediaMetadataRetriever().use { retriever ->
                 retriever.setDataSource(path)
-                retriever.getFrameAtTime(0)?.asImageBitmap()
+                val frame = retriever.getFrameAtTime(1_000_000, MediaMetadataRetriever.OPTION_CLOSEST_SYNC)
+                    ?: retriever.getFrameAtTime(0)
+                    ?: return@use null
+                val capped = if (frame.width > 720) {
+                    val h = (frame.height * 720f / frame.width).toInt().coerceAtLeast(1)
+                    android.graphics.Bitmap.createScaledBitmap(frame, 720, h, true).also { frame.recycle() }
+                } else {
+                    frame
+                }
+                capped.asImageBitmap()
             }
         }.getOrNull()
     }

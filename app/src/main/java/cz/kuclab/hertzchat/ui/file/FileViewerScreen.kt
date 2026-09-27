@@ -6,6 +6,8 @@ import android.graphics.pdf.PdfRenderer
 import android.os.ParcelFileDescriptor
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.gestures.detectTransformGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -40,19 +42,24 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
+import cz.kuclab.hertzchat.ui.theme.HertzMatte
 import java.io.File
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -94,6 +101,7 @@ fun FileViewerScreen(onBack: () -> Unit, viewModel: FileViewerViewModel = hiltVi
         snackbarHost = { SnackbarHost(snackbar) },
         topBar = {
             CenterAlignedTopAppBar(
+                colors = HertzMatte.topBarColors(),
                 title = { Text(name, maxLines = 1) },
                 navigationIcon = { IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Zpět") } },
                 actions = {
@@ -154,6 +162,9 @@ private fun TextPreview(file: File) {
             CircularProgressIndicator()
         }
     } else {
+        // Pinch scales the text; panning is deliberately left alone so the
+        // vertical scroll underneath keeps working.
+        var textScale by remember(file) { mutableFloatStateOf(1f) }
         Column(modifier = Modifier.fillMaxSize()) {
             if (truncated) {
                 Text(
@@ -167,7 +178,16 @@ private fun TextPreview(file: File) {
                 content,
                 fontFamily = FontFamily.Monospace,
                 style = MaterialTheme.typography.bodySmall,
-                modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp),
+                modifier = Modifier
+                    .fillMaxSize()
+                    .verticalScroll(rememberScrollState())
+                    .graphicsLayer(scaleX = textScale, scaleY = textScale)
+                    .pointerInput(file) {
+                        detectTransformGestures { _, _, zoom, _ ->
+                            textScale = (textScale * zoom).coerceIn(1f, 4f)
+                        }
+                    }
+                    .padding(16.dp),
             )
         }
     }
@@ -197,16 +217,24 @@ private fun PdfPreview(file: File) {
             runCatching {
                 pageCount = r.pageCount
                 r.openPage(pageIndex.coerceIn(0, r.pageCount - 1)).use { page ->
-                    // 2x rasterization, capped so a huge page doesn't OOM the viewer.
-                    val scale = 2f
-                    val width = (page.width * scale).toInt().coerceAtMost(2560)
-                    val height = (page.height * width / page.width).coerceAtMost(2560)
+                    // 3x rasterization so pinch-zoom stays crisp, capped so a huge
+                    // page doesn't OOM the viewer.
+                    val scale = 3f
+                    val width = (page.width * scale).toInt().coerceAtMost(3200)
+                    val height = (page.height * width / page.width).coerceAtMost(3200)
                     Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888).also { bmp ->
                         page.render(bmp, null, null, PdfRenderer.Page.RENDER_MODE_FOR_DISPLAY)
                     }
                 }
             }.onSuccess { bitmap = it }.onFailure { failed = true }
         }
+    }
+
+    var pdfScale by remember(file, pageIndex) { mutableFloatStateOf(1f) }
+    var pdfOffset by remember(file, pageIndex) { mutableStateOf(Offset.Zero) }
+    fun resetPdfZoom() {
+        pdfScale = 1f
+        pdfOffset = Offset.Zero
     }
 
     Column(modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.surfaceContainerLowest)) {
@@ -218,7 +246,38 @@ private fun PdfPreview(file: File) {
                     bitmap = bitmap!!.asImageBitmap(),
                     contentDescription = "Strana ${pageIndex + 1}",
                     contentScale = ContentScale.Fit,
-                    modifier = Modifier.fillMaxSize().padding(8.dp),
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(8.dp)
+                        .graphicsLayer(
+                            scaleX = pdfScale,
+                            scaleY = pdfScale,
+                            translationX = pdfOffset.x,
+                            translationY = pdfOffset.y,
+                        )
+                        .pointerInput(file, pageIndex) {
+                            detectTapGestures(
+                                onDoubleTap = {
+                                    if (pdfScale > 1f) resetPdfZoom() else pdfScale = 2.5f
+                                },
+                            )
+                        }
+                        .pointerInput(file, pageIndex) {
+                            detectTransformGestures { _, pan, zoom, _ ->
+                                val next = (pdfScale * zoom).coerceIn(1f, 4f)
+                                pdfScale = next
+                                pdfOffset = if (next == 1f) {
+                                    Offset.Zero
+                                } else {
+                                    // Bounded pan: the page can't be pushed clean off screen.
+                                    val bound = 1200f * next
+                                    Offset(
+                                        (pdfOffset.x + pan.x).coerceIn(-bound, bound),
+                                        (pdfOffset.y + pan.y).coerceIn(-bound, bound),
+                                    )
+                                }
+                            }
+                        },
                 )
             }
         }

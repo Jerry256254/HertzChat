@@ -46,6 +46,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.asAndroidPath
@@ -71,10 +72,15 @@ sealed interface PhotoSource {
     }
 }
 
+private fun android.graphics.Rect.toComposeRect(): Rect = Rect(left.toFloat(), top.toFloat(), right.toFloat(), bottom.toFloat())
+
+private fun Rect.toAndroidRect(): android.graphics.Rect = android.graphics.Rect(left.toInt(), top.toInt(), right.toInt(), bottom.toInt())
+
 private data class AspectOption(val label: String, val ratio: Float?)
 
 private val ASPECT_OPTIONS = listOf(
     AspectOption("Původní", null),
+    AspectOption("Volný", -1f),
     AspectOption("1:1", 1f),
     AspectOption("4:3", 4f / 3f),
     AspectOption("16:9", 16f / 9f),
@@ -98,7 +104,8 @@ private val DRAW_COLORS = listOf(
 )
 
 /**
- * The photo editor every outgoing picture passes through: crop-to-ratio + rotate,
+ * The photo editor every outgoing picture passes through: an interactive crop
+ * rectangle (drag to move, corners/edges to resize, optional aspect lock) + rotate,
  * freehand drawing, and a mosaic censor brush. Confirms staged JPEG bytes into the
  * message input tray - it never sends anything itself.
  */
@@ -111,6 +118,8 @@ fun PhotoEditorDialog(source: PhotoSource, jpegQuality: Int = 95, onCancel: () -
     var strokes by remember { mutableStateOf<List<EditorStroke>>(emptyList()) }
     var drawColor by remember { mutableStateOf(Color.Red) }
     var brushWidth by remember { mutableFloatStateOf(24f) }
+    /** Interactive crop rectangle in rotated-bitmap pixels; null means no crop. */
+    var cropRectBmp by remember { mutableStateOf<Rect?>(null) }
 
     val originalBitmap = remember(source) {
         when (source) {
@@ -124,11 +133,33 @@ fun PhotoEditorDialog(source: PhotoSource, jpegQuality: Int = 95, onCancel: () -
         return
     }
 
+    val rotatedBitmap = remember(originalBitmap, rotationDegrees) {
+        ImageEditor.rotate(originalBitmap, rotationDegrees)
+    }
+    // Rotation swaps the dimensions the rectangle lives in, so any stored rect is
+    // re-seeded from the aspect choice whenever the rotated bitmap changes.
+    androidx.compose.runtime.LaunchedEffect(rotatedBitmap) {
+        cropRectBmp = selectedAspect?.let { aspect ->
+            ImageEditor.defaultCropRect(rotatedBitmap.width, rotatedBitmap.height, aspect).toComposeRect()
+        }
+    }
+
     // Crop/rotate define the base every stroke is drawn onto - changing them clears
     // strokes (see the tool handlers below), since stored bitmap coordinates would no
-    // longer match the new base.
-    val baseBitmap = remember(originalBitmap, rotationDegrees, selectedAspect) {
-        ImageEditor.cropToAspect(ImageEditor.rotate(originalBitmap, rotationDegrees), selectedAspect)
+    // longer match the new base. While the crop rectangle is being dragged the base
+    // stays the uncropped photo (re-cutting a bitmap every drag frame would churn
+    // tens of megabytes); the cut applies when leaving crop mode or on confirm.
+    val baseBitmap = remember(rotatedBitmap, cropRectBmp, tool) {
+        val rect = cropRectBmp
+        if (rect == null || tool == EditorTool.CROP) rotatedBitmap
+        else ImageEditor.cropToRect(rotatedBitmap, rect.toAndroidRect())
+    }
+
+    /** The exact bytes confirm sends: cropped base plus committed strokes, always consistent - every base-changing action clears strokes. */
+    fun commitBitmap(): Bitmap {
+        val rect = cropRectBmp
+        val cropped = if (rect == null) rotatedBitmap else ImageEditor.cropToRect(rotatedBitmap, rect.toAndroidRect())
+        return bakeStrokes(cropped, strokes)
     }
 
     // The committed result, recomputed only when strokes change (not per touch move).
@@ -150,14 +181,16 @@ fun PhotoEditorDialog(source: PhotoSource, jpegQuality: Int = 95, onCancel: () -
                     Icon(Icons.Filled.Close, contentDescription = "Zrušit", tint = Color.White)
                 }
                 Text("Upravit fotku", color = Color.White, fontWeight = FontWeight.SemiBold)
-                IconButton(onClick = { onConfirm(ImageEditor.toJpegBytes(bakedBitmap, jpegQuality)) }) {
+                IconButton(onClick = { onConfirm(ImageEditor.toJpegBytes(commitBitmap(), jpegQuality)) }) {
                     Icon(Icons.Filled.Check, contentDescription = "Přidat", tint = Color.White)
                 }
             }
 
             var liveStroke by remember { mutableStateOf<EditorStroke?>(null) }
             PhotoCanvas(
-                bitmap = bakedBitmap.asImageBitmap(),
+                // Crop mode shows the pre-crop photo under the interactive rectangle;
+                // draw/censor modes show the cropped base strokes land on.
+                bitmap = (if (tool == EditorTool.CROP) rotatedBitmap else bakedBitmap).asImageBitmap(),
                 liveStroke = liveStroke.takeIf { tool != EditorTool.CROP },
                 drawEnabled = tool != EditorTool.CROP,
                 onStrokeStart = { point ->
@@ -172,6 +205,12 @@ fun PhotoEditorDialog(source: PhotoSource, jpegQuality: Int = 95, onCancel: () -
                     liveStroke?.let { if (it.points.size > 1) strokes = strokes + it }
                     liveStroke = null
                 },
+                cropRect = cropRectBmp.takeIf { tool == EditorTool.CROP },
+                cropAspect = selectedAspect,
+                onCropRectChange = {
+                    cropRectBmp = it
+                    strokes = emptyList()
+                },
                 modifier = Modifier.weight(1f).fillMaxWidth(),
             )
 
@@ -183,7 +222,13 @@ fun PhotoEditorDialog(source: PhotoSource, jpegQuality: Int = 95, onCancel: () -
                     ASPECT_OPTIONS.forEach { option ->
                         FilterChip(
                             selected = selectedAspect == option.ratio,
-                            onClick = { strokes = emptyList(); selectedAspect = option.ratio },
+                            onClick = {
+                                strokes = emptyList()
+                                selectedAspect = option.ratio
+                                cropRectBmp = option.ratio?.let {
+                                    ImageEditor.defaultCropRect(rotatedBitmap.width, rotatedBitmap.height, it).toComposeRect()
+                                }
+                            },
                             label = { Text(option.label) },
                         )
                     }
@@ -246,7 +291,7 @@ fun PhotoEditorDialog(source: PhotoSource, jpegQuality: Int = 95, onCancel: () -
             Row(modifier = Modifier.fillMaxWidth().padding(top = 8.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 TextButton(onClick = onCancel, modifier = Modifier.weight(1f)) { Text("Zrušit", color = Color.White) }
                 androidx.compose.material3.Button(
-                    onClick = { onConfirm(ImageEditor.toJpegBytes(bakedBitmap, jpegQuality)) },
+                    onClick = { onConfirm(ImageEditor.toJpegBytes(commitBitmap(), jpegQuality)) },
                     modifier = Modifier.weight(1f),
                 ) { Text("Přidat") }
             }
@@ -265,6 +310,7 @@ private fun ToolButton(icon: androidx.compose.ui.graphics.vector.ImageVector, la
 /**
  * The photo with a touch layer: drags become strokes in bitmap coordinates (ContentScale.Fit
  * letterboxing is accounted for), and the in-progress stroke previews live on top.
+ * In crop mode the same layer hosts the interactive crop rectangle instead.
  */
 @Composable
 private fun PhotoCanvas(
@@ -274,6 +320,9 @@ private fun PhotoCanvas(
     onStrokeStart: (Offset) -> Unit,
     onStrokeMove: (Offset) -> Unit,
     onStrokeEnd: () -> Unit,
+    cropRect: Rect?,
+    cropAspect: Float?,
+    onCropRectChange: (Rect) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val density = LocalDensity.current
@@ -291,6 +340,11 @@ private fun PhotoCanvas(
         fun toBitmap(touch: Offset): Offset =
             Offset(((touch.x - offX) / scale).coerceIn(0f, bmpW), ((touch.y - offY) / scale).coerceIn(0f, bmpH))
 
+        // Read through a ref: re-keying the gesture detector on every rectangle
+        // change would restart (and kill) the drag in progress.
+        val latestCropRect by androidx.compose.runtime.rememberUpdatedState(cropRect)
+        val latestOnCropChange by androidx.compose.runtime.rememberUpdatedState(onCropRectChange)
+
         Image(
             bitmap = bitmap,
             contentDescription = "Náhled úpravy obrázku",
@@ -307,6 +361,24 @@ private fun PhotoCanvas(
                         onDrag = { change, _ -> onStrokeMove(toBitmap(change.position)) },
                         onDragEnd = onStrokeEnd,
                         onDragCancel = onStrokeEnd,
+                    )
+                }
+                .pointerInput(cropRect != null, scale, offX, offY, cropAspect, bmpW, bmpH) {
+                    if (cropRect == null) return@pointerInput
+                    var drag: CropDrag? = null
+                    val slop = with(density) { 24.dp.toPx() }
+                    detectDragGestures(
+                        onDragStart = { start ->
+                            drag = latestCropRect?.let { classifyCropGrab(start, it, scale, offX, offY, slop, (cropAspect ?: 0f) > 0f) }
+                        },
+                        onDrag = { _, amount ->
+                            val rect = latestCropRect ?: return@detectDragGestures
+                            val mode = drag ?: return@detectDragGestures
+                            val next = applyCropDrag(rect, mode, amount / scale, cropAspect, bmpW, bmpH)
+                            if (next != rect) latestOnCropChange(next)
+                        },
+                        onDragEnd = { drag = null },
+                        onDragCancel = { drag = null },
                     )
                 },
         ) {
@@ -329,7 +401,117 @@ private fun PhotoCanvas(
                     )
                 }
             }
+            cropRect?.let { drawCropOverlay(it, scale, offX, offY) }
         }
+    }
+}
+
+/** Minimum crop rectangle side in bitmap pixels - smaller than this is a slip, not a crop. */
+private const val MIN_CROP_PX = 64f
+
+private sealed interface CropDrag {
+    data object Move : CropDrag
+    /** Corner resize around the fixed opposite [anchor] (bitmap coordinates). */
+    data class Corner(val anchor: Offset) : CropDrag
+    /** Single-edge resize in free mode: 0 = left, 1 = top, 2 = right, 3 = bottom. */
+    data class Edge(val edge: Int) : CropDrag
+}
+
+/** Decides what a crop-mode drag does from where the finger landed (display pixels). */
+private fun classifyCropGrab(start: Offset, rectBmp: Rect, scale: Float, offX: Float, offY: Float, slop: Float, ratioLocked: Boolean): CropDrag? {
+    val l = offX + rectBmp.left * scale
+    val t = offY + rectBmp.top * scale
+    val r = offX + rectBmp.right * scale
+    val b = offY + rectBmp.bottom * scale
+    val corners = listOf(Offset(l, t), Offset(r, t), Offset(l, b), Offset(r, b))
+    val anchors = listOf(rectBmp.bottomRight, Offset(rectBmp.left, rectBmp.bottom), Offset(rectBmp.right, rectBmp.top), rectBmp.topLeft)
+
+    fun nearestCorner(): Int = corners.indices.minBy { (corners[it] - start).getDistance() }
+
+    if (corners.indexOfFirst { (it - start).getDistance() <= slop } != -1) {
+        return CropDrag.Corner(anchors[corners.indexOfFirst { (it - start).getDistance() <= slop }])
+    }
+    val nearLeft = kotlin.math.abs(start.x - l) <= slop && start.y in t..b
+    val nearRight = kotlin.math.abs(start.x - r) <= slop && start.y in t..b
+    val nearTop = kotlin.math.abs(start.y - t) <= slop && start.x in l..r
+    val nearBottom = kotlin.math.abs(start.y - b) <= slop && start.x in l..r
+    if (nearLeft || nearRight || nearTop || nearBottom) {
+        // A locked ratio can't hold on a single edge - treat it as the nearest
+        // corner so the rectangle keeps its proportions while resizing.
+        if (ratioLocked) return CropDrag.Corner(anchors[nearestCorner()])
+        return CropDrag.Edge(when { nearLeft -> 0; nearTop -> 1; nearRight -> 2; else -> 3 })
+    }
+    if (start.x in l..r && start.y in t..b) return CropDrag.Move
+    return null
+}
+
+/** Applies one drag step (bitmap pixels) to the crop rectangle. Pure geometry - no Compose. */
+private fun applyCropDrag(rect: Rect, mode: CropDrag, delta: Offset, aspect: Float?, bmpW: Float, bmpH: Float): Rect {
+    return when (mode) {
+        CropDrag.Move -> {
+            val dx = delta.x.coerceIn(-rect.left, bmpW - rect.right)
+            val dy = delta.y.coerceIn(-rect.top, bmpH - rect.bottom)
+            rect.translate(dx, dy)
+        }
+        is CropDrag.Edge -> {
+            var (l, t, r, b) = listOf(rect.left, rect.top, rect.right, rect.bottom)
+            when (mode.edge) {
+                0 -> l = (l + delta.x).coerceIn(0f, r - MIN_CROP_PX)
+                1 -> t = (t + delta.y).coerceIn(0f, b - MIN_CROP_PX)
+                2 -> r = (r + delta.x).coerceIn(l + MIN_CROP_PX, bmpW)
+                else -> b = (b + delta.y).coerceIn(t + MIN_CROP_PX, bmpH)
+            }
+            Rect(l, t, r, b)
+        }
+        is CropDrag.Corner -> {
+            val anchor = mode.anchor
+            val grabX = if (anchor.x <= rect.left + 0.5f) rect.right else rect.left
+            val grabY = if (anchor.y <= rect.top + 0.5f) rect.bottom else rect.top
+            var w = kotlin.math.abs(grabX + delta.x - anchor.x)
+            var h = kotlin.math.abs(grabY + delta.y - anchor.y)
+            val ratio = aspect ?: 0f
+            if (ratio > 0f) {
+                if (w / h.coerceAtLeast(1f) > ratio) w = h * ratio else h = w / ratio
+            }
+            w = w.coerceAtLeast(MIN_CROP_PX)
+            h = h.coerceAtLeast(MIN_CROP_PX)
+            val sx = if (grabX + delta.x >= anchor.x) 1f else -1f
+            val sy = if (grabY + delta.y >= anchor.y) 1f else -1f
+            var l = (if (sx > 0) anchor.x else anchor.x - w).coerceIn(0f, bmpW)
+            var t = (if (sy > 0) anchor.y else anchor.y - h).coerceIn(0f, bmpH)
+            var r = (if (sx > 0) anchor.x + w else anchor.x).coerceIn(0f, bmpW)
+            var bb = (if (sy > 0) anchor.y + h else anchor.y).coerceIn(0f, bmpH)
+            if (r - l < MIN_CROP_PX || bb - t < MIN_CROP_PX) return rect
+            Rect(l, t, r, bb)
+        }
+    }
+}
+
+private fun androidx.compose.ui.graphics.drawscope.DrawScope.drawCropOverlay(rect: Rect, scale: Float, offX: Float, offY: Float) {
+    val l = offX + rect.left * scale
+    val t = offY + rect.top * scale
+    val r = offX + rect.right * scale
+    val b = offY + rect.bottom * scale
+    val dim = Color.Black.copy(alpha = 0.55f)
+    drawRect(dim, topLeft = Offset(0f, 0f), size = androidx.compose.ui.geometry.Size(size.width, t))
+    drawRect(dim, topLeft = Offset(0f, b), size = androidx.compose.ui.geometry.Size(size.width, size.height - b))
+    drawRect(dim, topLeft = Offset(0f, t), size = androidx.compose.ui.geometry.Size(l, b - t))
+    drawRect(dim, topLeft = Offset(r, t), size = androidx.compose.ui.geometry.Size(size.width - r, b - t))
+    drawRect(Color.White, topLeft = Offset(l, t), size = androidx.compose.ui.geometry.Size(r - l, b - t), style = Stroke(width = 2.dp.toPx()))
+    // Rule-of-thirds grid.
+    val gridColor = Color.White.copy(alpha = 0.55f)
+    val gridWidth = 1.dp.toPx()
+    for (i in 1..2) {
+        val gx = l + (r - l) * i / 3f
+        drawLine(gridColor, Offset(gx, t), Offset(gx, b), strokeWidth = gridWidth)
+        val gy = t + (b - t) * i / 3f
+        drawLine(gridColor, Offset(l, gy), Offset(r, gy), strokeWidth = gridWidth)
+    }
+    // Corner handles: white dots with a dark outline, visible on any photo.
+    val handleR = 6.dp.toPx()
+    listOf(Offset(l, t), Offset(r, t), Offset(l, b), Offset(r, b)).forEach { center ->
+        drawCircle(Color.Black.copy(alpha = 0.45f), radius = handleR + 2.dp.toPx(), center = center)
+        drawCircle(Color.White, radius = handleR, center = center)
     }
 }
 

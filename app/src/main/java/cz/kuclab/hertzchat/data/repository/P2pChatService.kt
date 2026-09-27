@@ -58,6 +58,12 @@ private const val FRAME_FRIEND_REQUEST: Byte = 4
 private const val FRAME_FRIEND_RESPONSE: Byte = 5
 
 private const val RETRY_INTERVAL_MS = 60_000L
+/** How long a SENT message waits for a delivery receipt before it's confirmed optimistically (the peer may run a version that never sends receipts). */
+private const val ACK_GRACE_MS = 10 * 60_000L
+/** Incoming transfers with no progress past this age are discarded (their file handle closed, partial file deleted). */
+private const val STALE_TRANSFER_MS = 30 * 60_000L
+/** Attempts per chunk before the whole transfer is abandoned - re-dialing between attempts. */
+private const val CHUNK_ATTEMPTS = 5
 
 data class IncomingFriendRequest(val contactId: String, val nickname: String, val request: FriendRequestPayload)
 
@@ -131,6 +137,7 @@ class P2pChatService @Inject constructor(
         val outputFile: File,
         val out: BufferedOutputStream,
         var received: Int = 0,
+        val startedAt: Long = System.currentTimeMillis(),
     )
 
     private val incomingTransfers = mutableMapOf<String, IncomingTransfer>()
@@ -597,18 +604,35 @@ class P2pChatService @Inject constructor(
             val contact = contactDao.find(contactId)
             val delivered = contact != null && runCatching {
                 check(trySendPayload(contactId, control))
-                var offset = 0
-                var index = 0
-                while (offset < sourceBytes.size) {
-                    val end = minOf(offset + MediaCrypto.CHUNK_SIZE, sourceBytes.size)
-                    val cipherChunk = MediaCrypto.encryptChunk(key, nonceSalt, index, sourceBytes.copyOfRange(offset, end))
-                    check(sendFrameTo(contactId, contact.i2pDestination, frameMediaChunk(transferId, index, cipherChunk)))
-                    offset = end
-                    index++
-                }
+                check(sendChunkStream(contactId, contact.i2pDestination, transferId, key, nonceSalt, sourceBytes))
             }.isSuccess
             messageDao.updateState(messageId, if (delivered) DeliveryState.SENT else DeliveryState.PENDING)
         }
+    }
+
+    /**
+     * Streams encrypted chunks over whatever connection is currently alive, re-attempting
+     * each chunk a few times (sendFrameTo re-dials between attempts). Without per-chunk
+     * retries, one failed chunk out of hundreds abandons the whole photo - over flaky
+     * I2P that makes large attachments effectively undeliverable.
+     */
+    private suspend fun sendChunkStream(contactId: String, i2pDestination: String, transferId: UUID, key: ByteArray, nonceSalt: ByteArray, sourceBytes: ByteArray): Boolean {
+        var offset = 0
+        var index = 0
+        while (offset < sourceBytes.size) {
+            val end = minOf(offset + MediaCrypto.CHUNK_SIZE, sourceBytes.size)
+            val cipherChunk = MediaCrypto.encryptChunk(key, nonceSalt, index, sourceBytes.copyOfRange(offset, end))
+            var sent = false
+            var attempts = 0
+            while (!sent && attempts < CHUNK_ATTEMPTS) {
+                sent = sendFrameTo(contactId, i2pDestination, frameMediaChunk(transferId, index, cipherChunk))
+                attempts++
+            }
+            if (!sent) return false
+            offset = end
+            index++
+        }
+        return true
     }
 
     /**
@@ -663,15 +687,7 @@ class P2pChatService @Inject constructor(
                 val contact = contactDao.find(member.contactId)
                 contact != null && runCatching {
                     check(trySendPayload(member.contactId, control))
-                    var offset = 0
-                    var index = 0
-                    while (offset < sourceBytes.size) {
-                        val end = minOf(offset + MediaCrypto.CHUNK_SIZE, sourceBytes.size)
-                        val cipherChunk = MediaCrypto.encryptChunk(key, nonceSalt, index, sourceBytes.copyOfRange(offset, end))
-                        check(sendFrameTo(member.contactId, contact.i2pDestination, frameMediaChunk(transferId, index, cipherChunk)))
-                        offset = end
-                        index++
-                    }
+                    check(sendChunkStream(member.contactId, contact.i2pDestination, transferId, key, nonceSalt, sourceBytes))
                 }.isSuccess
             }.any { it }
             messageDao.updateState(messageId, if (delivered) DeliveryState.SENT else DeliveryState.PENDING)
@@ -686,7 +702,30 @@ class P2pChatService @Inject constructor(
         // belongs off the main thread, same as everything else in here.
         scope.launch {
             mediaStorage.selfAvatarFile().writeBytes(jpegBytes)
-            contactDao.observeContacts().first().forEach { contact -> sendAvatarTo(contact.contactId, jpegBytes) }
+            broadcastProfile()
+        }
+    }
+
+    /**
+     * Pushes our current nickname (and avatar, if any) to every contact, so both update
+     * on their side without anyone re-scanning a QR code. Called after an avatar change
+     * and after a nickname change alike - profile data is tiny and changes are rare.
+     */
+    fun broadcastProfile() {
+        scope.launch {
+            val myId = identityKeyManager.contactId()
+            val nickname = identityKeyManager.nickname
+            val avatarBytes = mediaStorage.selfAvatarFile().takeIf { it.exists() }?.readBytes()
+            contactDao.observeContacts().first().forEach { contact ->
+                if (contact.contactId == myId) return@forEach
+                runCatching {
+                    trySendPayload(
+                        contact.contactId,
+                        ChatPayload(UUID.randomUUID().toString(), System.currentTimeMillis(), PayloadKind.PROFILE_UPDATE, profileNickname = nickname),
+                    )
+                }
+                if (avatarBytes != null) sendAvatarTo(contact.contactId, avatarBytes)
+            }
         }
     }
 
@@ -710,15 +749,7 @@ class P2pChatService @Inject constructor(
             val contact = contactDao.find(contactId) ?: return@launch
             runCatching {
                 check(trySendPayload(contactId, control))
-                var offset = 0
-                var index = 0
-                while (offset < jpegBytes.size) {
-                    val end = minOf(offset + MediaCrypto.CHUNK_SIZE, jpegBytes.size)
-                    val cipherChunk = MediaCrypto.encryptChunk(key, nonceSalt, index, jpegBytes.copyOfRange(offset, end))
-                    check(sendFrameTo(contactId, contact.i2pDestination, frameMediaChunk(transferId, index, cipherChunk)))
-                    offset = end
-                    index++
-                }
+                check(sendChunkStream(contactId, contact.i2pDestination, transferId, key, nonceSalt, jpegBytes))
             }
         }
     }
@@ -739,7 +770,7 @@ class P2pChatService @Inject constructor(
         val chunkCount = payload.mediaChunkCount ?: return
         val mimeType = payload.mediaMimeType ?: "application/octet-stream"
         val outputFile = if (payload.kind == PayloadKind.AVATAR) {
-            mediaStorage.contactAvatarFile(contactId)
+            mediaStorage.newContactAvatarFile(contactId)
         } else {
             mediaStorage.fileFor(transferId, mediaStorage.extensionFor(mimeType))
         }
@@ -780,7 +811,11 @@ class P2pChatService @Inject constructor(
             if (transfer.kind == PayloadKind.AVATAR) {
                 scope.launch {
                     contactDao.find(transfer.contactId)?.let {
+                        val previous = it.avatarPath?.let { path -> java.io.File(path) }
                         contactDao.update(it.copy(avatarPath = transfer.outputFile.absolutePath))
+                        if (previous != null && previous.absolutePath != transfer.outputFile.absolutePath) {
+                            runCatching { previous.delete() }
+                        }
                     }
                 }
                 return
@@ -800,9 +835,15 @@ class P2pChatService @Inject constructor(
                 senderContactId = transfer.senderContactId,
             )
             scope.launch {
-                messageDao.upsert(entity)
-                _events.tryEmit(ChatServiceEvent.MessageReceived(transfer.threadId, entity))
+                // Retries reuse the message id, so a completed transfer may simply be the
+                // second copy of something already shown - store idempotently, but only
+                // notify (and vibrate) the first time.
+                if (messageDao.find(transfer.messageId) == null) {
+                    messageDao.upsert(entity)
+                    _events.tryEmit(ChatServiceEvent.MessageReceived(transfer.threadId, entity))
+                }
             }
+            sendDeliveredAck(transfer.contactId, transfer.messageId)
         }
     }
 
@@ -823,21 +864,51 @@ class P2pChatService @Inject constructor(
     }
 
     private suspend fun retryPendingNow() {
-        val pending = messageDao.findAllPending()
+        sweepStaleTransfers()
+        val pending = messageDao.findUnsent()
         for (message in pending) {
+            // SENT without a receipt past the grace period means the peer runs a version
+            // that never sends receipts (or is gone) - confirm optimistically instead of
+            // spinning under the message forever.
+            if (message.deliveryState == DeliveryState.SENT && System.currentTimeMillis() - message.timestamp > ACK_GRACE_MS) {
+                messageDao.updateState(message.messageId, DeliveryState.DELIVERED)
+                continue
+            }
+            // Group threads live under the group id, not a contact id - resolving them as
+            // contacts silently skipped every failed group message forever.
+            if (groupDao.find(message.contactId) != null) {
+                retryGroupMessage(message.contactId, message)
+                continue
+            }
             val contact = contactDao.find(message.contactId) ?: continue
             if (contact.contactId in blockedContactIds) continue
             val delivered = if (message.type == MessageType.TEXT) {
                 trySendPayload(message.contactId, ChatPayload(message.messageId, message.timestamp, PayloadKind.TEXT, text = message.text))
             } else {
                 val bytes = message.mediaPath?.let { runCatching { File(it).readBytes() }.getOrNull() }
-                bytes != null && resendMedia(message, bytes, contact.i2pDestination)
+                bytes != null && resendMedia(message, bytes, contact.i2pDestination, groupId = null, toContactId = message.contactId)
             }
             if (delivered) messageDao.updateState(message.messageId, DeliveryState.SENT)
         }
     }
 
-    private suspend fun resendMedia(message: MessageEntity, sourceBytes: ByteArray, i2pDestination: String): Boolean {
+    private suspend fun retryGroupMessage(groupId: String, message: MessageEntity) {
+        val members = groupMemberDao.findMembers(groupId)
+        val delivered = if (message.type == MessageType.TEXT) {
+            val payload = ChatPayload(message.messageId, message.timestamp, PayloadKind.TEXT, text = message.text, groupId = groupId)
+            members.map { trySendPayload(it.contactId, payload) }.any { it }
+        } else {
+            val bytes = message.mediaPath?.let { runCatching { File(it).readBytes() }.getOrNull() } ?: return
+            members.map { member ->
+                val contact = contactDao.find(member.contactId) ?: return@map false
+                if (contact.contactId in blockedContactIds) return@map false
+                resendMedia(message, bytes, contact.i2pDestination, groupId = groupId, toContactId = member.contactId)
+            }.any { it }
+        }
+        if (delivered) messageDao.updateState(message.messageId, DeliveryState.SENT)
+    }
+
+    private suspend fun resendMedia(message: MessageEntity, sourceBytes: ByteArray, i2pDestination: String, groupId: String?, toContactId: String): Boolean {
         // A retried media message reuses a fresh transfer id/key - the original attempt may have
         // partially landed on the peer's side, and re-keying is simpler and just as cheap as
         // trying to resume a specific byte offset.
@@ -855,25 +926,43 @@ class P2pChatService @Inject constructor(
                 else -> PayloadKind.FILE
             },
             mediaMimeType = message.mediaMimeType,
+            mediaFileName = message.mediaFileName,
             mediaSizeBytes = sourceBytes.size.toLong(),
             mediaDurationMs = message.mediaDurationMs,
             mediaTransferId = transferId.toString(),
             mediaKeyBase64 = Base64.encodeToString(key, Base64.NO_WRAP),
             mediaNonceSaltBase64 = Base64.encodeToString(nonceSalt, Base64.NO_WRAP),
             mediaChunkCount = chunkCount,
+            groupId = groupId,
         )
         return runCatching {
-            check(trySendPayload(message.contactId, control))
-            var offset = 0
-            var index = 0
-            while (offset < sourceBytes.size) {
-                val end = minOf(offset + MediaCrypto.CHUNK_SIZE, sourceBytes.size)
-                val cipherChunk = MediaCrypto.encryptChunk(key, nonceSalt, index, sourceBytes.copyOfRange(offset, end))
-                check(sendFrameTo(message.contactId, i2pDestination, frameMediaChunk(transferId, index, cipherChunk)))
-                offset = end
-                index++
-            }
+            check(trySendPayload(toContactId, control))
+            check(sendChunkStream(toContactId, i2pDestination, transferId, key, nonceSalt, sourceBytes))
         }.isSuccess
+    }
+
+    /** Confirms receipt back to the sender - this is what stops their spinner. Fire-and-forget: a lost receipt just means another retry cycle, never lost data. */
+    private fun sendDeliveredAck(contactId: String, ackForMessageId: String) {
+        scope.launch {
+            runCatching {
+                trySendPayload(
+                    contactId,
+                    ChatPayload(UUID.randomUUID().toString(), System.currentTimeMillis(), PayloadKind.DELIVERED_ACK, ackForMessageId = ackForMessageId),
+                )
+            }
+        }
+    }
+
+    /** Drops transfers whose chunks stopped arriving mid-photo: closes the leaked file handle and deletes the partial file. */
+    private fun sweepStaleTransfers() {
+        val cutoff = System.currentTimeMillis() - STALE_TRANSFER_MS
+        val staleIds = incomingTransfers.filterValues { it.startedAt < cutoff }.keys.toList()
+        staleIds.forEach { id ->
+            incomingTransfers.remove(id)?.let { transfer ->
+                runCatching { transfer.out.close() }
+                runCatching { transfer.outputFile.delete() }
+            }
+        }
     }
 
     // --- Connection handling ---
@@ -944,24 +1033,37 @@ class P2pChatService @Inject constructor(
             PayloadKind.IMAGE, PayloadKind.VIDEO, PayloadKind.VOICE, PayloadKind.FILE, PayloadKind.AVATAR -> beginIncomingTransfer(contactId, payload)
             PayloadKind.GROUP_INVITE -> scope.launch { handleGroupInvite(contactId, payload) }
             PayloadKind.GROUP_ROSTER_UPDATE -> scope.launch { handleGroupRosterUpdate(contactId, payload) }
+            PayloadKind.DELIVERED_ACK -> scope.launch {
+                payload.ackForMessageId?.let { messageDao.updateState(it, DeliveryState.DELIVERED) }
+            }
+            PayloadKind.PROFILE_UPDATE -> scope.launch {
+                val nickname = payload.profileNickname?.trim().orEmpty()
+                if (nickname.isNotEmpty()) {
+                    contactDao.find(contactId)?.let { contactDao.update(it.copy(nickname = nickname)) }
+                }
+            }
             PayloadKind.TEXT -> {
                 val threadId = payload.groupId ?: contactId
                 scope.launch {
-                    val mentions = if (payload.groupId != null) resolveMentions(payload.groupId, payload.text.orEmpty()) else emptyList()
-                    val entity = MessageEntity(
-                        messageId = payload.messageId,
-                        contactId = threadId,
-                        fromMe = false,
-                        type = MessageType.TEXT,
-                        text = payload.text,
-                        timestamp = payload.sentAt,
-                        deliveryState = DeliveryState.DELIVERED,
-                        senderContactId = if (payload.groupId != null) contactId else null,
-                        mentionedContactIds = mentions.takeIf { it.isNotEmpty() }?.joinToString(","),
-                    )
-                    messageDao.upsert(entity)
-                    _events.tryEmit(ChatServiceEvent.MessageReceived(threadId, entity))
+                    // Same dedup as media below: retried texts reuse the message id.
+                    if (messageDao.find(payload.messageId) == null) {
+                        val mentions = if (payload.groupId != null) resolveMentions(payload.groupId, payload.text.orEmpty()) else emptyList()
+                        val entity = MessageEntity(
+                            messageId = payload.messageId,
+                            contactId = threadId,
+                            fromMe = false,
+                            type = MessageType.TEXT,
+                            text = payload.text,
+                            timestamp = payload.sentAt,
+                            deliveryState = DeliveryState.DELIVERED,
+                            senderContactId = if (payload.groupId != null) contactId else null,
+                            mentionedContactIds = mentions.takeIf { it.isNotEmpty() }?.joinToString(","),
+                        )
+                        messageDao.upsert(entity)
+                        _events.tryEmit(ChatServiceEvent.MessageReceived(threadId, entity))
+                    }
                 }
+                sendDeliveredAck(contactId, payload.messageId)
             }
             else -> Unit
         }
