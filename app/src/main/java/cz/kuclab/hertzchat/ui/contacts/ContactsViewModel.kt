@@ -35,7 +35,8 @@ class ContactsViewModel @Inject constructor(
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     fun createGroup(name: String, memberContactIds: List<String>) {
-        if (name.isBlank() || memberContactIds.isEmpty()) return
+        // Empty members are fine - that's a solo group (just me), members can be added later.
+        if (name.isBlank()) return
         p2pChatService.createGroup(name.trim(), memberContactIds)
     }
 

@@ -18,6 +18,7 @@ import cz.kuclab.hertzchat.data.db.MessageDao
 import cz.kuclab.hertzchat.data.db.MessageEntity
 import cz.kuclab.hertzchat.data.db.MessageType
 import cz.kuclab.hertzchat.data.model.ChatPayload
+import cz.kuclab.hertzchat.data.model.MessageSequencer
 import cz.kuclab.hertzchat.data.model.PayloadKind
 import cz.kuclab.hertzchat.media.FileChunks
 import cz.kuclab.hertzchat.media.ImageEditor
@@ -35,7 +36,6 @@ import java.io.RandomAccessFile
 import java.net.Socket
 import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
-import java.util.concurrent.atomic.AtomicLong
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlinx.coroutines.CoroutineScope
@@ -83,6 +83,8 @@ private const val CHUNK_ATTEMPTS = 5
 private const val REQUEST_EXPIRY_MS = 7 * 24 * 60 * 60_000L
 /** Chunks buffered for transfers whose control payload hasn't arrived yet, per transfer - past this the sender is presumed broken and extras drop. */
 private const val PENDING_CHUNKS_CAP = 1024
+/** How many recent 1:1 contacts get pre-dialled the moment I2P connects (see [P2pChatService.warmRecentContacts]). */
+private const val WARMUP_CONTACTS = 4
 
 data class IncomingFriendRequest(val contactId: String, val nickname: String, val request: FriendRequestPayload)
 
@@ -135,8 +137,7 @@ class P2pChatService @Inject constructor(
     private val requestedAvatarHashes = java.util.concurrent.ConcurrentHashMap<String, String>()
     @Volatile private var cachedAvatarHash: String? = null
     @Volatile private var cachedAvatarHashValid = false
-    /** Low bits of [nextSeq] - the high bits are the send timestamp, so the sequence survives restarts with no persistence. */
-    private val seqCounter = AtomicLong(0)
+
 
     val i2pState: StateFlow<I2pState> get() = i2pTransport.state
     val bootstrapPercent: StateFlow<Int> get() = i2pTransport.bootstrapPercent
@@ -160,14 +161,7 @@ class P2pChatService @Inject constructor(
     private var blockedContactIds: Set<String> = emptySet()
     private var started = false
 
-    /**
-     * Strictly increasing per send: the high bits are the send time in ms, the
-     * low 20 bits a counter. Two messages in the same millisecond still order
-     * correctly, and a restart can't collide with (or reorder against) older
-     * rows because wall-clock time only moves forward.
-     */
-    internal fun nextSeq(sentAtMs: Long): Long =
-        (sentAtMs shl 20) or (seqCounter.incrementAndGet() and 0xFFFFF)
+    internal fun nextSeq(sentAtMs: Long): Long = MessageSequencer.next(sentAtMs)
 
     private data class IncomingTransfer(
         val contactId: String,
@@ -230,6 +224,9 @@ class P2pChatService @Inject constructor(
                     // already online, so a changed name/photo propagates on
                     // connect instead of waiting for the next message.
                     broadcastProfile()
+                    // And pre-dial the most recent contacts, so the first
+                    // message after a cold start finds live sockets.
+                    warmRecentContacts()
                 }
             }
         }
@@ -473,8 +470,14 @@ class P2pChatService @Inject constructor(
     fun deleteGroup(groupId: String) {
         scope.launch {
             val group = groupDao.find(groupId) ?: return@launch
-            if (group.ownerId != identityKeyManager.contactId()) return@launch
+            if (!canManage(group)) return@launch
             val members = groupMemberDao.findMembers(groupId)
+            // Wipe locally FIRST: the sends below dial every member and a single
+            // unreachable one used to stall the wipe for minutes, leaving the
+            // "deleted" group on screen here long after members already lost it.
+            // The tombstone still catches offline members up later.
+            identityKeyManager.deletedGroupIds = identityKeyManager.deletedGroupIds + groupId
+            wipeGroupLocally(groupId)
             val payload = ChatPayload(
                 UUID.randomUUID().toString(), System.currentTimeMillis(), PayloadKind.GROUP_DELETE,
                 groupId = groupId,
@@ -482,9 +485,24 @@ class P2pChatService @Inject constructor(
             coroutineScope {
                 members.map { async { trySendPayload(it.contactId, payload) } }.awaitAll()
             }
-            identityKeyManager.deletedGroupIds = identityKeyManager.deletedGroupIds + groupId
-            wipeGroupLocally(groupId)
         }
+    }
+
+    /**
+     * Groups created before owner tracking carry a blank owner - anyone in them
+     * may manage (the pre-owner free-for-all), and the first manager stamps
+     * themselves so the group converges to the strict model from then on.
+     */
+    private fun canManage(group: GroupEntity): Boolean {
+        val myId = identityKeyManager.contactId()
+        return group.ownerId.isBlank() || group.ownerId == myId
+    }
+
+    private suspend fun claimOwnershipIfLegacy(group: GroupEntity): GroupEntity {
+        if (group.ownerId.isNotBlank()) return group
+        val claimed = group.copy(ownerId = identityKeyManager.contactId())
+        groupDao.upsert(claimed)
+        return claimed
     }
 
     private suspend fun wipeGroupLocally(groupId: String) {
@@ -505,7 +523,8 @@ class P2pChatService @Inject constructor(
         scope.launch {
             val group = groupDao.find(groupId) ?: return@launch
             val myId = identityKeyManager.contactId()
-            if (group.ownerId != myId) return@launch
+            if (!canManage(group)) return@launch
+            claimOwnershipIfLegacy(group)
             val existing = groupMemberDao.findMembers(groupId)
             val toAdd = newContactIds.filter { id -> id != myId && existing.none { it.contactId == id } }.mapNotNull { contactDao.find(it) }
             if (toAdd.isEmpty()) return@launch
@@ -529,19 +548,23 @@ class P2pChatService @Inject constructor(
         scope.launch {
             val group = groupDao.find(groupId) ?: return@launch
             val myId = identityKeyManager.contactId()
-            if (group.ownerId != myId || contactId == myId) return@launch
+            if (!canManage(group) || contactId == myId) return@launch
             contactDao.find(contactId) ?: return@launch
-            // Sent before deleting locally, so this device is still in its own roster send below.
-            trySendPayload(
-                contactId,
-                ChatPayload(
-                    UUID.randomUUID().toString(), System.currentTimeMillis(), PayloadKind.GROUP_ROSTER_UPDATE,
-                    groupId = groupId, groupName = group.name, groupOwnerId = myId,
-                    groupRoster = listOfNotNull(myHertzId()),
-                ),
-            )
+            val managed = claimOwnershipIfLegacy(group)
+            // Local state updates instantly; the notifications fan out in the
+            // background instead of blocking the member list on slow dials.
             groupMemberDao.deleteMember(groupId, contactId)
-            broadcastRoster(group)
+            scope.launch {
+                trySendPayload(
+                    contactId,
+                    ChatPayload(
+                        UUID.randomUUID().toString(), System.currentTimeMillis(), PayloadKind.GROUP_ROSTER_UPDATE,
+                        groupId = groupId, groupName = managed.name, groupOwnerId = myId,
+                        groupRoster = listOfNotNull(myHertzId()),
+                    ),
+                )
+                broadcastRoster(managed)
+            }
         }
     }
 
@@ -604,7 +627,7 @@ class P2pChatService @Inject constructor(
         val group = groupDao.find(groupId) ?: return
         // Only the owner we already recorded for this group may change its membership -
         // otherwise any group member could forge a roster update and remove or add people.
-        if (fromContactId != group.ownerId) return
+        if (group.ownerId.isNotBlank() && fromContactId != group.ownerId) return
         val roster = payload.groupRoster ?: return
         val myId = identityKeyManager.contactId()
 
@@ -636,7 +659,7 @@ class P2pChatService @Inject constructor(
     private suspend fun handleGroupDelete(fromContactId: String, payload: ChatPayload) {
         val groupId = payload.groupId ?: return
         val group = groupDao.find(groupId) ?: return
-        if (fromContactId != group.ownerId) return
+        if (group.ownerId.isNotBlank() && fromContactId != group.ownerId) return
         wipeGroupLocally(groupId)
     }
 
@@ -728,6 +751,12 @@ class P2pChatService @Inject constructor(
                     mentionedContactIds = mentions.takeIf { it.isNotEmpty() }?.joinToString(","),
                 ),
             )
+            if (members.isEmpty()) {
+                // Solo group (just me) - a note to self has already arrived the
+                // moment it's written, same as the self 1:1 chat.
+                messageDao.updateState(messageId, DeliveryState.DELIVERED)
+                return@launch
+            }
             val payload = ChatPayload(messageId, now, PayloadKind.TEXT, seq = seq, text = text, groupId = groupId)
             // Members dial in parallel - sequential dials would multiply one
             // slow I2P handshake by the member count on every group message.
@@ -1054,6 +1083,11 @@ class P2pChatService @Inject constructor(
             }
 
             val members = groupMemberDao.findMembers(groupId)
+            if (members.isEmpty()) {
+                // Solo group (just me) - see sendGroupText.
+                messageDao.updateState(messageId, DeliveryState.DELIVERED)
+                return@launch
+            }
             val delivered = coroutineScope {
                 members.map { member ->
                     async {
@@ -1113,6 +1147,11 @@ class P2pChatService @Inject constructor(
             )
 
             val members = groupMemberDao.findMembers(groupId)
+            if (members.isEmpty()) {
+                // Solo group (just me) - see sendGroupText.
+                messageDao.updateState(messageId, DeliveryState.DELIVERED)
+                return@launch
+            }
             val delivered = coroutineScope {
                 members.map { member ->
                     async {
@@ -1442,6 +1481,24 @@ class P2pChatService @Inject constructor(
         }
     }
 
+    /**
+     * Cold-start killer: the moment I2P connects, dial the most recently active
+     * 1:1 contacts in the background, so the user's first message finds live
+     * sockets instead of paying a cold I2P dial (tunnel use plus lease lookup,
+     * easily tens of seconds) on the send path. Capped small - this is a head
+     * start, not a fan-out.
+     */
+    private fun warmRecentContacts() {
+        scope.launch {
+            val myId = identityKeyManager.contactId()
+            val threads = runCatching { messageDao.recentThreadIds(WARMUP_CONTACTS) }.getOrDefault(emptyList())
+                .filter { it != myId }
+            coroutineScope {
+                threads.map { async { warmConnection(it) } }.awaitAll()
+            }
+        }
+    }
+
     private suspend fun heartbeatLoop() {
         while (started) {
             delay(HEARTBEAT_MS)
@@ -1541,6 +1598,11 @@ class P2pChatService @Inject constructor(
     private suspend fun retryGroupMessage(groupId: String, message: MessageEntity): Boolean {
         val resolicit = message.deliveryState == DeliveryState.SENT
         val members = groupMemberDao.findMembers(groupId)
+        if (members.isEmpty()) {
+            // Everyone left (or solo group) - nothing to send to, confirm locally.
+            messageDao.updateState(message.messageId, DeliveryState.DELIVERED)
+            return true
+        }
         val delivered = if (message.type == MessageType.TEXT) {
             val payload = ChatPayload(message.messageId, message.timestamp, PayloadKind.TEXT, seq = message.seq, text = message.text, groupId = groupId)
             coroutineScope {

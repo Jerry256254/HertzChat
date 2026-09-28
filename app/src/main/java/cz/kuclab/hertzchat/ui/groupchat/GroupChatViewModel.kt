@@ -94,7 +94,7 @@ class GroupChatViewModel @Inject constructor(
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), "")
 
     val isOwner = groupDao.observeGroup(groupId)
-        .map { it != null && it.ownerId == myId }
+        .map { it != null && (it.ownerId.isBlank() || it.ownerId == myId) }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), false)
 
     val members = groupMemberDao.observeMembers(groupId)

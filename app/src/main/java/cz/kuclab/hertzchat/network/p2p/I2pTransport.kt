@@ -282,14 +282,18 @@ class I2pTransport @Inject constructor(
      *
      * Tunnels are also kept alive rather than torn down when idle: rebuilding them on the
      * next message is exactly the multi-second stall this is meant to avoid.
+     *
+     * Quantity is two each way (one live, one spare): three builds noticeably
+     * slower on cold start for redundancy a chat app never visibly uses, while
+     * one would stall every message on any single tunnel hiccup.
      */
     private fun tunnelOptions(): Properties = Properties().apply {
         setProperty("inbound.length", "1")
         setProperty("outbound.length", "1")
         setProperty("inbound.lengthVariance", "0")
         setProperty("outbound.lengthVariance", "0")
-        setProperty("inbound.quantity", "3")
-        setProperty("outbound.quantity", "3")
+        setProperty("inbound.quantity", "2")
+        setProperty("outbound.quantity", "2")
         setProperty("inbound.backupQuantity", "0")
         setProperty("outbound.backupQuantity", "0")
         setProperty("inbound.nickname", "Hertz Chat")

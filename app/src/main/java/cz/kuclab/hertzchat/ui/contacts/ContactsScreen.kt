@@ -223,7 +223,6 @@ fun ContactsScreen(
             item {
                 OutlinedButton(
                     onClick = { createGroupOpen = true },
-                    enabled = contacts.isNotEmpty(),
                     modifier = Modifier.fillMaxWidth(),
                 ) {
                     Icon(Icons.Filled.Groups, contentDescription = null, modifier = Modifier.size(18.dp))
@@ -231,7 +230,7 @@ fun ContactsScreen(
                 }
                 if (contacts.isEmpty()) {
                     Text(
-                        "Skupinu vytvoříš, jakmile si přidáš aspoň jeden kontakt.",
+                        "Můžeš vytvořit i skupinu jen pro sebe - členy přidáš později.",
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         textAlign = androidx.compose.ui.text.style.TextAlign.Center,
@@ -479,7 +478,7 @@ private fun CreateGroupDialog(
                     singleLine = true,
                 )
                 Text(
-                    "Vyber kontakty (skupina funguje jen mezi vzájemnými kontakty)",
+                    "Vyber kontakty (skupina funguje jen mezi vzájemnými kontakty) - nebo nikoho a členy přidej později",
                     style = MaterialTheme.typography.labelSmall,
                     modifier = Modifier.padding(top = 12.dp, bottom = 4.dp),
                 )
@@ -506,7 +505,7 @@ private fun CreateGroupDialog(
         confirmButton = {
             TextButton(
                 onClick = { onCreate(name, selected.value.toList()) },
-                enabled = name.isNotBlank() && selected.value.isNotEmpty(),
+                enabled = name.isNotBlank(),
             ) { Text("Vytvořit") }
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Zrušit") } },

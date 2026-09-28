@@ -185,6 +185,10 @@ interface MessageDao {
     @Query("SELECT * FROM messages WHERE contactId = :threadId AND fromMe = 0 AND deliveryState = 'DELIVERED' ORDER BY timestamp ASC, seq ASC")
     suspend fun findDeliveredIncoming(threadId: String): List<MessageEntity>
 
+    /** 1:1 threads by recency, for cold-start socket warmup - groups excluded (their members warm on open instead). */
+    @Query("SELECT contactId FROM messages WHERE contactId NOT IN (SELECT groupId FROM `groups`) GROUP BY contactId ORDER BY MAX(timestamp) DESC LIMIT :limit")
+    suspend fun recentThreadIds(limit: Int): List<String>
+
     /**
      * Recent messages across all threads, incoming and outgoing alike. The chat list
      * derives both the per-row preview and the unread dots from this one flow - it must
