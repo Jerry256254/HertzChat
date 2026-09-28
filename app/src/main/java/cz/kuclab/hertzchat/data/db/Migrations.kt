@@ -90,3 +90,18 @@ val MIGRATION_10_11 = object : Migration(10, 11) {
         db.execSQL("ALTER TABLE groups ADD COLUMN pinOrder INTEGER NOT NULL DEFAULT 0")
     }
 }
+
+/**
+ * The I2P-to-relay transport switch. The contacts address column is renamed to
+ * the relay key - old rows keep their I2P destination string in it, which the
+ * send path recognises as "not a relay key" and treats as unreachable until
+ * the contact is re-added (one scan; the Signal session survives, only the
+ * address changes). Messages gain the sender sequence that keeps thread order
+ * exact; old rows default to 0 and keep their timestamp order.
+ */
+val MIGRATION_11_12 = object : Migration(11, 12) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL("ALTER TABLE contacts RENAME COLUMN i2pDestination TO nostrPubkey")
+        db.execSQL("ALTER TABLE messages ADD COLUMN seq INTEGER NOT NULL DEFAULT 0")
+    }
+}

@@ -80,8 +80,10 @@ class QrScanRotationTest {
 
     @Test
     fun `dense qr payload survives encode to y-plane decode`() {
-        // Same shape as a real HertzId QR: ~670 JSON chars, many small modules.
-        val payload = """{"contactId":"${"a".repeat(64)}","nickname":"Testβ","identityKeyBase64":"${"b".repeat(44)}","i2pDestination":"${"c".repeat(520)}"}"""
+        // Same shape as a real HertzId QR: ~200 JSON chars (the relay key is far
+        // shorter than the old network address), plus padding to keep the dense
+        // many-small-modules stress on the decoder.
+        val payload = """{"contactId":"${"a".repeat(22)}","nickname":"Testβ","identityKeyBase64":"${"b".repeat(44)}","nostrPubkeyHex":"${"c".repeat(64)}","pad":"${"d".repeat(440)}"}"""
         val size = 400
         val matrix = QRCodeWriter().encode(payload, BarcodeFormat.QR_CODE, size, size, mapOf(com.google.zxing.EncodeHintType.CHARACTER_SET to "UTF-8"))
         val yuv = ByteArray(size * size) { i ->

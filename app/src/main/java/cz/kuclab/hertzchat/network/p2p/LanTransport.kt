@@ -30,13 +30,14 @@ private const val CONNECT_TIMEOUT_MS = 4_000
  *
  * This is the one configuration where "no servers at all" is literally true. Over
  * the internet it can't work - two phones behind different NATs have no way to find
- * each other without *something* in the middle - which is what [I2pTransport] is
- * for. The two run side by side: LAN is tried first because it's faster and works
- * offline, I2P covers everything else.
+ * each other without *something* in the middle - which is what the relay transport
+ * ([cz.kuclab.hertzchat.network.relay.RelayTransport]) is for. The two run side by
+ * side: LAN is tried first because it's faster and works offline, the relay covers
+ * everything else.
  *
  * Sockets handed out here are plain [Socket]s carrying the exact same length-prefixed
- * frames as I2P ones, so everything above this layer (Signal sessions, media chunking,
- * delivery state) is identical and transport-agnostic.
+ * frames the relay events carry inside, so everything above this layer (Signal
+ * sessions, media chunking, delivery state) is identical and transport-agnostic.
  */
 @Singleton
 class LanTransport @Inject constructor(
@@ -145,9 +146,9 @@ class LanTransport @Inject constructor(
     /**
      * Whether [contactId] was actually announced at [address] on this network.
      *
-     * An I2P destination is cryptographic proof of who dialled us; a plain LAN socket
-     * carries no such proof, so an inbound peer claiming to be a given contact has to at
-     * least be coming from the address mDNS advertised for them. Without this check
+     * A relay-routed event carries its sender's pairwise tag as proof of who sent it;
+     * a plain LAN socket carries no such proof, so an inbound peer claiming to be a
+     * given contact has to at least be coming from the address mDNS advertised for them. Without this check
      * anyone on the same Wi-Fi could claim a contact's identity and swallow the messages
      * meant for them - they could never read any (everything is Signal-encrypted to the
      * real contact's keys) but they could stop them arriving.

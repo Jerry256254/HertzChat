@@ -36,16 +36,20 @@ import androidx.core.content.ContextCompat
 import androidx.hilt.navigation.compose.hiltViewModel
 import cz.kuclab.hertzchat.ui.common.AppCard
 import cz.kuclab.hertzchat.ui.common.GlassBar
+import cz.kuclab.hertzchat.ui.common.HertzGlass
+import dev.chrisbanes.haze.HazeState
+import dev.chrisbanes.haze.haze
 import java.util.concurrent.Executors
 
 @Composable
 fun QrExportScreen(onDone: () -> Unit, viewModel: QrMigrationViewModel = hiltViewModel()) {
     val bitmap = remember { generateQrBitmap(viewModel.exportPayload()) }
+    val hazeState = remember { HazeState() }
 
     Scaffold { padding ->
         Box(modifier = Modifier.fillMaxSize().padding(padding)) {
         Column(
-            modifier = Modifier.fillMaxSize().padding(24.dp).padding(top = 68.dp),
+            modifier = Modifier.fillMaxSize().haze(hazeState, HertzGlass.hazeStyle()).padding(24.dp).padding(top = 68.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(20.dp),
         ) {
@@ -69,7 +73,7 @@ fun QrExportScreen(onDone: () -> Unit, viewModel: QrMigrationViewModel = hiltVie
             )
             Button(onClick = onDone, modifier = Modifier.fillMaxWidth()) { Text("Hotovo") }
         }
-        GlassBar(title = "Přenos identity", hazeState = null, onBack = onDone, modifier = Modifier.align(Alignment.TopCenter))
+        GlassBar(title = "Přenos identity", hazeState = hazeState, onBack = onDone, modifier = Modifier.align(Alignment.TopCenter))
         }
     }
 }
@@ -89,10 +93,11 @@ fun QrImportScreen(onDone: () -> Unit, viewModel: QrMigrationViewModel = hiltVie
 
     var imported by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
+    val hazeState = remember { HazeState() }
 
     Scaffold { padding ->
         Box(modifier = Modifier.fillMaxSize().padding(padding)) {
-        Column(modifier = Modifier.fillMaxSize().padding(top = 68.dp)) {
+        Column(modifier = Modifier.fillMaxSize().haze(hazeState, HertzGlass.hazeStyle()).padding(top = 68.dp)) {
             Text(
                 "Namiř na QR kód zobrazený na starém zařízení v Profil → Přenést identitu.",
                 modifier = Modifier.padding(16.dp),
@@ -161,7 +166,7 @@ fun QrImportScreen(onDone: () -> Unit, viewModel: QrMigrationViewModel = hiltVie
                 }
             }
         }
-        GlassBar(title = "Naskenovat identitu", hazeState = null, onBack = onDone, modifier = Modifier.align(Alignment.TopCenter))
+        GlassBar(title = "Naskenovat identitu", hazeState = hazeState, onBack = onDone, modifier = Modifier.align(Alignment.TopCenter))
         }
     }
 }

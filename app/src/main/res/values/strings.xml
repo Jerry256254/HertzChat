@@ -29,7 +29,7 @@
     <string name="settings_notifications_subtitle">Vyskakovací upozornění, i když je appka zavřená (pokud má telefon internet)</string>
     <string name="settings_section_privacy">Soukromí a síť</string>
     <string name="settings_discoverable_title">Být dosažitelný</string>
-    <string name="settings_discoverable_subtitle">Vypnutím se úplně zastaví síť I2P i služba na pozadí - nikdo tě nenajde ani ti nemůže poslat zprávu, ale appka nespotřebovává baterii navíc.</string>
+    <string name="settings_discoverable_subtitle">Vypnutím se úplně zastaví síťové připojení (relay) i služba na pozadí - nikdo tě nenajde ani ti nemůže poslat zprávu, ale appka nespotřebovává baterii navíc.</string>
     <string name="settings_auto_accept_title">Automaticky přijímat žádosti o přátelství</string>
     <string name="settings_auto_accept_subtitle">Nové kontakty se přidají rovnou, bez tvého potvrzení.</string>
     <string name="settings_section_assistant">AI asistent</string>
@@ -47,6 +47,11 @@
     <string name="settings_section_blocked">Blokovaní uživatelé</string>
     <string name="settings_unblock">Odblokovat</string>
     <string name="settings_section_updates">Aktualizace</string>
+    <string name="settings_section_network">Síť</string>
+    <string name="settings_relays_title">Relay servery</string>
+    <string name="settings_relays_subtitle">Prázdné = vestavěné bezplatné servery. Vlastní relay (jedno URL na řádek, wss://…) – viz server/hertz-relay v repozitáři.</string>
+    <string name="settings_relays_save">Uložit</string>
+    <string name="settings_relays_reset">Výchozí servery</string>
     <string name="settings_installed_version">Nainstalovaná verze</string>
     <string name="settings_check_update">Zkontrolovat</string>
     <string name="settings_up_to_date">Máš nejnovější verzi</string>
@@ -57,5 +62,5 @@
     <string name="settings_install_blocked">Povol instalaci aplikací z Hertz Chatu a zkus to znovu</string>
     <string name="settings_open_install_settings">Otevřít nastavení</string>
     <string name="settings_section_about">O aplikaci</string>
-    <string name="settings_about_description">Open source, žádný server, end-to-end šifrované přes Signal Protokol, přenos přes síť I2P.</string>
+    <string name="settings_about_description">Open source, end-to-end šifrované přes Signal Protokol, přenos přes rychlé relay servery, které nic neukládají.</string>
 </resources>

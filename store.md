@@ -8,14 +8,14 @@ last_updated: 2026-09-27
 license: MIT
 category: Komunikace
 short_description: >-
-  Peer-to-peer, end-to-end šifrovaný chat bez serveru, přes síť I2P.
+  End-to-end šifrovaný chat přes rychlé relay servery, které nic neukládají.
 full_description: |-
-  Hertz Chat je chatovací aplikace, za kterou nestojí žádný server - ani náš,
-  ani cizí. Dvě zařízení se najdou a spojí přímo přes veřejnou síť I2P
-  (každé si otevře vlastní "destinaci" - I2P obdobu adresy), zdarma, bez
-  registrace, bez jakékoliv firmy uprostřed. Text, obrázky, videa i hlasové
-  zprávy jsou navíc šifrované Signal Protokolem (X3DH + Double Ratchet),
-  takže je nikdy nikdo jiný nemůže přečíst - ani autor aplikace.
+  Hertz Chat je chatovací aplikace, kde zprávy přenášejí rychlé relay servery
+  (veřejné zdarma, nebo vlastní), které fungují jen jako slepá přepážka -
+  přeposílají zašifrované bloby a nic neukládají, ani zprávy, ani metadata.
+  Text, obrázky, videa i hlasové zprávy jsou navíc šifrované Signal Protokolem
+  (X3DH + Double Ratchet), takže je nikdy nikdo jiný nemůže přečíst - ani
+  provozovatel relay serveru, ani autor aplikace.
 
   Identita je čistě zařízení - žádné telefonní číslo, e-mail ani registrace.
   Bez centrálního adresáře nejde procházet cizí online uživatele - kontakty
@@ -25,9 +25,9 @@ full_description: |-
 tags:
   - messaging
   - encryption
-  - p2p
   - privacy
-  - i2p
+  - relay
+  - nostr
 repository_url: https://github.com/Jerry256254/HertzChat
 download_url: https://github.com/Jerry256254/HertzChat/releases/latest
 logo: store/logo.png

@@ -20,7 +20,7 @@ import cz.kuclab.hertzchat.data.model.PayloadKind
 import cz.kuclab.hertzchat.data.repository.DraftStore
 import cz.kuclab.hertzchat.data.repository.P2pChatService
 import cz.kuclab.hertzchat.media.MediaStorage
-import cz.kuclab.hertzchat.network.p2p.I2pState
+import cz.kuclab.hertzchat.network.relay.RelayState
 import cz.kuclab.hertzchat.p2p.ActiveChatTracker
 import cz.kuclab.hertzchat.ui.common.PendingAttachment
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -253,13 +253,13 @@ class GroupChatViewModel @Inject constructor(
     }
 
     private fun warnIfOffline() {
-        if (p2pChatService.i2pState.value == I2pState.CONNECTED) {
+        if (p2pChatService.relayState.value == RelayState.CONNECTED) {
             coldStartNoticeShown = false
             return
         }
         if (!coldStartNoticeShown) {
             coldStartNoticeShown = true
-            _userNotice.tryEmit("Zpráva se odešle po připojení k I2P")
+            _userNotice.tryEmit("Zpráva se odešle po připojení k síti")
         }
     }
 

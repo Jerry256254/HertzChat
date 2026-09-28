@@ -33,8 +33,8 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
 import kotlin.math.sqrt
 
-private const val CALL_SAMPLE_RATE = 8000
-private const val CALL_FRAME_SAMPLES = 160
+private const val CALL_SAMPLE_RATE = 16000
+private const val CALL_FRAME_SAMPLES = 320
 private const val CALL_RING_TIMEOUT_MS = 60_000L
 private const val OFFER_RESEND_MS = 5_000L
 private const val ANSWER_RESEND_MS = 5_000L
@@ -63,9 +63,9 @@ sealed interface CallState {
 }
 
 /**
- * Realtime 1:1 voice calls over the existing P2P transport. Deliberately low-fi:
- * 8kHz mono PCM in 20ms frames, which squeezes through an I2P tunnel where
- * wideband audio never would.
+ * Realtime 1:1 voice calls over the relay transport: 16kHz mono PCM in 20ms
+ * frames, each its own relay event on the fast lane (one relay, no fan-out -
+ * audio tolerates loss and 50 duplicate frames a second would just burn uplink).
  *
  * Encryption is exactly the chat's: every signaling packet and every audio frame
  * travels as a [ChatPayload] through the contact's Signal session (X3DH +

@@ -53,7 +53,7 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import coil.compose.AsyncImage
 import cz.kuclab.hertzchat.data.repository.IncomingFriendRequest
-import cz.kuclab.hertzchat.network.p2p.I2pState
+import cz.kuclab.hertzchat.network.relay.RelayState
 import cz.kuclab.hertzchat.ui.common.GlassAmbientBackground
 import cz.kuclab.hertzchat.ui.common.GlassCircleButton
 import cz.kuclab.hertzchat.ui.common.GlassMenu
@@ -79,10 +79,8 @@ fun ChatListScreen(
     viewModel: ChatListViewModel = hiltViewModel(),
 ) {
     val items by viewModel.items.collectAsState()
-    val i2pState by viewModel.i2pState.collectAsState()
-    val bootstrapPercent by viewModel.bootstrapPercent.collectAsState()
-    val bootstrapLabel by viewModel.bootstrapLabel.collectAsState()
-    val i2pError by viewModel.i2pError.collectAsState()
+    val relayState by viewModel.relayState.collectAsState()
+    val relayCount by viewModel.relayCount.collectAsState()
     val requests by viewModel.incomingRequests.collectAsState()
     val myAvatarPath by viewModel.myAvatarPath.collectAsState()
     val hazeState = remember { HazeState() }
@@ -135,7 +133,7 @@ fun ChatListScreen(
             // content behind itself, so rows scroll underneath the frost.
             Box(modifier = Modifier.fillMaxSize().haze(hazeState, HertzGlass.hazeStyle())) {
             GlassAmbientBackground()
-            if (items.isEmpty() && requests.isEmpty() && i2pState == I2pState.CONNECTED) {
+            if (items.isEmpty() && requests.isEmpty() && relayState == RelayState.CONNECTED) {
                 Column(
                     modifier = Modifier.fillMaxSize().padding(top = 56.dp).padding(horizontal = 32.dp),
                     horizontalAlignment = Alignment.CenterHorizontally,
@@ -175,14 +173,8 @@ fun ChatListScreen(
                     verticalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
                 item {
-                    AnimatedVisibility(visible = i2pState != I2pState.CONNECTED) {
-                        I2pConnectBanner(
-                            state = i2pState,
-                            percent = bootstrapPercent,
-                            label = bootstrapLabel,
-                            error = i2pError,
-                            onRetry = viewModel::retryI2p,
-                        )
+                    AnimatedVisibility(visible = relayState != RelayState.CONNECTED) {
+                        RelayConnectBanner(state = relayState, relayCount = relayCount)
                     }
                 }
                 if (requests.isNotEmpty()) {
@@ -300,53 +292,28 @@ private fun FloatingHomeBar(
 
 /**
  * The connection status lives on the main screen now, not buried in Contacts:
- * while I2P is still bootstrapping this banner shows the live progress, and the
- * moment the router connects it fades away on its own.
+ * while the relays are still connecting this banner shows, and the moment any
+ * relay connects it fades away on its own. The transport retries by itself, so
+ * there is no retry button - this is purely informational.
  */
 @Composable
-private fun I2pConnectBanner(
-    state: I2pState?,
-    percent: Int,
-    label: String?,
-    error: String?,
-    onRetry: () -> Unit,
-) {
+private fun RelayConnectBanner(state: RelayState?, relayCount: Int) {
     AppCard(containerColor = HertzMatte.cardRaised()) {
         Row(
             modifier = Modifier.fillMaxWidth().padding(16.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            if (error != null) {
-                Icon(
-                    Icons.Filled.Wifi,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.error,
-                    modifier = Modifier.size(28.dp),
-                )
-            } else {
-                CircularProgressIndicator(
-                    progress = { (percent.coerceIn(0, 100)) / 100f },
-                    modifier = Modifier.size(28.dp),
-                    strokeWidth = 3.dp,
-                )
-            }
+            CircularProgressIndicator(modifier = Modifier.size(28.dp), strokeWidth = 3.dp)
             Column(modifier = Modifier.weight(1f).padding(start = 12.dp)) {
                 Text(
-                    when {
-                        error != null -> "Nepodařilo se připojit k I2P"
-                        state == I2pState.STOPPED -> "Síť je vypnutá"
-                        else -> "Connecting to I2P - $percent%"
-                    },
+                    if (state == RelayState.OFFLINE) "Offline - zprávy se odešlou později" else "Připojuje se k síti…",
                     fontWeight = FontWeight.SemiBold,
                 )
                 Text(
-                    error ?: label ?: "Navazuje se spojení…",
+                    if (relayCount > 0) "Připojeno k $relayCount relayům" else "Navazuje se spojení…",
                     style = MaterialTheme.typography.labelSmall,
-                    color = if (error != null) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
-            }
-            if (error != null) {
-                TextButton(onClick = onRetry) { Text("Zkusit znovu") }
             }
         }
     }

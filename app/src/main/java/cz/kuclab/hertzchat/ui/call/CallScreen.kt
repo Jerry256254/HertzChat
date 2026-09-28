@@ -13,6 +13,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
@@ -21,6 +22,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -41,6 +43,7 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -138,147 +141,168 @@ fun CallScreen(contactId: String, onDone: () -> Unit, viewModel: CallViewModel =
             ),
         )
 
-        Column(
-            modifier = Modifier.fillMaxSize().navigationBarsPadding().padding(horizontal = 24.dp).padding(top = 48.dp, bottom = 24.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
-        ) {
-            GlassSurface(
-                shape = HertzShapes.Dialog,
-                modifier = Modifier.fillMaxWidth(),
+        // Short screens (small phones, landscape-ish heights, big fonts) used to
+        // overflow: fixed 104dp photo + paddings + pill simply didn't fit and the
+        // controls clipped off-screen. Everything below scales off the available
+        // height instead, so the whole surface always fits.
+        BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
+            val compact = maxHeight < 700.dp
+            val topPad = if (compact) 12.dp else 32.dp
+            val bottomPad = if (compact) 12.dp else 24.dp
+            val cardVPadding = if (compact) 14.dp else 28.dp
+            val photoSize = if (compact) 72.dp else 104.dp
+            val nameTopPad = if (compact) 8.dp else 14.dp
+            val strandsHeight = if (compact) 36.dp else 56.dp
+            val primaryButton = if (compact) 52.dp else 60.dp
+            val secondaryButton = if (compact) 46.dp else 52.dp
+            val nameStyle = if (compact) MaterialTheme.typography.titleLarge else MaterialTheme.typography.headlineSmall
+
+            Column(
+                modifier = Modifier.fillMaxSize().statusBarsPadding().navigationBarsPadding().padding(horizontal = 24.dp).padding(top = topPad, bottom = bottomPad),
+                horizontalAlignment = Alignment.CenterHorizontally,
             ) {
-                Column(
-                    modifier = Modifier.fillMaxWidth().padding(vertical = 28.dp, horizontal = 20.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally,
+                GlassSurface(
+                    shape = HertzShapes.Dialog,
+                    modifier = Modifier.fillMaxWidth(),
                 ) {
-                    // While ringing, the photo breathes gently - alive, not static.
-                    val ringing = state is CallState.Outgoing || state is CallState.Incoming
-                    val pulse by rememberInfiniteTransition(label = "ring").animateFloat(
-                        initialValue = 1f,
-                        targetValue = 1.07f,
-                        animationSpec = infiniteRepeatable(tween(900), RepeatMode.Reverse),
-                        label = "pulse",
-                    )
-                    Box(
-                        modifier = Modifier
-                            .size(104.dp)
-                            .graphicsLayer {
-                                val s = if (ringing) pulse else 1f
-                                scaleX = s
-                                scaleY = s
-                            }
-                            .clip(CircleShape)
-                            .background(MaterialTheme.colorScheme.primaryContainer),
-                        contentAlignment = Alignment.Center,
+                    Column(
+                        modifier = Modifier.fillMaxWidth().padding(vertical = cardVPadding, horizontal = 20.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally,
                     ) {
-                        if (avatarPath != null) {
-                            AsyncImage(
-                                model = File(avatarPath!!),
-                                contentDescription = null,
-                                contentScale = ContentScale.Crop,
-                                modifier = Modifier.fillMaxSize(),
+                        // While ringing, the photo breathes gently - alive, not static.
+                        val ringing = state is CallState.Outgoing || state is CallState.Incoming
+                        val pulse by rememberInfiniteTransition(label = "ring").animateFloat(
+                            initialValue = 1f,
+                            targetValue = 1.07f,
+                            animationSpec = infiniteRepeatable(tween(900), RepeatMode.Reverse),
+                            label = "pulse",
+                        )
+                        Box(
+                            modifier = Modifier
+                                .size(photoSize)
+                                .graphicsLayer {
+                                    val s = if (ringing) pulse else 1f
+                                    scaleX = s
+                                    scaleY = s
+                                }
+                                .clip(CircleShape)
+                                .background(MaterialTheme.colorScheme.primaryContainer),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            if (avatarPath != null) {
+                                AsyncImage(
+                                    model = File(avatarPath!!),
+                                    contentDescription = null,
+                                    contentScale = ContentScale.Crop,
+                                    modifier = Modifier.fillMaxSize(),
+                                )
+                            } else {
+                                Text(
+                                    nickname.take(1).uppercase(),
+                                    style = MaterialTheme.typography.headlineLarge,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.onPrimaryContainer,
+                                )
+                            }
+                        }
+                        Text(
+                            nickname.ifEmpty { "Neznámý" },
+                            style = nameStyle,
+                            fontWeight = FontWeight.SemiBold,
+                            color = HertzGlass.contentOnGlass(),
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.padding(top = nameTopPad),
+                        )
+                        Text(
+                            callStatusText(state, nowMs),
+                            style = MaterialTheme.typography.bodyLarge,
+                            color = HertzGlass.contentOnGlass().copy(alpha = 0.7f),
+                            maxLines = 1,
+                            modifier = Modifier.padding(top = 4.dp),
+                        )
+                        Strands(
+                            level = if (state is CallState.Active && !muted) micLevel else 0f,
+                            color = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.fillMaxWidth().height(strandsHeight).padding(top = 12.dp),
+                        )
+                        Text(
+                            "Šifrováno end-to-end (Signal)",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = HertzGlass.contentOnGlass().copy(alpha = 0.5f),
+                            maxLines = 1,
+                            modifier = Modifier.padding(top = 8.dp),
+                        )
+                    }
+                }
+
+                androidx.compose.foundation.layout.Spacer(modifier = Modifier.weight(1f))
+
+                when (state) {
+                    is CallState.Incoming -> GlassSurface(
+                        shape = HertzShapes.Pill,
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth().padding(vertical = 12.dp),
+                            horizontalArrangement = Arrangement.SpaceEvenly,
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            GlassCircleButton(
+                                icon = HertzIcons.CallEnd,
+                                contentDescription = "Odmítnout",
+                                onClick = { viewModel.calls.reject(); onDone() },
+                                size = primaryButton,
+                                danger = true,
                             )
-                        } else {
-                            Text(
-                                nickname.take(1).uppercase(),
-                                style = MaterialTheme.typography.headlineLarge,
-                                fontWeight = FontWeight.Bold,
-                                color = MaterialTheme.colorScheme.onPrimaryContainer,
+                            GlassCircleButton(
+                                icon = HertzIcons.Call,
+                                contentDescription = "Přijmout",
+                                onClick = {
+                                    if (ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) {
+                                        viewModel.calls.accept()
+                                    } else {
+                                        micPermission.launch(Manifest.permission.RECORD_AUDIO)
+                                    }
+                                },
+                                size = primaryButton,
+                                accent = true,
                             )
                         }
                     }
-                    Text(
-                        nickname.ifEmpty { "Neznámý" },
-                        style = MaterialTheme.typography.headlineSmall,
-                        fontWeight = FontWeight.SemiBold,
-                        color = HertzGlass.contentOnGlass(),
-                        modifier = Modifier.padding(top = 14.dp),
-                    )
-                    Text(
-                        callStatusText(state, nowMs),
-                        style = MaterialTheme.typography.bodyLarge,
-                        color = HertzGlass.contentOnGlass().copy(alpha = 0.7f),
-                        modifier = Modifier.padding(top = 4.dp),
-                    )
-                    Strands(
-                        level = if (state is CallState.Active && !muted) micLevel else 0f,
-                        color = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.fillMaxWidth().height(56.dp).padding(top = 12.dp),
-                    )
-                    Text(
-                        "Šifrováno end-to-end (Signal)",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = HertzGlass.contentOnGlass().copy(alpha = 0.5f),
-                        modifier = Modifier.padding(top = 8.dp),
-                    )
-                }
-            }
-
-            androidx.compose.foundation.layout.Spacer(modifier = Modifier.weight(1f))
-
-            when (state) {
-                is CallState.Incoming -> GlassSurface(
-                    shape = HertzShapes.Pill,
-                    modifier = Modifier.fillMaxWidth(),
-                ) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth().padding(vertical = 12.dp),
-                        horizontalArrangement = Arrangement.SpaceEvenly,
-                        verticalAlignment = Alignment.CenterVertically,
+                    is CallState.Outgoing, is CallState.Active -> GlassSurface(
+                        shape = HertzShapes.Pill,
+                        modifier = Modifier.fillMaxWidth(),
                     ) {
-                        GlassCircleButton(
-                            icon = HertzIcons.CallEnd,
-                            contentDescription = "Odmítnout",
-                            onClick = { viewModel.calls.reject(); onDone() },
-                            size = 60.dp,
-                            danger = true,
-                        )
-                        GlassCircleButton(
-                            icon = HertzIcons.Call,
-                            contentDescription = "Přijmout",
-                            onClick = {
-                                if (ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) {
-                                    viewModel.calls.accept()
-                                } else {
-                                    micPermission.launch(Manifest.permission.RECORD_AUDIO)
-                                }
-                            },
-                            size = 60.dp,
-                            accent = true,
-                        )
+                        Row(
+                            modifier = Modifier.fillMaxWidth().padding(vertical = 10.dp),
+                            horizontalArrangement = Arrangement.SpaceEvenly,
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            GlassCircleButton(
+                                icon = if (muted) HertzIcons.MicOff else HertzIcons.Mic,
+                                contentDescription = if (muted) "Zapnout mikrofon" else "Ztlumit mikrofon",
+                                onClick = viewModel.calls::toggleMute,
+                                size = secondaryButton,
+                            )
+                            GlassCircleButton(
+                                icon = HertzIcons.CallEnd,
+                                contentDescription = "Ukončit hovor",
+                                onClick = { viewModel.calls.hangup() },
+                                size = primaryButton,
+                                danger = true,
+                            )
+                            GlassCircleButton(
+                                icon = HertzIcons.Speaker,
+                                contentDescription = if (speaker) "Vypnout reproduktor" else "Zapnout reproduktor",
+                                onClick = viewModel.calls::toggleSpeaker,
+                                size = secondaryButton,
+                                accent = speaker,
+                            )
+                        }
                     }
+                    else -> Unit
                 }
-                is CallState.Outgoing, is CallState.Active -> GlassSurface(
-                    shape = HertzShapes.Pill,
-                    modifier = Modifier.fillMaxWidth(),
-                ) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth().padding(vertical = 10.dp),
-                        horizontalArrangement = Arrangement.SpaceEvenly,
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        GlassCircleButton(
-                            icon = if (muted) HertzIcons.MicOff else HertzIcons.Mic,
-                            contentDescription = if (muted) "Zapnout mikrofon" else "Ztlumit mikrofon",
-                            onClick = viewModel.calls::toggleMute,
-                            size = 52.dp,
-                        )
-                        GlassCircleButton(
-                            icon = HertzIcons.CallEnd,
-                            contentDescription = "Ukončit hovor",
-                            onClick = { viewModel.calls.hangup() },
-                            size = 60.dp,
-                            danger = true,
-                        )
-                        GlassCircleButton(
-                            icon = HertzIcons.Speaker,
-                            contentDescription = if (speaker) "Vypnout reproduktor" else "Zapnout reproduktor",
-                            onClick = viewModel.calls::toggleSpeaker,
-                            size = 52.dp,
-                            accent = speaker,
-                        )
-                    }
-                }
-                else -> Unit
             }
         }
     }

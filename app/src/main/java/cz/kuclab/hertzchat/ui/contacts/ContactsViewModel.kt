@@ -50,6 +50,10 @@ class ContactsViewModel @Inject constructor(
     private val _addSuccess = MutableStateFlow(false)
     val addSuccess: StateFlow<Boolean> = _addSuccess
 
+    private val _addSending = MutableStateFlow(false)
+    /** True while the request is on its way - the scanner already closed, so the card must show progress instead of silence. */
+    val addSending: StateFlow<Boolean> = _addSending
+
     fun addByHertzId(text: String) {
         val trimmed = text.trim()
         val id = runCatching { json.decodeFromString(HertzId.serializer(), trimmed) }.getOrNull()
@@ -57,11 +61,12 @@ class ContactsViewModel @Inject constructor(
             _addError.value = explainUnusableId(trimmed)
             return
         }
-        if (id.i2pDestination.isBlank() || id.contactId.isBlank()) {
-            _addError.value = "Tenhle kód je neúplný - na druhém telefonu se ještě nedopojila síť I2P. Počkej, až se mu QR kód zobrazí celý, a zkus to znovu."
+        if (id.nostrPubkeyHex.isBlank() || id.contactId.isBlank()) {
+            _addError.value = "Tenhle kód je ze staré verze aplikace - aktualizuj Hertz Chat na druhém telefonu a ukaž kód znovu."
             return
         }
         _addError.value = null
+        _addSending.value = true
         viewModelScope.launch {
             p2pChatService.sendFriendRequest(id).fold(
                 onSuccess = {
@@ -70,13 +75,14 @@ class ContactsViewModel @Inject constructor(
                 },
                 onFailure = { error -> _addError.value = error.message ?: "Žádost se nepodařilo odeslat" },
             )
+            _addSending.value = false
         }
     }
 
     /**
      * "Neplatné Hertz ID" on its own gives the user nothing to act on - every failure
      * looked identical whether they scanned the wrong code, the other phone was still
-     * connecting, or it runs a version that predates I2P. Each of those needs a
+     * connecting, or it runs a version that predates the relay network. Each of those needs a
      * different thing done about it, so each says so.
      */
     private fun explainUnusableId(text: String): String {
@@ -86,7 +92,7 @@ class ContactsViewModel @Inject constructor(
             // The identity-transfer code from Profil carries the private key material, not
             // a contact - it's for moving your own account to a new phone.
             looksLikeJson && text.contains("\"identityKeyPair\"") ->
-                "Tohle je kód pro přenos vlastní identity na nové zařízení, ne pro přidání kontaktu. Na druhém telefonu otevři Kontakty a ukaž QR kód odtamtud."
+                "Tohle je kód pro přenos vlastní identity na nové zařízení, ne pro přidání kontaktu. Na druhém telefonu otevři Profil a ukaž QR kód odtamtud."
             // Pre-0.9 builds shared a Tor onion address; those can't be reached at all now.
             looksLikeJson && text.contains("\"onionAddress\"") ->
                 "QR kód pochází z verze aplikace starší než 0.9, která používala síť Tor. Aktualizuj Hertz Chat na druhém telefonu a ukaž kód znovu."
@@ -94,7 +100,7 @@ class ContactsViewModel @Inject constructor(
                 "Kód se přečetl, ale nemá tvar Hertz ID - nejspíš pochází z jiné verze aplikace. Zkontroluj, že máte oba stejnou verzi."
             else ->
                 "Tohle není Hertz ID - kód obsahuje něco jiného: „${text.take(30)}${if (text.length > 30) "…" else ""}“. " +
-                    "Na druhém telefonu otevři Kontakty a ukaž QR kód, který je tam nahoře."
+                    "Na druhém telefonu otevři Profil a ukaž QR kód."
         }
     }
 

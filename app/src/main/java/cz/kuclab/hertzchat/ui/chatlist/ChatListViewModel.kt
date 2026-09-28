@@ -46,12 +46,8 @@ class ChatListViewModel @Inject constructor(
     private val mediaStorage: MediaStorage,
 ) : ViewModel() {
 
-    val i2pState = p2pChatService.i2pState.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
-    val bootstrapPercent = p2pChatService.bootstrapPercent.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 0)
-    val bootstrapLabel = p2pChatService.bootstrapLabel.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
-    val i2pError = p2pChatService.i2pError.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
-
-    fun retryI2p() = p2pChatService.retryI2p()
+    val relayState = p2pChatService.relayState.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
+    val relayCount = p2pChatService.relayCount.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 0)
 
     /** Own photo for the profile button - re-read whenever contacts change so a new avatar appears without restart. */
     val myAvatarPath = contactDao.observeContacts()
@@ -89,7 +85,7 @@ class ChatListViewModel @Inject constructor(
             ChatListItem(
                 contactId = contact.contactId,
                 nickname = contact.nickname,
-                // Own photo is already on this device - showing it never depends on I2P
+                // Own photo is already on this device - showing it never depends on the network round-tripping
                 // round-tripping an AVATAR transfer to yourself.
                 avatarPath = if (isSelf) selfAvatarPath else contact.avatarPath,
                 pinned = contact.pinned,

@@ -21,7 +21,6 @@ import androidx.compose.material.icons.filled.CameraAlt
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material3.Button
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -36,6 +35,8 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import dev.chrisbanes.haze.HazeState
+import dev.chrisbanes.haze.haze
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -51,6 +52,7 @@ import coil.compose.AsyncImage
 import cz.kuclab.hertzchat.ui.chat.PhotoSource
 import cz.kuclab.hertzchat.ui.common.AppCard
 import cz.kuclab.hertzchat.ui.common.GlassBar
+import cz.kuclab.hertzchat.ui.common.HertzGlass
 import cz.kuclab.hertzchat.ui.common.glassEdge
 import cz.kuclab.hertzchat.ui.migration.generateQrBitmap
 
@@ -60,17 +62,17 @@ fun ProfileScreen(onBack: () -> Unit, onOpenQrExport: () -> Unit, viewModel: Pro
     val committedNickname by viewModel.committedNickname.collectAsState()
     val avatarVersion by viewModel.avatarVersion.collectAsState()
     val myQrText by viewModel.myHertzIdQrText.collectAsState()
-    val i2pError by viewModel.i2pError.collectAsState()
     val canSave = nickname.trim().isNotEmpty() && nickname.trim() != committedNickname
     val clipboard = LocalClipboardManager.current
 
     var editingUri by remember { mutableStateOf<android.net.Uri?>(null) }
     val pickImage = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri -> editingUri = uri }
 
+    val hazeState = remember { HazeState() }
     Scaffold { padding ->
         Box(modifier = Modifier.fillMaxSize().padding(padding)) {
         Column(
-            modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(24.dp).padding(top = 68.dp, bottom = 24.dp),
+            modifier = Modifier.fillMaxSize().haze(hazeState, HertzGlass.hazeStyle()).verticalScroll(rememberScrollState()).padding(24.dp).padding(top = 68.dp, bottom = 24.dp),
             verticalArrangement = Arrangement.spacedBy(20.dp),
         ) {
             Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
@@ -155,40 +157,8 @@ fun ProfileScreen(onBack: () -> Unit, onOpenQrExport: () -> Unit, viewModel: Pro
                 ) {
                     Text("Můj QR kód", fontWeight = FontWeight.SemiBold)
                     Box(modifier = Modifier.padding(vertical = 12.dp), contentAlignment = Alignment.Center) {
-                        val qrText = myQrText
-                        when {
-                            qrText != null -> {
-                                val bitmap = remember(qrText) { generateQrBitmap(qrText) }
-                                Image(bitmap = bitmap.asImageBitmap(), contentDescription = "Můj QR kód")
-                            }
-                            i2pError != null -> {
-                                Column(
-                                    horizontalAlignment = Alignment.CenterHorizontally,
-                                    modifier = Modifier.size(220.dp),
-                                    verticalArrangement = Arrangement.Center,
-                                ) {
-                                    Text(
-                                        "Připojení k síti I2P selhalo",
-                                        style = MaterialTheme.typography.labelSmall,
-                                        color = MaterialTheme.colorScheme.error,
-                                        textAlign = TextAlign.Center,
-                                    )
-                                    OutlinedButton(onClick = viewModel::retryI2p, modifier = Modifier.padding(top = 12.dp)) {
-                                        Text("Zkusit znovu")
-                                    }
-                                }
-                            }
-                            else -> {
-                                Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.size(220.dp)) {
-                                    CircularProgressIndicator(modifier = Modifier.padding(bottom = 12.dp))
-                                    Text(
-                                        "Připravuje se tvoje adresa v síti I2P...",
-                                        style = MaterialTheme.typography.labelSmall,
-                                        textAlign = TextAlign.Center,
-                                    )
-                                }
-                            }
-                        }
+                        val bitmap = remember(myQrText) { generateQrBitmap(myQrText) }
+                        Image(bitmap = bitmap.asImageBitmap(), contentDescription = "Můj QR kód")
                     }
                     Text(
                         "Ukaž tenhle QR kód příteli (nebo mu ID zkopíruj a pošli), ať tě může přidat. Bez toho tě nikdo nenajde - není tu žádný adresář uživatelů.",
@@ -196,8 +166,7 @@ fun ProfileScreen(onBack: () -> Unit, onOpenQrExport: () -> Unit, viewModel: Pro
                         textAlign = TextAlign.Center,
                     )
                     TextButton(
-                        onClick = { myQrText?.let { clipboard.setText(AnnotatedString(it)) } },
-                        enabled = myQrText != null,
+                        onClick = { clipboard.setText(AnnotatedString(myQrText)) },
                     ) {
                         Icon(Icons.Filled.ContentCopy, contentDescription = null, modifier = Modifier.size(18.dp))
                         Text("  Zkopírovat ID")
@@ -209,7 +178,7 @@ fun ProfileScreen(onBack: () -> Unit, onOpenQrExport: () -> Unit, viewModel: Pro
                 Text("Přenést identitu na nové zařízení (QR)")
             }
         }
-        GlassBar(title = "Profil", hazeState = null, onBack = onBack, modifier = Modifier.align(Alignment.TopCenter))
+        GlassBar(title = "Profil", hazeState = hazeState, onBack = onBack, modifier = Modifier.align(Alignment.TopCenter))
         }
     }
 

@@ -13,6 +13,14 @@ data class ChatPayload(
     val messageId: String,
     val sentAt: Long,
     val kind: PayloadKind,
+    /**
+     * Sender-side per-thread sequence, strictly increasing in send order (see
+     * P2pChatService.nextSeq). Together with [sentAt] this is what orders the
+     * thread: a photo sent before a text sorts before it even though its bytes
+     * finish arriving later. Zero on payloads from versions that predate it -
+     * those fall back to [sentAt] ordering.
+     */
+    val seq: Long = 0,
     val text: String? = null,
     val mediaMimeType: String? = null,
     val mediaFileName: String? = null,
@@ -56,9 +64,11 @@ data class ChatPayload(
     val senderNickname: String? = null,
     /** SHA-256 hex of the sender's downscaled avatar, or null when they have none. */
     val senderAvatarHash: String? = null,
+    /** The sender's current relay key - lets the receiver repair a stale address without the user re-scanning anything. */
+    val senderNostrPub: String? = null,
     /** Set for every CALL_* kind - the call this signaling or audio packet belongs to. */
     val callId: String? = null,
-    /** Only set for [PayloadKind.CALL_AUDIO] - base64 of one 20ms 8kHz mono PCM frame. */
+    /** Only set for [PayloadKind.CALL_AUDIO] - base64 of one 20ms 16kHz mono PCM frame. */
     val audioBase64: String? = null,
     /** Only set for [PayloadKind.CALL_AUDIO] - sender-side sequence, so the player can drop late packets. */
     val audioSeq: Long? = null,

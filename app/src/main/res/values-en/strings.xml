@@ -27,7 +27,7 @@
     <string name="settings_notifications_subtitle">Pop-up alerts even when the app is closed (as long as the phone has internet)</string>
     <string name="settings_section_privacy">Privacy &amp; network</string>
     <string name="settings_discoverable_title">Be reachable</string>
-    <string name="settings_discoverable_subtitle">Turning this off fully stops the I2P network and the background service - nobody can find or message you, but the app uses no extra battery.</string>
+    <string name="settings_discoverable_subtitle">Turning this off fully stops the network connection (relays) and the background service - nobody can find or message you, but the app uses no extra battery.</string>
     <string name="settings_auto_accept_title">Auto-accept friend requests</string>
     <string name="settings_auto_accept_subtitle">New contacts get added right away, without your confirmation.</string>
     <string name="settings_section_assistant">AI assistant</string>
@@ -45,6 +45,11 @@
     <string name="settings_section_blocked">Blocked users</string>
     <string name="settings_unblock">Unblock</string>
     <string name="settings_section_updates">Updates</string>
+    <string name="settings_section_network">Network</string>
+    <string name="settings_relays_title">Relay servers</string>
+    <string name="settings_relays_subtitle">Empty = built-in free servers. Custom relay (one URL per line, wss://…) – see server/hertz-relay in the repo.</string>
+    <string name="settings_relays_save">Save</string>
+    <string name="settings_relays_reset">Default servers</string>
     <string name="settings_installed_version">Installed version</string>
     <string name="settings_check_update">Check</string>
     <string name="settings_up_to_date">You have the latest version</string>
@@ -55,5 +60,5 @@
     <string name="settings_install_blocked">Allow installing apps from Hertz Chat, then try again</string>
     <string name="settings_open_install_settings">Open settings</string>
     <string name="settings_section_about">About</string>
-    <string name="settings_about_description">Open source, no server, end-to-end encrypted via the Signal Protocol, transported over the I2P network.</string>
+    <string name="settings_about_description">Open source, end-to-end encrypted via the Signal Protocol, transported over fast relay servers that store nothing.</string>
 </resources>

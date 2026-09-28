@@ -27,9 +27,9 @@ private const val PREFS_NAME = "hertzchat_identity_prefs"
 private const val KEY_IDENTITY_KEYPAIR = "identity_keypair"
 private const val KEY_REGISTRATION_ID = "registration_id"
 private const val KEY_NICKNAME = "nickname"
-private const val KEY_I2P_PRIVATE_KEY = "i2p_private_key"
-private const val KEY_I2P_DESTINATION = "i2p_destination"
 private const val KEY_DELETED_GROUPS = "deleted_group_ids"
+private const val KEY_NOSTR_SECRET = "nostr_secret"
+private const val KEY_PENDING_REQUESTS = "pending_friend_requests"
 
 private const val ONE_TIME_PREKEY_COUNT = 100
 private const val ONE_TIME_PREKEY_LOW_WATERMARK = 20
@@ -91,14 +91,32 @@ class IdentityKeyManager @Inject constructor(
     /** Stable, shareable contact ID derived from the public identity key - this is what you show a friend so they can find/add you. */
     fun contactId(): String = contactIdFor(identityKeyPair().publicKey.serialize())
 
-    /** Opaque I2P destination keypair blob - empty until [I2pTransport][cz.kuclab.hertzchat.network.p2p.I2pTransport] first opens our destination, after which it's persisted so the address stays stable across restarts. */
-    var i2pPrivateKey: String
-        get() = prefs.getString(KEY_I2P_PRIVATE_KEY, "") ?: ""
-        set(value) = prefs.edit().putString(KEY_I2P_PRIVATE_KEY, value).apply()
+    /**
+     * Our long-term relay keypair (secp256k1, Nostr-flavoured): the public half
+     * is the address contacts publish to, generated once and kept stable across
+     * restarts (and carried over by identity export/import). It is *not* used
+     * to sign traffic - every published event carries a fresh ephemeral sender
+     * key instead, so the relay can never link events back to this identity.
+     */
+    fun nostrSecret(): ByteArray {
+        val stored = prefs.getString(KEY_NOSTR_SECRET, null)
+        if (!stored.isNullOrBlank()) return Base64.decode(stored, Base64.NO_WRAP)
+        val fresh = ByteArray(32).also { java.security.SecureRandom().nextBytes(it) }
+        // Near-zero chance of landing outside 1..n-1, but a broken key would be
+        // permanent, so check rather than assume.
+        val scalar = java.math.BigInteger(1, fresh)
+        val n = org.bouncycastle.asn1.x9.ECNamedCurveTable.getByName("secp256k1").n
+        val valid = if (scalar > java.math.BigInteger.ZERO && scalar < n) fresh else nostrSecret()
+        if (valid === fresh) {
+            prefs.edit().putString(KEY_NOSTR_SECRET, Base64.encodeToString(fresh, Base64.NO_WRAP)).apply()
+        }
+        return valid
+    }
 
-    var i2pDestination: String
-        get() = prefs.getString(KEY_I2P_DESTINATION, "") ?: ""
-        set(value) = prefs.edit().putString(KEY_I2P_DESTINATION, value).apply()
+    fun nostrPubkeyHex(): String =
+        cz.kuclab.hertzchat.network.relay.NostrCrypto.bytesToHex(
+            cz.kuclab.hertzchat.network.relay.NostrCrypto.pubkeyFromSecret(nostrSecret()),
+        )
 
     /**
      * Ids of groups this device deleted as owner. Deletes are re-sent to anyone
@@ -108,6 +126,17 @@ class IdentityKeyManager @Inject constructor(
     var deletedGroupIds: Set<String>
         get() = prefs.getStringSet(KEY_DELETED_GROUPS, emptySet()) ?: emptySet()
         set(value) = prefs.edit().putStringSet(KEY_DELETED_GROUPS, value.take(50).toSet()).apply()
+
+    /**
+     * Friend requests we sent but that were never accepted, one entry per
+     * target: `<createdAtMs>
+     * <HertzId JSON>`. Relay events are ephemeral - a request published while
+     * the other side is offline simply never lands - so the retry sweep keeps
+     * re-sending these until they accept (or they expire).
+     */
+    var pendingFriendRequests: Set<String>
+        get() = prefs.getStringSet(KEY_PENDING_REQUESTS, emptySet()) ?: emptySet()
+        set(value) = prefs.edit().putStringSet(KEY_PENDING_REQUESTS, value.take(50).toSet()).apply()
 
     fun contactIdFor(identityKeyBytes: ByteArray): String {
         val digest = MessageDigest.getInstance("SHA-256").digest(identityKeyBytes)
@@ -122,6 +151,7 @@ class IdentityKeyManager @Inject constructor(
     fun ensureIdentityAndPreKeys(chosenNickname: String?) {
         identityKeyPair()
         registrationId()
+        nostrSecret()
         nickname = chosenNickname?.takeIf { it.isNotBlank() } ?: nickname
 
         topUpOneTimePreKeysIfNeeded()
@@ -167,7 +197,7 @@ class IdentityKeyManager @Inject constructor(
         // migration (or clearing app data) empties these tables while leaving the identity
         // intact. Onboarding is then skipped, nothing ever regenerates them, and reading
         // .first() off an empty table threw NoSuchElementException("List is empty.") -
-        // surfacing as a crash the moment I2P connected and we built our first bundle.
+        // surfacing as a crash the moment we built our first bundle.
         // Provisioning on demand makes that state self-correcting instead of permanent.
         ensureIdentityAndPreKeys(null)
 
@@ -208,7 +238,7 @@ class IdentityKeyManager @Inject constructor(
             append("\"identityKeyPair\":\"").append(Base64.encodeToString(identityKeyPair().serialize(), Base64.NO_WRAP)).append("\",")
             append("\"registrationId\":").append(registrationId()).append(',')
             append("\"nickname\":\"").append(nickname.replace("\"", "")).append("\",")
-            append("\"i2pPrivateKey\":\"").append(i2pPrivateKey).append('"')
+            append("\"nostrSecret\":\"").append(Base64.encodeToString(nostrSecret(), Base64.NO_WRAP)).append('"')
             append('}')
         }
         return payload
@@ -216,10 +246,9 @@ class IdentityKeyManager @Inject constructor(
 
     /**
      * Overwrites the local identity with one exported from another device,
-     * including the I2P destination key - without that, contacts would keep
-     * trying to reach the old device's destination and never find the
-     * new one. Only ever call this from a dedicated migration flow the user
-     * explicitly confirmed.
+     * including the relay key - without that, contacts would keep publishing
+     * to the old device's key and never reach the new one. Only ever call
+     * this from a dedicated migration flow the user explicitly confirmed.
      */
     fun importIdentityJson(json: String) {
         val obj = org.json.JSONObject(json)
@@ -229,8 +258,9 @@ class IdentityKeyManager @Inject constructor(
             .putString(KEY_IDENTITY_KEYPAIR, Base64.encodeToString(keyPairBytes, Base64.NO_WRAP))
             .putInt(KEY_REGISTRATION_ID, obj.getInt("registrationId"))
             .putString(KEY_NICKNAME, obj.getString("nickname"))
-            .putString(KEY_I2P_PRIVATE_KEY, obj.optString("i2pPrivateKey", ""))
-            .remove(KEY_I2P_DESTINATION) // republished on next start; keep the key, drop the cached address until I2P confirms it
+            .putString(KEY_NOSTR_SECRET, obj.optString("nostrSecret", ""))
+            .remove("i2p_private_key")
+            .remove("i2p_destination")
             .apply()
     }
 

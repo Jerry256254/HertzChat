@@ -17,7 +17,8 @@ data class ContactEntity(
     @PrimaryKey val contactId: String, // stable fingerprint of the contact's identity key
     val nickname: String,
     val identityKeyBytes: ByteArray,
-    val i2pDestination: String,
+    /** The contact's long-term relay key (64 hex chars) - where sealed requests and routed traffic are published. */
+    val nostrPubkey: String,
     val avatarPath: String? = null,
     val pinned: Boolean = false,
     /** Position inside the pinned section (lower floats higher); only meaningful while [pinned] is true. */
@@ -63,6 +64,8 @@ data class MessageEntity(
     val mediaFileName: String? = null,
     val mediaDurationMs: Long? = null,
     val timestamp: Long,
+    /** Sender-side sequence within the thread - the tiebreak after [timestamp] that keeps send order exact. */
+    val seq: Long = 0,
     val deliveryState: DeliveryState,
     /** Who actually authored this in a group thread - null for 1:1 messages (the thread's contactId already says who) and for our own outgoing messages. */
     val senderContactId: String? = null,
@@ -155,18 +158,18 @@ interface GroupMemberDao {
 
 @Dao
 interface MessageDao {
-    @Query("SELECT * FROM messages WHERE contactId = :threadId ORDER BY timestamp ASC")
+    @Query("SELECT * FROM messages WHERE contactId = :threadId ORDER BY timestamp ASC, seq ASC")
     fun observeMessages(threadId: String): Flow<List<MessageEntity>>
 
     @Query("SELECT * FROM messages WHERE messageId = :id")
     suspend fun find(id: String): MessageEntity?
 
     @Query(
-        "SELECT * FROM messages WHERE contactId = :threadId ORDER BY timestamp DESC LIMIT 1",
+        "SELECT * FROM messages WHERE contactId = :threadId ORDER BY timestamp DESC, seq DESC LIMIT 1",
     )
     suspend fun lastMessage(threadId: String): MessageEntity?
 
-    @Query("SELECT * FROM messages WHERE contactId = :threadId ORDER BY timestamp DESC LIMIT :limit")
+    @Query("SELECT * FROM messages WHERE contactId = :threadId ORDER BY timestamp DESC, seq DESC LIMIT :limit")
     suspend fun recentForThread(threadId: String, limit: Int): List<MessageEntity>
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
@@ -176,8 +179,12 @@ interface MessageDao {
     suspend fun updateState(id: String, state: DeliveryState)
 
     /** Everything still awaiting a delivery receipt - never-sent PENDING plus SENT-but-unacked. */
-    @Query("SELECT * FROM messages WHERE fromMe = 1 AND deliveryState IN ('PENDING', 'SENT') ORDER BY timestamp ASC")
+    @Query("SELECT * FROM messages WHERE fromMe = 1 AND deliveryState IN ('PENDING', 'SENT') ORDER BY timestamp ASC, seq ASC")
     suspend fun findUnsent(): List<MessageEntity>
+
+    /** Incoming messages in one thread that arrived but were never marked read - what READ_ACKs go out for. */
+    @Query("SELECT * FROM messages WHERE contactId = :threadId AND fromMe = 0 AND deliveryState = 'DELIVERED' ORDER BY timestamp ASC, seq ASC")
+    suspend fun findDeliveredIncoming(threadId: String): List<MessageEntity>
 
     /**
      * Recent messages across all threads, incoming and outgoing alike. The chat list
@@ -185,11 +192,11 @@ interface MessageDao {
      * re-emit on our own sends too, or the preview freezes the moment we write first.
      * Capped, so a huge history can't stall the list.
      */
-    @Query("SELECT * FROM messages ORDER BY timestamp DESC LIMIT 500")
+    @Query("SELECT * FROM messages ORDER BY timestamp DESC, seq DESC LIMIT 500")
     fun observeRecent(): Flow<List<MessageEntity>>
 
     /** Case-insensitive substring search within one thread, for in-chat find. */
-    @Query("SELECT * FROM messages WHERE contactId = :threadId AND text LIKE '%' || :query || '%' ESCAPE '\\' ORDER BY timestamp ASC")
+    @Query("SELECT * FROM messages WHERE contactId = :threadId AND text LIKE '%' || :query || '%' ESCAPE '\\' ORDER BY timestamp ASC, seq ASC")
     suspend fun searchInThread(threadId: String, query: String): List<MessageEntity>
 
     @Query("DELETE FROM messages WHERE contactId = :threadId")

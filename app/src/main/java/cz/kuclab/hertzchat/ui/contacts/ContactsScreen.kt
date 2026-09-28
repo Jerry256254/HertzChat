@@ -40,6 +40,7 @@ import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Checkbox
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -90,6 +91,7 @@ fun ContactsScreen(
 ) {
     val addError by viewModel.addError.collectAsState()
     val addSuccess by viewModel.addSuccess.collectAsState()
+    val addSending by viewModel.addSending.collectAsState()
     val contacts by viewModel.contacts.collectAsState()
     val blocked by viewModel.blockedContacts.collectAsState()
 
@@ -138,6 +140,12 @@ fun ContactsScreen(
                             modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
                         ) { Text("Odeslat žádost o přátelství") }
 
+                        if (addSending) {
+                            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 8.dp)) {
+                                CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
+                                Text("  Odesílá se žádost…", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            }
+                        }
                         if (addSuccess) {
                             Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 8.dp)) {
                                 Icon(Icons.Filled.CheckCircle, contentDescription = null, tint = MaterialTheme.colorScheme.secondary, modifier = Modifier.size(18.dp))

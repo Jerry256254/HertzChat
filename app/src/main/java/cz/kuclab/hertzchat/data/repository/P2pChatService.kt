@@ -26,15 +26,19 @@ import cz.kuclab.hertzchat.media.MediaStorage
 import cz.kuclab.hertzchat.network.p2p.FriendRequestPayload
 import cz.kuclab.hertzchat.network.p2p.FriendResponsePayload
 import cz.kuclab.hertzchat.network.p2p.HertzId
-import cz.kuclab.hertzchat.network.p2p.I2pState
-import cz.kuclab.hertzchat.network.p2p.I2pTransport
 import cz.kuclab.hertzchat.network.p2p.LanTransport
 import cz.kuclab.hertzchat.network.p2p.P2pConnection
-import java.io.BufferedOutputStream
+import cz.kuclab.hertzchat.network.p2p.SealedWire
+import cz.kuclab.hertzchat.network.relay.NostrCrypto
+import cz.kuclab.hertzchat.network.relay.NostrProtocol
+import cz.kuclab.hertzchat.network.relay.RelayState
+import cz.kuclab.hertzchat.network.relay.RelayTransport
 import java.io.File
-import java.io.FileOutputStream
+import java.io.RandomAccessFile
 import java.net.Socket
 import java.util.UUID
+import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.atomic.AtomicLong
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlinx.coroutines.CoroutineScope
@@ -57,7 +61,10 @@ import kotlinx.coroutines.withTimeout
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 
-// Wire framing prefix byte for the length-prefixed frames sent over a P2pConnection.
+// Wire framing prefix byte for one framed payload - the same bytes travel over
+// a LAN socket frame and inside a relay event's content, so everything above
+// this layer (Signal sessions, media chunking, delivery state) is identical
+// and transport-agnostic.
 private const val FRAME_HELLO: Byte = 0
 private const val FRAME_MESSAGE: Byte = 1
 private const val FRAME_PREKEY: Byte = 2
@@ -66,16 +73,24 @@ private const val FRAME_FRIEND_REQUEST: Byte = 4
 private const val FRAME_FRIEND_RESPONSE: Byte = 5
 
 private const val RETRY_INTERVAL_MS = 15_000L
-/** Idle open connections get a tiny ping on this cadence, so tunnels and NAT bindings stay warm instead of dying between messages. */
+/** Idle open LAN connections get a tiny ping on this cadence, so NAT bindings stay warm instead of dying between messages. */
 private const val HEARTBEAT_MS = 180_000L
-/** A send that doesn't leave the device within this long is treated as a dead connection and re-dialled, instead of blocking behind TCP retransmits. */
+/** A LAN send that doesn't leave the device within this long is treated as a dead connection and re-dialled, instead of blocking behind TCP retransmits. */
 private const val SEND_TIMEOUT_MS = 12_000L
 /** How long a SENT message waits for a delivery receipt before it's confirmed optimistically (the peer may run a version that never sends receipts). */
 private const val ACK_GRACE_MS = 10 * 60_000L
+/** A SENT message unacked past this age gets its payload re-sent to solicit a fresh receipt (idempotent - the receiver just re-acks). */
+private const val ACK_RESOLICIT_MS = 30_000L
 /** Incoming transfers with no progress past this age are discarded (their file handle closed, partial file deleted). */
 private const val STALE_TRANSFER_MS = 30 * 60_000L
 /** Attempts per chunk before the whole transfer is abandoned - re-dialing between attempts. */
 private const val CHUNK_ATTEMPTS = 5
+/** Friend requests are re-sent until accepted or this old - then they expire quietly. */
+private const val REQUEST_EXPIRY_MS = 7 * 24 * 60 * 60_000L
+/** How often a contact we hear from gets a fresh group-state sync at most. */
+private const val GROUP_SYNC_INTERVAL_MS = 24 * 60 * 60_000L
+/** Chunks buffered for transfers whose control payload hasn't arrived yet, per transfer - past this the sender is presumed broken and extras drop. */
+private const val PENDING_CHUNKS_CAP = 1024
 
 data class IncomingFriendRequest(val contactId: String, val nickname: String, val request: FriendRequestPayload)
 
@@ -87,11 +102,18 @@ sealed interface ChatServiceEvent {
 }
 
 /**
- * Orchestrates the whole P2P pipeline: I2P destinations are the transport
- * (no server of ours or anyone's is ever involved in finding a peer or
- * carrying a message/media byte), and the Signal Protocol session per
- * contact is the end-to-end encryption. A message never exists in
- * plaintext anywhere except on the two devices party to the conversation.
+ * Orchestrates the whole messaging pipeline: free public relay servers carry
+ * opaque *ephemeral* events between devices (they forward to whoever is
+ * subscribed right now and store nothing - no messages, no timestamps, no logs
+ * of who talked to whom), and the Signal Protocol session per contact is the
+ * end-to-end encryption. A message never exists in plaintext anywhere except
+ * on the two devices party to the conversation, and thanks to per-event
+ * ephemeral sender keys plus pairwise routing tags the relay can't even tell
+ * who sent what to whom.
+ *
+ * Same local network still wins when available: LAN sockets are direct,
+ * near-instant and work with no internet at all. The relay covers everything
+ * else.
  */
 @Singleton
 class P2pChatService @Inject constructor(
@@ -102,7 +124,7 @@ class P2pChatService @Inject constructor(
     private val groupDao: GroupDao,
     private val groupMemberDao: GroupMemberDao,
     private val mediaStorage: MediaStorage,
-    private val i2pTransport: I2pTransport,
+    private val relayTransport: RelayTransport,
     private val lanTransport: LanTransport,
     private val settingsRepository: SettingsRepository,
 ) {
@@ -110,37 +132,74 @@ class P2pChatService @Inject constructor(
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
     /**
-     * Sockets we dialled, by contact - the send path. Kept strictly separate from
-     * [incomingConnections]: the old single slot let an inbound dial evict (and close)
-     * our outbound socket mid-write, which read exactly as "receiving works but
-     * sending is stuck" whenever both sides talked at once.
+     * LAN sockets we dialled, by contact - the LAN send path. Kept strictly
+     * separate from [incomingConnections]: the old single slot let an inbound
+     * dial evict (and close) our outbound socket mid-write, which read exactly
+     * as "receiving works but sending is stuck" whenever both sides talked at
+     * once.
      */
-    private val outgoingConnections = java.util.concurrent.ConcurrentHashMap<String, P2pConnection>()
-    /** Sockets peers dialled to us, by contact - the receive path. Never used for sending. */
-    private val incomingConnections = java.util.concurrent.ConcurrentHashMap<String, P2pConnection>()
+    private val outgoingConnections = ConcurrentHashMap<String, P2pConnection>()
+    /** LAN sockets peers dialled to us, by contact - the LAN receive path. Never used for sending. */
+    private val incomingConnections = ConcurrentHashMap<String, P2pConnection>()
     private val ciphers = mutableMapOf<String, MessageCipher>()
     /** Serializes retry sweeps - the loop, the event-driven flushes and a manual send may all fire at once. */
     private val retryMutex = Mutex()
-    /** One dial at a time per contact - parallel dials evict each other's connections mid-write (see [sendFrameTo]). */
-    private val dialMutexes = java.util.concurrent.ConcurrentHashMap<String, Mutex>()
+    /** One LAN dial at a time per contact - parallel dials evict each other's connections mid-write (see [sendFrameTo]). */
+    private val dialMutexes = ConcurrentHashMap<String, Mutex>()
     private fun dialMutexFor(contactId: String): Mutex = dialMutexes.getOrPut(contactId) { Mutex() }
     /** Avatar hashes already pull-requested per contact - stops every incoming message re-requesting the same photo while its transfer is still in flight. */
-    private val requestedAvatarHashes = java.util.concurrent.ConcurrentHashMap<String, String>()
+    private val requestedAvatarHashes = ConcurrentHashMap<String, String>()
     @Volatile private var cachedAvatarHash: String? = null
     @Volatile private var cachedAvatarHashValid = false
+    /** Pairwise routing tag -> contactId, so an incoming relay event resolves to its sender without trial-decrypting every session. */
+    private val routeTagCache = ConcurrentHashMap<String, String>()
+    /** contactId -> last group-state sync, so ordinary traffic re-syncs groups without spamming invites. */
+    private val lastGroupSyncAt = ConcurrentHashMap<String, Long>()
+    /** Low bits of [nextSeq] - the high bits are the send timestamp, so the sequence survives restarts with no persistence. */
+    private val seqCounter = AtomicLong(0)
 
-    val i2pState: StateFlow<I2pState> get() = i2pTransport.state
-    val bootstrapPercent: StateFlow<Int> get() = i2pTransport.bootstrapPercent
-    val bootstrapLabel: StateFlow<String?> get() = i2pTransport.bootstrapLabel
-    val i2pDestination: StateFlow<String?> get() = i2pTransport.i2pDestination
-    val i2pError: StateFlow<String?> get() = i2pTransport.error
-    val i2pDiagnostics: StateFlow<String?> get() = i2pTransport.diagnostics
+    val relayState: StateFlow<RelayState> get() = relayTransport.state
+    val relayCount: StateFlow<Int> get() = relayTransport.relayCount
     val lanPeerCount: StateFlow<Int> get() = lanTransport.peerCount
 
-    /** Retries starting the I2P router after a previous failure (e.g. no internet at the time). */
-    fun retryI2p() {
-        i2pTransport.start(identityKeyManager.i2pPrivateKey) { newKey -> identityKeyManager.i2pPrivateKey = newKey }
-    }
+    /**
+     * Strictly increasing per send: the high bits are the send time in ms, the
+     * low 20 bits a counter. Two messages in the same millisecond still order
+     * correctly, and a restart can't collide with (or reorder against) older
+     * rows because wall-clock time only moves forward.
+     */
+    internal fun nextSeq(sentAtMs: Long): Long =
+        (sentAtMs shl 20) or (seqCounter.incrementAndGet() and 0xFFFFF)
+
+    private data class IncomingTransfer(
+        val contactId: String,
+        /** Where the finished message belongs - the group for group media, otherwise the sender's 1:1 thread. */
+        val threadId: String,
+        /** Non-null only for group media, so the bubble can be attributed to the member who sent it. */
+        val senderContactId: String?,
+        val messageId: String,
+        /** The control payload's own timestamp/sequence - the bubble sorts by *send* order, not by when its last byte landed. */
+        val sentAt: Long,
+        val seq: Long,
+        val kind: PayloadKind,
+        val key: ByteArray,
+        val nonceSalt: ByteArray,
+        val chunkCount: Int,
+        val mimeType: String,
+        val fileName: String?,
+        val durationMs: Long?,
+        val outputFile: File,
+        val out: RandomAccessFile,
+        /** Which chunk indexes already landed - relay fan-out duplicates every chunk, so a plain counter would "complete" early with holes. */
+        val receivedIndices: MutableSet<Int> = mutableSetOf(),
+        val startedAt: Long = System.currentTimeMillis(),
+    )
+
+    private val incomingTransfers = ConcurrentHashMap<String, IncomingTransfer>()
+
+    private data class PendingChunks(val startedAt: Long = System.currentTimeMillis(), val chunks: MutableMap<Int, ByteArray> = mutableMapOf())
+    /** Chunks that beat their control payload here - held until it arrives (or they go stale), never dropped on the floor. */
+    private val pendingChunks = ConcurrentHashMap<String, PendingChunks>()
 
     private val _incomingRequests = MutableStateFlow<List<IncomingFriendRequest>>(emptyList())
     val incomingRequests: StateFlow<List<IncomingFriendRequest>> = _incomingRequests
@@ -151,42 +210,17 @@ class P2pChatService @Inject constructor(
     private var blockedContactIds: Set<String> = emptySet()
     private var started = false
 
-    private data class IncomingTransfer(
-        val contactId: String,
-        /** Where the finished message belongs - the group for group media, otherwise the sender's 1:1 thread. */
-        val threadId: String,
-        /** Non-null only for group media, so the bubble can be attributed to the member who sent it. */
-        val senderContactId: String?,
-        val messageId: String,
-        val kind: PayloadKind,
-        val key: ByteArray,
-        val nonceSalt: ByteArray,
-        val chunkCount: Int,
-        val mimeType: String,
-        val fileName: String?,
-        val durationMs: Long?,
-        val outputFile: File,
-        val out: BufferedOutputStream,
-        var received: Int = 0,
-        val startedAt: Long = System.currentTimeMillis(),
-    )
-
-    private val incomingTransfers = mutableMapOf<String, IncomingTransfer>()
-
     fun start() {
         if (started) return
         started = true
         scope.launch { contactDao.observeBlocked().collect { blocked -> blockedContactIds = blocked.map { it.contactId }.toSet() } }
-        i2pTransport.start(identityKeyManager.i2pPrivateKey) { newKey -> identityKeyManager.i2pPrivateKey = newKey }
+        relayTransport.start()
         scope.launch {
-            i2pTransport.i2pDestination.collect { address -> if (address != null) identityKeyManager.i2pDestination = address }
-        }
-        scope.launch {
-            i2pTransport.incomingConnections.collect { socket -> handleIncomingSocket(socket, viaLan = false) }
+            relayTransport.incoming.collect { incoming -> onRelayIncoming(incoming) }
         }
         lanTransport.start(identityKeyManager.contactId())
         scope.launch {
-            lanTransport.incomingConnections.collect { socket -> handleIncomingSocket(socket, viaLan = true) }
+            lanTransport.incomingConnections.collect { socket -> handleIncomingSocket(socket) }
         }
         scope.launch { retryPendingLoop() }
         scope.launch { heartbeatLoop() }
@@ -194,15 +228,10 @@ class P2pChatService @Inject constructor(
         // proves reachable, anything waiting goes out immediately instead of
         // sitting until the next retry tick.
         scope.launch {
-            // StateFlow already drops consecutive repeats, so this only fires
-            // on genuine transitions into CONNECTED.
-            i2pTransport.state.collect { state ->
-                if (state == I2pState.CONNECTED) {
+            relayTransport.state.collect { state ->
+                if (state == RelayState.CONNECTED) {
                     runCatching { retryPendingNow() }
-                    // Just joined the network - push who we are to whoever is
-                    // already online, so a changed name/photo propagates on
-                    // connect instead of waiting for the next message.
-                    broadcastProfile()
+                    runCatching { retryPendingRequests() }
                 }
             }
         }
@@ -213,34 +242,19 @@ class P2pChatService @Inject constructor(
         }
         scope.launch {
             ensureSelfContact()
-            // Backfill our own destination once I2P opens it, so the self entry isn't
-            // left permanently address-less on the very first run.
-            val destination = i2pTransport.i2pDestination.first { !it.isNullOrBlank() } ?: return@launch
-            val myId = identityKeyManager.contactId()
-            contactDao.find(myId)?.takeIf { it.i2pDestination.isBlank() }?.let {
-                contactDao.update(it.copy(i2pDestination = destination))
-            }
+            rebuildRouteTagCache()
         }
     }
 
     /**
      * A note to yourself has already arrived the moment it's written to the local
-     * database - the "recipient" is this very device. Routing it out through I2P and
-     * back would leave it sitting at "waiting for the recipient to come online" for
-     * as long as the loopback takes (and forever if it never completes).
+     * database - the "recipient" is this very device.
      */
     private fun isSelf(contactId: String): Boolean = contactId == identityKeyManager.contactId()
 
     /**
      * Everyone has themselves in their contacts, the way "Message yourself" works
      * elsewhere - and unconditionally, from the first launch onward.
-     *
-     * This used to run the full friend-request pipeline against our own Hertz ID once
-     * I2P reached CONNECTED, to establish a genuine Signal session rather than a
-     * shortcut. That session buys nothing now that notes to self are delivered locally
-     * (see [isSelf]) and it cost the entry outright whenever the network never got
-     * there: no I2P, no self contact. Writing the row directly needs neither the
-     * network nor a destination, so the contact is simply always present.
      */
     private suspend fun ensureSelfContact() {
         val myId = identityKeyManager.contactId()
@@ -250,16 +264,28 @@ class P2pChatService @Inject constructor(
                 contactId = myId,
                 nickname = identityKeyManager.nickname,
                 identityKeyBytes = identityKeyManager.identityKeyPair().publicKey.serialize(),
-                // Filled in once I2P opens our destination; nothing is ever dialled for
-                // a note to self, so an empty address here changes nothing.
-                i2pDestination = i2pTransport.i2pDestination.value.orEmpty(),
+                nostrPubkey = identityKeyManager.nostrPubkeyHex(),
                 addedAt = System.currentTimeMillis(),
             ),
         )
     }
 
+    /** Resolves every known contact's pairwise routing tag once, so the hot receive path is a map lookup. */
+    private suspend fun rebuildRouteTagCache() {
+        val ownPrivate = identityKeyManager.identityKeyPair().privateKey.serialize()
+        runCatching { contactDao.observeContacts().first() }.getOrDefault(emptyList()).forEach { contact ->
+            runCatching {
+                routeTagCache[NostrCrypto.pairRoutingTag(ownPrivate, contact.identityKeyBytes)] = contact.contactId
+            }
+        }
+    }
+
+    private fun routeTagFor(identityKeyBytes: ByteArray): String? = runCatching {
+        NostrCrypto.pairRoutingTag(identityKeyManager.identityKeyPair().privateKey.serialize(), identityKeyBytes)
+    }.getOrNull()
+
     fun stop() {
-        i2pTransport.stop()
+        relayTransport.stop()
         lanTransport.stop()
         outgoingConnections.values.forEach { it.close() }
         outgoingConnections.clear()
@@ -273,32 +299,115 @@ class P2pChatService @Inject constructor(
 
     // --- Identity / friend requests ---
 
-    /** Null until I2P has opened our destination - there's no usable Hertz ID to share before that. */
-    fun myHertzId(): HertzId? {
-        val address = i2pTransport.i2pDestination.value ?: return null
-        return HertzId(
-            contactId = identityKeyManager.contactId(),
-            nickname = identityKeyManager.nickname,
-            identityKeyBase64 = Base64.encodeToString(identityKeyManager.identityKeyPair().publicKey.serialize(), Base64.NO_WRAP),
-            i2pDestination = address,
-        )
-    }
+    /**
+     * Our shareable Hertz ID. Always available immediately - unlike the old
+     * network address there is nothing to bootstrap first, so the QR code
+     * never sits behind a spinner.
+     */
+    fun myHertzId(): HertzId = HertzId(
+        contactId = identityKeyManager.contactId(),
+        nickname = identityKeyManager.nickname,
+        identityKeyBase64 = Base64.encodeToString(identityKeyManager.identityKeyPair().publicKey.serialize(), Base64.NO_WRAP),
+        nostrPubkeyHex = identityKeyManager.nostrPubkeyHex(),
+    )
+
+    /** True for a well-formed relay key (64 hex chars) - anything else is a pre-relay address and can't be published to. */
+    private fun isRelayKey(value: String): Boolean =
+        value.length == 64 && value.all { it in '0'..'9' || it in 'a'..'f' || it in 'A'..'F' }
 
     /** Result carries a human-readable reason on failure, since "nothing happened" after scanning a QR code is a bad silent failure mode. */
     suspend fun sendFriendRequest(target: HertzId, viaGroupId: String? = null): Result<Unit> = withContext(Dispatchers.IO) {
-        val me = myHertzId() ?: return@withContext Result.failure(IllegalStateException("Síť I2P ještě není připravená - zkus to za chvíli znovu"))
-        if (target.i2pDestination.isBlank()) return@withContext Result.failure(IllegalStateException("Neplatné Hertz ID (chybí adresa)"))
-        runCatching {
-            val payload = FriendRequestPayload(
-                nickname = me.nickname,
-                identityKeyBase64 = me.identityKeyBase64,
-                i2pDestination = me.i2pDestination,
-                preKeyBundle = identityKeyManager.currentPreKeyBundle().toWire(),
-                viaGroupId = viaGroupId,
-            )
-            val connection = dialAndRegister(target.contactId, target.i2pDestination)
-            connection.send(frame(FRAME_FRIEND_REQUEST, json.encodeToString(payload).encodeToByteArray()))
+        if (!isRelayKey(target.nostrPubkeyHex) || target.contactId.isBlank()) {
+            return@withContext Result.failure(IllegalStateException("Tenhle kód je ze staré verze aplikace - aktualizuj Hertz Chat na druhém telefonu a ukaž kód znovu."))
         }
+        val me = myHertzId()
+        val payload = FriendRequestPayload(
+            nickname = me.nickname,
+            identityKeyBase64 = me.identityKeyBase64,
+            nostrPubkeyHex = me.nostrPubkeyHex,
+            preKeyBundle = identityKeyManager.currentPreKeyBundle().toWire(),
+            viaGroupId = viaGroupId,
+        )
+        val sent = publishSealed(target, json.encodeToString(payload).encodeToByteArray()) ||
+            sendLanFriendFrame(target.contactId, frame(FRAME_FRIEND_REQUEST, json.encodeToString(payload).encodeToByteArray()))
+        if (!sent) {
+            return@withContext Result.failure(IllegalStateException("Nejde se připojit k relay serverům ani najít přítele v místní síti - zkontroluj připojení a zkus to znovu."))
+        }
+        // Relay events are ephemeral: if they were offline just now, the retry
+        // sweep keeps re-sending until they accept (or it expires).
+        rememberPendingRequest(target)
+        Result.success(Unit)
+    }
+
+    /**
+     * Publishes a sealed handshake payload (request or response) to a relay
+     * key the sender isn't contacts with yet - or re-sends one they are.
+     */
+    private suspend fun publishSealed(recipientPubHex: String, recipientIdentityKeyBase64: String, plaintext: ByteArray): Boolean {
+        if (!isRelayKey(recipientPubHex)) return false
+        val recipientIdentity = runCatching { Base64.decode(recipientIdentityKeyBase64, Base64.NO_WRAP) }.getOrNull() ?: return false
+        val sealed = NostrCrypto.sealToIdentityKey(plaintext, recipientIdentity)
+        val wire = SealedWire(sealed.ephemeralPublicHex, sealed.nonceBase64, sealed.ciphertextBase64)
+        return withContext(Dispatchers.IO) {
+            relayTransport.publish(
+                recipientPubHex,
+                listOf(listOf(NostrProtocol.TAG_SEALED, sealed.ephemeralPublicHex)),
+                json.encodeToString(wire).encodeToByteArray(),
+            )
+        }
+    }
+
+    private suspend fun publishSealed(target: HertzId, plaintext: ByteArray): Boolean =
+        publishSealed(target.nostrPubkeyHex, target.identityKeyBase64, plaintext)
+
+    /** Best-effort direct LAN delivery for handshake frames - instant when both phones share a network, silent no-op otherwise. */
+    private suspend fun sendLanFriendFrame(contactId: String, bytes: ByteArray): Boolean {
+        if (lanTransport.addressFor(contactId) == null) return false
+        return runCatching {
+            val connection = dialAndRegister(contactId)
+            withTimeout(SEND_TIMEOUT_MS) { connection.send(bytes) }
+            true
+        }.getOrDefault(false)
+    }
+
+    private fun rememberPendingRequest(target: HertzId) {
+        val entry = "${System.currentTimeMillis()}\n${json.encodeToString(target)}"
+        val kept = identityKeyManager.pendingFriendRequests.filterNot { it.substringAfter("\n", "") == json.encodeToString(target) }
+        identityKeyManager.pendingFriendRequests = (kept + entry).toSet()
+    }
+
+    private fun forgetPendingRequest(contactId: String) {
+        identityKeyManager.pendingFriendRequests = identityKeyManager.pendingFriendRequests.filterNot { entry ->
+            runCatching { json.decodeFromString(HertzId.serializer(), entry.substringAfter("\n", "")) }.getOrNull()?.contactId == contactId
+        }.toSet()
+    }
+
+    /** Re-sends every unaccepted request (and drops expired ones) - the other side may have been offline for all previous attempts. */
+    private suspend fun retryPendingRequests() {
+        val now = System.currentTimeMillis()
+        val kept = mutableSetOf<String>()
+        identityKeyManager.pendingFriendRequests.forEach { entry ->
+            val createdAt = entry.substringBefore("\n", "").toLongOrNull() ?: 0L
+            val target = runCatching { json.decodeFromString(HertzId.serializer(), entry.substringAfter("\n", "")) }.getOrNull()
+            if (target == null || now - createdAt > REQUEST_EXPIRY_MS) return@forEach
+            // Accepted meanwhile (their response may itself still be in flight) - stop asking.
+            if (contactDao.find(target.contactId) != null) return@forEach
+            kept += entry
+            runCatching { sendFriendRequestNow(target) }
+        }
+        identityKeyManager.pendingFriendRequests = kept
+    }
+
+    /** The actual re-send behind [retryPendingRequests] - same payload shape as the original, fresh prekeys. */
+    private suspend fun sendFriendRequestNow(target: HertzId) {
+        val me = myHertzId()
+        val payload = FriendRequestPayload(
+            nickname = me.nickname,
+            identityKeyBase64 = me.identityKeyBase64,
+            nostrPubkeyHex = me.nostrPubkeyHex,
+            preKeyBundle = identityKeyManager.currentPreKeyBundle().toWire(),
+        )
+        publishSealed(target, json.encodeToString(payload).encodeToByteArray())
     }
 
     /**
@@ -319,7 +428,7 @@ class P2pChatService @Inject constructor(
                     request.contactId,
                     request.nickname,
                     request.request.identityKeyBase64,
-                    request.request.i2pDestination,
+                    request.request.nostrPubkeyHex,
                 )
                 runCatching {
                     cipherFor(request.contactId).establishSessionFromBundle(request.request.preKeyBundle.toPreKeyBundle())
@@ -329,35 +438,35 @@ class P2pChatService @Inject constructor(
                 sendProfileTo(request.contactId)
                 requestProfile(request.contactId)
             }
-            val me = myHertzId() ?: return@launch
+            // Their request is answered - if we also had one pending to them, it served its purpose.
+            forgetPendingRequest(request.contactId)
+            val me = myHertzId()
             val response = FriendResponsePayload(
                 accepted = accept,
                 nickname = me.nickname,
                 identityKeyBase64 = me.identityKeyBase64,
-                i2pDestination = me.i2pDestination,
-                // The other half of the symmetric handshake described above - lets the
+                nostrPubkeyHex = me.nostrPubkeyHex,
+                // The other half of the symmetric handshake - lets the
                 // original requester establish their own side of the session too.
                 preKeyBundle = if (accept) identityKeyManager.currentPreKeyBundle().toWire() else null,
             )
-            runCatching {
-                val connection = dialAndRegister(request.contactId, request.request.i2pDestination)
-                connection.send(frame(FRAME_FRIEND_RESPONSE, json.encodeToString(response).encodeToByteArray()))
-            }
+            val responseBytes = json.encodeToString(response).encodeToByteArray()
+            publishSealed(request.request.nostrPubkeyHex, request.request.identityKeyBase64, responseBytes)
+            sendLanFriendFrame(request.contactId, frame(FRAME_FRIEND_RESPONSE, responseBytes))
         }
     }
 
-    private suspend fun addTrustedContact(contactId: String, nickname: String, identityKeyBase64: String, i2pDestination: String) {
-        run {
-            contactDao.upsert(
-                ContactEntity(
-                    contactId = contactId,
-                    nickname = nickname,
-                    identityKeyBytes = Base64.decode(identityKeyBase64, Base64.NO_WRAP),
-                    i2pDestination = i2pDestination,
-                    addedAt = System.currentTimeMillis(),
-                ),
-            )
-        }
+    private suspend fun addTrustedContact(contactId: String, nickname: String, identityKeyBase64: String, nostrPubkey: String) {
+        contactDao.upsert(
+            ContactEntity(
+                contactId = contactId,
+                nickname = nickname,
+                identityKeyBytes = Base64.decode(identityKeyBase64, Base64.NO_WRAP),
+                nostrPubkey = nostrPubkey,
+                addedAt = System.currentTimeMillis(),
+            ),
+        )
+        routeTagFor(Base64.decode(identityKeyBase64, Base64.NO_WRAP))?.let { routeTagCache[it] = contactId }
     }
 
     // --- Groups ---
@@ -375,10 +484,10 @@ class P2pChatService @Inject constructor(
             val members = memberContactIds.filter { it != myId }.mapNotNull { contactDao.find(it) }
             members.forEach { groupMemberDao.upsert(GroupMemberEntity(groupId, it.contactId, it.nickname)) }
 
-            val me = myHertzId() ?: return@launch
+            val me = myHertzId()
             // Every member's HertzId (including the creator) so recipients who don't know each other yet can auto-introduce themselves.
-            val roster = listOf(me) + members.map { HertzId(it.contactId, it.nickname, Base64.encodeToString(it.identityKeyBytes, Base64.NO_WRAP), it.i2pDestination) }
-            val invite = ChatPayload(UUID.randomUUID().toString(), now, PayloadKind.GROUP_INVITE, groupId = groupId, groupName = name, groupMembers = roster, groupOwnerId = myId)
+            val roster = listOf(me) + members.map { HertzId(it.contactId, it.nickname, Base64.encodeToString(it.identityKeyBytes, Base64.NO_WRAP), it.nostrPubkey) }
+            val invite = ChatPayload(UUID.randomUUID().toString(), now, PayloadKind.GROUP_INVITE, seq = nextSeq(now), groupId = groupId, groupName = name, groupMembers = roster, groupOwnerId = myId)
             coroutineScope {
                 members.map { async { trySendPayload(it.contactId, invite) } }.awaitAll()
             }
@@ -400,9 +509,10 @@ class P2pChatService @Inject constructor(
             val group = groupDao.find(groupId) ?: return@launch
             if (group.ownerId != identityKeyManager.contactId()) return@launch
             val members = groupMemberDao.findMembers(groupId)
+            val now = System.currentTimeMillis()
             val payload = ChatPayload(
-                UUID.randomUUID().toString(), System.currentTimeMillis(), PayloadKind.GROUP_DELETE,
-                groupId = groupId,
+                UUID.randomUUID().toString(), now, PayloadKind.GROUP_DELETE,
+                seq = nextSeq(now), groupId = groupId,
             )
             coroutineScope {
                 members.map { async { trySendPayload(it.contactId, payload) } }.awaitAll()
@@ -436,11 +546,13 @@ class P2pChatService @Inject constructor(
             if (toAdd.isEmpty()) return@launch
             toAdd.forEach { groupMemberDao.upsert(GroupMemberEntity(groupId, it.contactId, it.nickname)) }
 
-            val me = myHertzId() ?: return@launch
+            val me = myHertzId()
             val allMembers = groupMemberDao.findMembers(groupId)
-            val roster = listOf(me) + allMembers.mapNotNull { m -> contactDao.find(m.contactId)?.let { HertzId(it.contactId, it.nickname, Base64.encodeToString(it.identityKeyBytes, Base64.NO_WRAP), it.i2pDestination) } }
+            val roster = listOf(me) + allMembers.mapNotNull { m -> contactDao.find(m.contactId)?.let { HertzId(it.contactId, it.nickname, Base64.encodeToString(it.identityKeyBytes, Base64.NO_WRAP), it.nostrPubkey) } }
+            val now = System.currentTimeMillis()
             val invite = ChatPayload(
-                UUID.randomUUID().toString(), System.currentTimeMillis(), PayloadKind.GROUP_INVITE,
+                UUID.randomUUID().toString(), now, PayloadKind.GROUP_INVITE,
+                seq = nextSeq(now),
                 groupId = groupId, groupName = group.name, groupMembers = roster, groupOwnerId = myId,
             )
             coroutineScope {
@@ -456,11 +568,13 @@ class P2pChatService @Inject constructor(
             val myId = identityKeyManager.contactId()
             if (group.ownerId != myId || contactId == myId) return@launch
             contactDao.find(contactId) ?: return@launch
+            val now = System.currentTimeMillis()
             // Sent before deleting locally, so this device is still in its own roster send below.
             trySendPayload(
                 contactId,
                 ChatPayload(
-                    UUID.randomUUID().toString(), System.currentTimeMillis(), PayloadKind.GROUP_ROSTER_UPDATE,
+                    UUID.randomUUID().toString(), now, PayloadKind.GROUP_ROSTER_UPDATE,
+                    seq = nextSeq(now),
                     groupId = groupId, groupName = group.name, groupOwnerId = myId,
                     groupRoster = listOfNotNull(myHertzId()),
                 ),
@@ -475,7 +589,7 @@ class P2pChatService @Inject constructor(
      * a fresh invite for every group we own with them in it (invites are
      * fire-and-forget, so without this a member added while offline never sees
      * the group appear), plus a GROUP_DELETE per tombstone. Called when they prove
-     * reachable - a HELLO - never on a timer, so it costs nothing when idle.
+     * reachable - never on a timer, so it costs nothing when idle.
      */
     fun syncGroupStateTo(contactId: String) {
         scope.launch {
@@ -488,35 +602,48 @@ class P2pChatService @Inject constructor(
                     groupInvitePayload(group)?.let { trySendPayload(contactId, it) }
                 }
             identityKeyManager.deletedGroupIds.forEach { groupId ->
+                val now = System.currentTimeMillis()
                 trySendPayload(
                     contactId,
-                    ChatPayload(UUID.randomUUID().toString(), System.currentTimeMillis(), PayloadKind.GROUP_DELETE, groupId = groupId),
+                    ChatPayload(UUID.randomUUID().toString(), now, PayloadKind.GROUP_DELETE, seq = nextSeq(now), groupId = groupId),
                 )
             }
         }
     }
 
+    /** Any traffic from a contact proves they're online - sync group state at most once a day per contact. */
+    private fun maybeSyncGroupState(contactId: String) {
+        val now = System.currentTimeMillis()
+        if (now - (lastGroupSyncAt[contactId] ?: 0L) < GROUP_SYNC_INTERVAL_MS) return
+        lastGroupSyncAt[contactId] = now
+        syncGroupStateTo(contactId)
+    }
+
     /** The same bootstrap invite [addGroupMembers] sends - extracted so late joiners get the identical shape. */
     private suspend fun groupInvitePayload(group: GroupEntity): ChatPayload? {
         val myId = identityKeyManager.contactId()
-        val me = myHertzId() ?: return null
+        val me = myHertzId()
         val members = groupMemberDao.findMembers(group.groupId)
         val roster = listOf(me) + members.mapNotNull { m ->
-            contactDao.find(m.contactId)?.let { HertzId(it.contactId, it.nickname, Base64.encodeToString(it.identityKeyBytes, Base64.NO_WRAP), it.i2pDestination) }
+            contactDao.find(m.contactId)?.let { HertzId(it.contactId, it.nickname, Base64.encodeToString(it.identityKeyBytes, Base64.NO_WRAP), it.nostrPubkey) }
         }
+        val now = System.currentTimeMillis()
         return ChatPayload(
-            UUID.randomUUID().toString(), System.currentTimeMillis(), PayloadKind.GROUP_INVITE,
+            UUID.randomUUID().toString(), now, PayloadKind.GROUP_INVITE,
+            seq = nextSeq(now),
             groupId = group.groupId, groupName = group.name, groupMembers = roster, groupOwnerId = myId,
         )
     }
 
     private suspend fun broadcastRoster(group: GroupEntity) {
         val myId = identityKeyManager.contactId()
-        val me = myHertzId() ?: return
+        val me = myHertzId()
         val members = groupMemberDao.findMembers(group.groupId)
-        val roster = listOf(me) + members.mapNotNull { m -> contactDao.find(m.contactId)?.let { HertzId(it.contactId, it.nickname, Base64.encodeToString(it.identityKeyBytes, Base64.NO_WRAP), it.i2pDestination) } }
+        val roster = listOf(me) + members.mapNotNull { m -> contactDao.find(m.contactId)?.let { HertzId(it.contactId, it.nickname, Base64.encodeToString(it.identityKeyBytes, Base64.NO_WRAP), it.nostrPubkey) } }
+        val now = System.currentTimeMillis()
         val payload = ChatPayload(
-            UUID.randomUUID().toString(), System.currentTimeMillis(), PayloadKind.GROUP_ROSTER_UPDATE,
+            UUID.randomUUID().toString(), now, PayloadKind.GROUP_ROSTER_UPDATE,
+            seq = nextSeq(now),
             groupId = group.groupId, groupName = group.name, groupOwnerId = myId, groupRoster = roster,
         )
         coroutineScope {
@@ -602,10 +729,12 @@ class P2pChatService @Inject constructor(
     // --- Messaging ---
 
     fun sendText(contactId: String, text: String) {
+        val now = System.currentTimeMillis()
         val payload = ChatPayload(
             messageId = UUID.randomUUID().toString(),
-            sentAt = System.currentTimeMillis(),
+            sentAt = now,
             kind = PayloadKind.TEXT,
+            seq = nextSeq(now),
             text = text,
         )
         scope.launch {
@@ -617,6 +746,7 @@ class P2pChatService @Inject constructor(
                     type = MessageType.TEXT,
                     text = text,
                     timestamp = payload.sentAt,
+                    seq = payload.seq,
                     deliveryState = DeliveryState.PENDING,
                 ),
             )
@@ -636,6 +766,7 @@ class P2pChatService @Inject constructor(
             val mentions = resolveMentions(groupId, text)
             val messageId = UUID.randomUUID().toString()
             val now = System.currentTimeMillis()
+            val seq = nextSeq(now)
             messageDao.upsert(
                 MessageEntity(
                     messageId = messageId,
@@ -644,13 +775,12 @@ class P2pChatService @Inject constructor(
                     type = MessageType.TEXT,
                     text = text,
                     timestamp = now,
+                    seq = seq,
                     deliveryState = DeliveryState.PENDING,
                     mentionedContactIds = mentions.takeIf { it.isNotEmpty() }?.joinToString(","),
                 ),
             )
-            val payload = ChatPayload(messageId, now, PayloadKind.TEXT, text = text, groupId = groupId)
-            // Members dial in parallel - sequential dials would multiply one
-            // slow I2P handshake by the member count on every group message.
+            val payload = ChatPayload(messageId, now, PayloadKind.TEXT, seq = seq, text = text, groupId = groupId)
             val delivered = coroutineScope {
                 members.map { async { trySendPayload(it.contactId, payload) } }.awaitAll().any { it }
             }
@@ -658,30 +788,53 @@ class P2pChatService @Inject constructor(
         }
     }
 
-    /** Returns true if the envelope made it onto a connection successfully - not a delivery receipt, just "left this device". */
     /**
      * encrypt() is what actually threw the NoSessionException that used to crash the app
-     * outright (see the FriendResponsePayload fix above for why a session could be
-     * missing in the first place) - wrapped now so any future encryption failure fails
+     * outright - wrapped now so any future encryption failure fails
      * this one send instead of taking the whole app down. A message that can't be
      * encrypted can't be sent either way, so "not delivered" is the correct outcome,
      * not a crash.
      */
     /** Sends one call-signaling or audio packet - through the same E2E session as chat, so calls are encrypted exactly like messages. */
-    suspend fun sendCallPayload(contactId: String, payload: ChatPayload): Boolean = trySendPayload(contactId, payload)
+    suspend fun sendCallPayload(contactId: String, payload: ChatPayload): Boolean =
+        trySendPayload(contactId, payload, fastLane = payload.kind == PayloadKind.CALL_AUDIO)
 
-    private suspend fun trySendPayload(contactId: String, payload: ChatPayload): Boolean = runCatching {
+    /** Returns true if the envelope made it onto the wire - not a delivery receipt, just "left this device". */
+    private suspend fun trySendPayload(contactId: String, payload: ChatPayload, fastLane: Boolean = false): Boolean = runCatching {
         val contact = contactDao.find(contactId) ?: return false
         // Every payload carries who we currently are - the receiver syncs our
-        // nickname/avatar off ordinary traffic, so an offline peer catches up
+        // nickname/avatar/address off ordinary traffic, so an offline peer catches up
         // on the next message instead of missing a one-shot broadcast forever.
-        val stamped = payload.copy(senderNickname = identityKeyManager.nickname, senderAvatarHash = myAvatarHash())
+        val stamped = payload.copy(
+            senderNickname = identityKeyManager.nickname,
+            senderAvatarHash = myAvatarHash(),
+            senderNostrPub = identityKeyManager.nostrPubkeyHex(),
+        )
         val envelope = cipherFor(contactId).encrypt(json.encodeToString(stamped).encodeToByteArray())
         val frameType = if (envelope.isPreKeyMessage) FRAME_PREKEY else FRAME_MESSAGE
-        sendFrameTo(contactId, contact.i2pDestination, frame(frameType, envelope.ciphertext))
+        sendRoutedBytes(contact, frame(frameType, envelope.ciphertext), fastLane)
     }.getOrDefault(false)
 
-    private suspend fun sendFrameTo(contactId: String, i2pDestination: String, bytes: ByteArray): Boolean {
+    /**
+     * One routed send: same local network wins (direct, near-instant, works with
+     * no internet at all), the relay covers everyone else. [fastLane] (call
+     * audio only) publishes to a single relay instead of all of them.
+     */
+    private suspend fun sendRoutedBytes(contact: ContactEntity, bytes: ByteArray, fastLane: Boolean = false): Boolean {
+        if (lanTransport.addressFor(contact.contactId) != null) {
+            if (sendFrameTo(contact.contactId, bytes)) return true
+            // LAN dial failed (they left the network) - fall through to the relay.
+        }
+        if (!isRelayKey(contact.nostrPubkey)) return false
+        val tag = routeTagFor(contact.identityKeyBytes) ?: return false
+        val tags = listOf(listOf(NostrProtocol.TAG_ROUTE, tag))
+        return withContext(Dispatchers.IO) {
+            if (fastLane) relayTransport.publishFast(contact.nostrPubkey, tags, bytes)
+            else relayTransport.publish(contact.nostrPubkey, tags, bytes)
+        }
+    }
+
+    private suspend fun sendFrameTo(contactId: String, bytes: ByteArray): Boolean {
         val cached = outgoingConnections[contactId]
         if (cached != null) {
             val ok = runCatching { withTimeout(SEND_TIMEOUT_MS) { cached.send(bytes) } }.isSuccess
@@ -693,13 +846,10 @@ class P2pChatService @Inject constructor(
             runCatching { cached.close() }
         }
         // Parallel sends to the same peer (a tap on send racing the retry sweep
-        // or a flush) used to dial in parallel: each multi-second I2P dial then
-        // evicted the previous connection out from under its in-flight write,
-        // failing messages that had a working socket - the flakiness that read
-        // as "the app is unstable". One dial per contact at a time; whoever
-        // waited rechecks the cache first, since the winner already connected.
-        // The dial keeps its own (longer) connect timeout - only the write is
-        // bounded, so a slow-but-working I2P dial is never cut short.
+        // or a flush) used to dial in parallel: each dial then evicted the
+        // previous connection out from under its in-flight write, failing
+        // messages that had a working socket. One dial per contact at a time;
+        // whoever waited rechecks the cache first, since the winner already connected.
         return dialMutexFor(contactId).withLock {
             outgoingConnections[contactId]?.let { winner ->
                 if (runCatching { withTimeout(SEND_TIMEOUT_MS) { winner.send(bytes) } }.isSuccess) return@withLock true
@@ -707,20 +857,14 @@ class P2pChatService @Inject constructor(
                 runCatching { winner.close() }
             }
             runCatching {
-                val fresh = dialAndRegister(contactId, i2pDestination)
+                val fresh = dialAndRegister(contactId)
                 withTimeout(SEND_TIMEOUT_MS) { fresh.send(bytes) }
             }.isSuccess
         }
     }
 
-    private suspend fun dialAndRegister(contactId: String, i2pDestination: String): P2pConnection = withContext(Dispatchers.IO) {
-        // Same local network wins: it's direct, near-instant, works with no internet at
-        // all, and needs no bootstrap of any kind. I2P is the fallback for everyone else.
-        val socket: Socket = if (lanTransport.addressFor(contactId) != null) {
-            runCatching { lanTransport.connectTo(contactId) }.getOrElse { i2pTransport.connectTo(i2pDestination) }
-        } else {
-            i2pTransport.connectTo(i2pDestination)
-        }
+    private suspend fun dialAndRegister(contactId: String): P2pConnection = withContext(Dispatchers.IO) {
+        val socket: Socket = lanTransport.connectTo(contactId)
         val connection = P2pConnection(socket)
         connection.send(frame(FRAME_HELLO, identityKeyManager.contactId().encodeToByteArray()))
         registerOutgoing(contactId, connection)
@@ -753,11 +897,13 @@ class P2pChatService @Inject constructor(
         val localCopy = runCatching { mediaStorage.newOutgoingCopyFromFile(sourceFile, extension) }.getOrNull()
         val messageId = UUID.randomUUID().toString()
         val chunkCount = FileChunks.chunkCount(size, MediaCrypto.CHUNK_SIZE).coerceAtLeast(1)
+        val now = System.currentTimeMillis()
 
         val control = ChatPayload(
             messageId = messageId,
-            sentAt = System.currentTimeMillis(),
+            sentAt = now,
             kind = kind,
+            seq = nextSeq(now),
             mediaMimeType = mimeType,
             mediaFileName = fileName,
             mediaSizeBytes = size,
@@ -780,6 +926,7 @@ class P2pChatService @Inject constructor(
                     mediaFileName = fileName,
                     mediaDurationMs = durationMs,
                     timestamp = control.sentAt,
+                    seq = control.seq,
                     deliveryState = DeliveryState.PENDING,
                 ),
             )
@@ -797,7 +944,7 @@ class P2pChatService @Inject constructor(
             val contact = contactDao.find(contactId)
             val delivered = contact != null && runCatching {
                 check(trySendPayload(contactId, control))
-                check(sendChunkStreamFromFile(contactId, contact.i2pDestination, transferId, key, nonceSalt, localCopy, chunkCount))
+                check(sendChunkStreamFromFile(contactId, transferId, key, nonceSalt, localCopy, chunkCount))
             }.isSuccess
             messageDao.updateState(messageId, if (delivered) DeliveryState.SENT else DeliveryState.PENDING)
         }
@@ -811,11 +958,13 @@ class P2pChatService @Inject constructor(
         val localCopy = mediaStorage.newOutgoingCopy(sourceBytes, extension)
         val messageId = UUID.randomUUID().toString()
         val chunkCount = (sourceBytes.size + MediaCrypto.CHUNK_SIZE - 1) / MediaCrypto.CHUNK_SIZE
+        val now = System.currentTimeMillis()
 
         val control = ChatPayload(
             messageId = messageId,
-            sentAt = System.currentTimeMillis(),
+            sentAt = now,
             kind = kind,
+            seq = nextSeq(now),
             mediaMimeType = mimeType,
             mediaFileName = fileName,
             mediaSizeBytes = sourceBytes.size.toLong(),
@@ -838,6 +987,7 @@ class P2pChatService @Inject constructor(
                     mediaFileName = fileName,
                     mediaDurationMs = durationMs,
                     timestamp = control.sentAt,
+                    seq = control.seq,
                     deliveryState = DeliveryState.PENDING,
                 ),
             )
@@ -850,24 +1000,24 @@ class P2pChatService @Inject constructor(
             val contact = contactDao.find(contactId)
             val delivered = contact != null && runCatching {
                 check(trySendPayload(contactId, control))
-                check(sendChunkStream(contactId, contact.i2pDestination, transferId, key, nonceSalt, sourceBytes))
+                check(sendChunkStream(contactId, transferId, key, nonceSalt, sourceBytes))
             }.isSuccess
             messageDao.updateState(messageId, if (delivered) DeliveryState.SENT else DeliveryState.PENDING)
         }
     }
 
     /**
-     * Streams encrypted chunks over whatever connection is currently alive, re-attempting
-     * each chunk a few times (sendFrameTo re-dials between attempts). Without per-chunk
-     * retries, one failed chunk out of hundreds abandons the whole photo - over flaky
-     * I2P that makes large attachments effectively undeliverable.
+     * Streams encrypted chunks over whatever route is currently alive, re-attempting
+     * each chunk a few times. Without per-chunk retries, one failed chunk out of
+     * hundreds abandons the whole photo.
      */
-    private suspend fun sendChunkStream(contactId: String, i2pDestination: String, transferId: UUID, key: ByteArray, nonceSalt: ByteArray, sourceBytes: ByteArray): Boolean {
+    private suspend fun sendChunkStream(contactId: String, transferId: UUID, key: ByteArray, nonceSalt: ByteArray, sourceBytes: ByteArray): Boolean {
+        val contact = contactDao.find(contactId) ?: return false
         var offset = 0
         var index = 0
         while (offset < sourceBytes.size) {
             val end = minOf(offset + MediaCrypto.CHUNK_SIZE, sourceBytes.size)
-            if (!sendOneChunk(contactId, i2pDestination, transferId, key, nonceSalt, index, sourceBytes.copyOfRange(offset, end))) return false
+            if (!sendOneChunk(contact, transferId, key, nonceSalt, index, sourceBytes.copyOfRange(offset, end))) return false
             offset = end
             index++
         }
@@ -879,12 +1029,13 @@ class P2pChatService @Inject constructor(
      * video or APK holds one chunk in RAM instead of the whole file. Random access
      * (not a forward stream) so a retried chunk re-reads the same bytes.
      */
-    private suspend fun sendChunkStreamFromFile(contactId: String, i2pDestination: String, transferId: UUID, key: ByteArray, nonceSalt: ByteArray, sourceFile: File, chunkCount: Int): Boolean {
+    private suspend fun sendChunkStreamFromFile(contactId: String, transferId: UUID, key: ByteArray, nonceSalt: ByteArray, sourceFile: File, chunkCount: Int): Boolean {
+        val contact = contactDao.find(contactId) ?: return false
         return runCatching {
             FileChunks.Reader(sourceFile, MediaCrypto.CHUNK_SIZE).use { reader ->
                 if (reader.chunkCount != chunkCount) return@runCatching false
                 repeat(chunkCount) { index ->
-                    if (!sendOneChunk(contactId, i2pDestination, transferId, key, nonceSalt, index, reader.readChunk(index))) return@runCatching false
+                    if (!sendOneChunk(contact, transferId, key, nonceSalt, index, reader.readChunk(index))) return@runCatching false
                 }
             }
             true
@@ -892,12 +1043,12 @@ class P2pChatService @Inject constructor(
     }
 
     /** Encrypts one chunk and pushes it through the per-chunk retry loop. */
-    private suspend fun sendOneChunk(contactId: String, i2pDestination: String, transferId: UUID, key: ByteArray, nonceSalt: ByteArray, index: Int, plaintext: ByteArray): Boolean {
+    private suspend fun sendOneChunk(contact: ContactEntity, transferId: UUID, key: ByteArray, nonceSalt: ByteArray, index: Int, plaintext: ByteArray): Boolean {
         val cipherChunk = MediaCrypto.encryptChunk(key, nonceSalt, index, plaintext)
         var sent = false
         var attempts = 0
         while (!sent && attempts < CHUNK_ATTEMPTS) {
-            sent = sendFrameTo(contactId, i2pDestination, frameMediaChunk(transferId, index, cipherChunk))
+            sent = sendRoutedBytes(contact, frameMediaChunk(transferId, index, cipherChunk))
             attempts++
         }
         return sent
@@ -923,11 +1074,13 @@ class P2pChatService @Inject constructor(
         val localCopy = runCatching { mediaStorage.newOutgoingCopyFromFile(sourceFile, extension) }.getOrNull()
         val messageId = UUID.randomUUID().toString()
         val chunkCount = FileChunks.chunkCount(size, MediaCrypto.CHUNK_SIZE).coerceAtLeast(1)
+        val now = System.currentTimeMillis()
 
         val control = ChatPayload(
             messageId = messageId,
-            sentAt = System.currentTimeMillis(),
+            sentAt = now,
             kind = kind,
+            seq = nextSeq(now),
             mediaMimeType = mimeType,
             mediaFileName = fileName,
             mediaSizeBytes = size,
@@ -951,6 +1104,7 @@ class P2pChatService @Inject constructor(
                     mediaFileName = fileName,
                     mediaDurationMs = durationMs,
                     timestamp = control.sentAt,
+                    seq = control.seq,
                     deliveryState = DeliveryState.PENDING,
                 ),
             )
@@ -964,10 +1118,9 @@ class P2pChatService @Inject constructor(
             val delivered = coroutineScope {
                 members.map { member ->
                     async {
-                        val contact = contactDao.find(member.contactId)
-                        contact != null && runCatching {
+                        runCatching {
                             check(trySendPayload(member.contactId, control))
-                            check(sendChunkStreamFromFile(member.contactId, contact.i2pDestination, transferId, key, nonceSalt, localCopy, chunkCount))
+                            check(sendChunkStreamFromFile(member.contactId, transferId, key, nonceSalt, localCopy, chunkCount))
                         }.isSuccess
                     }
                 }.awaitAll().any { it }
@@ -984,11 +1137,13 @@ class P2pChatService @Inject constructor(
         val localCopy = mediaStorage.newOutgoingCopy(sourceBytes, extension)
         val messageId = UUID.randomUUID().toString()
         val chunkCount = (sourceBytes.size + MediaCrypto.CHUNK_SIZE - 1) / MediaCrypto.CHUNK_SIZE
+        val now = System.currentTimeMillis()
 
         val control = ChatPayload(
             messageId = messageId,
-            sentAt = System.currentTimeMillis(),
+            sentAt = now,
             kind = kind,
+            seq = nextSeq(now),
             mediaMimeType = mimeType,
             mediaFileName = fileName,
             mediaSizeBytes = sourceBytes.size.toLong(),
@@ -1012,6 +1167,7 @@ class P2pChatService @Inject constructor(
                     mediaFileName = fileName,
                     mediaDurationMs = durationMs,
                     timestamp = control.sentAt,
+                    seq = control.seq,
                     deliveryState = DeliveryState.PENDING,
                 ),
             )
@@ -1020,10 +1176,9 @@ class P2pChatService @Inject constructor(
             val delivered = coroutineScope {
                 members.map { member ->
                     async {
-                        val contact = contactDao.find(member.contactId)
-                        contact != null && runCatching {
+                        runCatching {
                             check(trySendPayload(member.contactId, control))
-                            check(sendChunkStream(member.contactId, contact.i2pDestination, transferId, key, nonceSalt, sourceBytes))
+                            check(sendChunkStream(member.contactId, transferId, key, nonceSalt, sourceBytes))
                         }.isSuccess
                     }
                 }.awaitAll().any { it }
@@ -1071,20 +1226,27 @@ class P2pChatService @Inject constructor(
 
     /**
      * Applies the sender profile stamped on an incoming payload: the nickname lands
-     * directly, and a mismatched avatar hash pulls the full photo. Skipped for call
-     * audio (50 packets a second would re-hash for nothing - the call signaling
-     * around it already carries the same stamp) and for our own loopback.
+     * directly, a changed relay key repairs the contact's address, and a mismatched
+     * avatar hash pulls the full photo. Skipped for call audio (50 packets a second
+     * would re-hash for nothing - the call signaling around it already carries the
+     * same stamp) and for our own loopback.
      */
     private fun applySenderProfile(contactId: String, payload: ChatPayload) {
         if (payload.kind == PayloadKind.CALL_AUDIO) return
-        if (payload.senderNickname == null && payload.senderAvatarHash == null) return
+        if (payload.senderNickname == null && payload.senderAvatarHash == null && payload.senderNostrPub == null) return
         if (contactId == identityKeyManager.contactId()) return
         scope.launch {
             val contact = contactDao.find(contactId) ?: return@launch
             val nickname = payload.senderNickname?.trim().orEmpty()
+            var updated = contact
             if (nickname.isNotEmpty() && nickname != contact.nickname) {
-                contactDao.update(contact.copy(nickname = nickname))
+                updated = updated.copy(nickname = nickname)
             }
+            val relayKey = payload.senderNostrPub
+            if (relayKey != null && isRelayKey(relayKey) && relayKey != contact.nostrPubkey) {
+                updated = updated.copy(nostrPubkey = relayKey)
+            }
+            if (updated != contact) contactDao.update(updated)
             val remoteHash = payload.senderAvatarHash
             val localHash = contact.avatarPath?.let { File(it) }?.takeIf { it.exists() }
                 ?.let { runCatching { sha256Hex(it.readBytes()) }.getOrNull() }
@@ -1117,10 +1279,11 @@ class P2pChatService @Inject constructor(
     /** Pushes our current nickname and avatar to one contact - accept-time sync, profile pulls, broadcasts. */
     fun sendProfileTo(contactId: String) {
         scope.launch {
+            val now = System.currentTimeMillis()
             runCatching {
                 trySendPayload(
                     contactId,
-                    ChatPayload(UUID.randomUUID().toString(), System.currentTimeMillis(), PayloadKind.PROFILE_UPDATE, profileNickname = identityKeyManager.nickname),
+                    ChatPayload(UUID.randomUUID().toString(), now, PayloadKind.PROFILE_UPDATE, seq = nextSeq(now), profileNickname = identityKeyManager.nickname),
                 )
             }
             mediaStorage.selfAvatarFile().takeIf { it.exists() }?.let { sendAvatarTo(contactId, ImageEditor.downscaleAvatar(it.readBytes())) }
@@ -1134,10 +1297,11 @@ class P2pChatService @Inject constructor(
      */
     fun requestProfile(contactId: String) {
         scope.launch {
+            val now = System.currentTimeMillis()
             runCatching {
                 trySendPayload(
                     contactId,
-                    ChatPayload(UUID.randomUUID().toString(), System.currentTimeMillis(), PayloadKind.PROFILE_REQUEST),
+                    ChatPayload(UUID.randomUUID().toString(), now, PayloadKind.PROFILE_REQUEST, seq = nextSeq(now)),
                 )
             }
         }
@@ -1148,10 +1312,12 @@ class P2pChatService @Inject constructor(
         val key = MediaCrypto.generateKey()
         val nonceSalt = MediaCrypto.generateNonceSalt()
         val chunkCount = (jpegBytes.size + MediaCrypto.CHUNK_SIZE - 1) / MediaCrypto.CHUNK_SIZE
+        val now = System.currentTimeMillis()
         val control = ChatPayload(
             messageId = UUID.randomUUID().toString(),
-            sentAt = System.currentTimeMillis(),
+            sentAt = now,
             kind = PayloadKind.AVATAR,
+            seq = nextSeq(now),
             mediaMimeType = "image/jpeg",
             mediaSizeBytes = jpegBytes.size.toLong(),
             mediaTransferId = transferId.toString(),
@@ -1160,10 +1326,10 @@ class P2pChatService @Inject constructor(
             mediaChunkCount = chunkCount,
         )
         scope.launch {
-            val contact = contactDao.find(contactId) ?: return@launch
+            contactDao.find(contactId) ?: return@launch
             runCatching {
                 check(trySendPayload(contactId, control))
-                check(sendChunkStream(contactId, contact.i2pDestination, transferId, key, nonceSalt, jpegBytes))
+                check(sendChunkStream(contactId, transferId, key, nonceSalt, jpegBytes))
             }
         }
     }
@@ -1179,6 +1345,8 @@ class P2pChatService @Inject constructor(
 
     private fun beginIncomingTransfer(contactId: String, payload: ChatPayload) {
         val transferId = payload.mediaTransferId ?: return
+        // A re-solicited control for a transfer that already finished - just re-ack, don't rebuild anything.
+        if (incomingTransfers.containsKey(transferId)) return
         val key = payload.mediaKeyBase64?.let { Base64.decode(it, Base64.NO_WRAP) } ?: return
         val nonceSalt = payload.mediaNonceSaltBase64?.let { Base64.decode(it, Base64.NO_WRAP) } ?: return
         val chunkCount = payload.mediaChunkCount ?: return
@@ -1189,11 +1357,13 @@ class P2pChatService @Inject constructor(
             mediaStorage.fileFor(transferId, mediaStorage.extensionFor(mimeType))
         }
 
-        incomingTransfers[transferId] = IncomingTransfer(
+        val transfer = IncomingTransfer(
             contactId = contactId,
             threadId = payload.groupId ?: contactId,
             senderContactId = payload.groupId?.let { contactId },
             messageId = payload.messageId,
+            sentAt = payload.sentAt,
+            seq = payload.seq,
             kind = payload.kind,
             key = key,
             nonceSalt = nonceSalt,
@@ -1202,66 +1372,96 @@ class P2pChatService @Inject constructor(
             fileName = payload.mediaFileName,
             durationMs = payload.mediaDurationMs,
             outputFile = outputFile,
-            out = BufferedOutputStream(FileOutputStream(outputFile)),
+            out = RandomAccessFile(outputFile, "rw"),
         )
+        incomingTransfers[transferId] = transfer
+        // Chunks that beat the control here get written now, at their own offsets.
+        pendingChunks.remove(transferId)?.chunks?.forEach { (index, ciphertext) ->
+            writeChunk(transfer, index, ciphertext)
+        }
+        maybeCompleteTransfer(transferId, transfer)
+    }
+
+    /** Writes one chunk at its own offset - order-independent, duplicate-safe. Returns false when the chunk is corrupt. */
+    private fun writeChunk(transfer: IncomingTransfer, chunkIndex: Int, ciphertext: ByteArray): Boolean {
+        if (chunkIndex < 0 || chunkIndex >= transfer.chunkCount) return false
+        val plaintext = runCatching { MediaCrypto.decryptChunk(transfer.key, transfer.nonceSalt, chunkIndex, ciphertext) }.getOrNull() ?: return false
+        synchronized(transfer) {
+            if (!transfer.receivedIndices.add(chunkIndex)) return true // relay fan-out duplicate - already have it
+            runCatching {
+                transfer.out.seek(chunkIndex.toLong() * MediaCrypto.CHUNK_SIZE)
+                transfer.out.write(plaintext)
+            }.getOrElse { return false }
+        }
+        return true
     }
 
     private fun onMediaChunkReceived(bytes: ByteArray) {
+        if (bytes.size < 1 + 16 + 4) return
         val buffer = java.nio.ByteBuffer.wrap(bytes, 1, bytes.size - 1)
         val transferId = UUID(buffer.long, buffer.long).toString()
         val chunkIndex = buffer.int
         val ciphertext = bytes.copyOfRange(1 + 16 + 4, bytes.size)
 
-        val transfer = incomingTransfers[transferId] ?: return
-        val plaintext = runCatching { MediaCrypto.decryptChunk(transfer.key, transfer.nonceSalt, chunkIndex, ciphertext) }.getOrNull() ?: return
-        transfer.out.write(plaintext)
-        transfer.received++
+        val transfer = incomingTransfers[transferId]
+        if (transfer == null) {
+            // Control hasn't arrived yet - hold the chunk rather than dropping it.
+            val pending = pendingChunks.getOrPut(transferId) { PendingChunks() }
+            synchronized(pending) {
+                if (pending.chunks.size < PENDING_CHUNKS_CAP) pending.chunks.putIfAbsent(chunkIndex, ciphertext)
+            }
+            return
+        }
+        if (!writeChunk(transfer, chunkIndex, ciphertext)) return
+        maybeCompleteTransfer(transferId, transfer)
+    }
 
-        if (transfer.received >= transfer.chunkCount) {
-            transfer.out.flush()
-            transfer.out.close()
-            incomingTransfers.remove(transferId)
+    private fun maybeCompleteTransfer(transferId: String, transfer: IncomingTransfer) {
+        val complete = synchronized(transfer) { transfer.receivedIndices.size >= transfer.chunkCount }
+        if (!complete) return
+        if (incomingTransfers.remove(transferId) == null) return
+        runCatching { transfer.out.close() }
 
-            if (transfer.kind == PayloadKind.AVATAR) {
-                // The photo we pulled has landed - the hash guard lifts, so a
-                // *newer* photo later pulls again instead of being swallowed.
-                requestedAvatarHashes.remove(transfer.contactId)
-                scope.launch {
-                    contactDao.find(transfer.contactId)?.let {
-                        val previous = it.avatarPath?.let { path -> java.io.File(path) }
-                        contactDao.update(it.copy(avatarPath = transfer.outputFile.absolutePath))
-                        if (previous != null && previous.absolutePath != transfer.outputFile.absolutePath) {
-                            runCatching { previous.delete() }
-                        }
+        if (transfer.kind == PayloadKind.AVATAR) {
+            // The photo we pulled has landed - the hash guard lifts, so a
+            // *newer* photo later pulls again instead of being swallowed.
+            requestedAvatarHashes.remove(transfer.contactId)
+            scope.launch {
+                contactDao.find(transfer.contactId)?.let {
+                    val previous = it.avatarPath?.let { path -> java.io.File(path) }
+                    contactDao.update(it.copy(avatarPath = transfer.outputFile.absolutePath))
+                    if (previous != null && previous.absolutePath != transfer.outputFile.absolutePath) {
+                        runCatching { previous.delete() }
                     }
                 }
-                return
             }
-
-            val entity = MessageEntity(
-                messageId = transfer.messageId,
-                contactId = transfer.threadId,
-                fromMe = false,
-                type = transfer.kind.toMessageType(),
-                mediaPath = transfer.outputFile.absolutePath,
-                mediaMimeType = transfer.mimeType,
-                mediaFileName = transfer.fileName,
-                mediaDurationMs = transfer.durationMs,
-                timestamp = System.currentTimeMillis(),
-                deliveryState = DeliveryState.DELIVERED,
-                senderContactId = transfer.senderContactId,
-            )
-            scope.launch {
-                // Retries reuse the message id, so a completed transfer may simply be the
-                // second copy of something already shown - store idempotently, but only
-                // notify (and vibrate) the first time.
-                if (messageDao.find(transfer.messageId) == null) {
-                    messageDao.upsert(entity)
-                    _events.tryEmit(ChatServiceEvent.MessageReceived(transfer.threadId, entity))
-                }
-            }
-            sendDeliveredAck(transfer.contactId, transfer.messageId)
+            return
         }
+
+        val entity = MessageEntity(
+            messageId = transfer.messageId,
+            contactId = transfer.threadId,
+            fromMe = false,
+            type = transfer.kind.toMessageType(),
+            mediaPath = transfer.outputFile.absolutePath,
+            mediaMimeType = transfer.mimeType,
+            mediaFileName = transfer.fileName,
+            mediaDurationMs = transfer.durationMs,
+            timestamp = transfer.sentAt,
+            seq = transfer.seq,
+            deliveryState = DeliveryState.DELIVERED,
+            senderContactId = transfer.senderContactId,
+        )
+        scope.launch {
+            // Retries reuse the message id, so a completed transfer may simply be the
+            // second copy of something already shown - store idempotently, but only
+            // notify (and vibrate) the first time.
+            if (messageDao.find(transfer.messageId) == null) {
+                messageDao.upsert(entity)
+                _events.tryEmit(ChatServiceEvent.MessageReceived(transfer.threadId, entity))
+            }
+        }
+        sendDeliveredAck(transfer.contactId, transfer.messageId)
     }
 
     private fun PayloadKind.toMessageType(): MessageType = when (this) {
@@ -1277,22 +1477,24 @@ class P2pChatService @Inject constructor(
         while (started) {
             delay(RETRY_INTERVAL_MS)
             runCatching { retryPendingNow() }
+            runCatching { retryPendingRequests() }
         }
     }
 
     /**
-     * Dials [contactId] in the background without sending anything - opening a chat
-     * warms its peer, so the first message usually finds a live connection instead
-     * of paying the multi-second I2P dial. No-op when already connected.
+     * Warms the LAN path to a contact - opening a chat dials while the user
+     * reads, so the first send finds a live socket. No-op when they're not on
+     * this network (the relay needs no warmup at all).
      */
     fun warmConnection(contactId: String) {
         if (outgoingConnections.containsKey(contactId)) return
+        if (lanTransport.addressFor(contactId) == null) return
         scope.launch {
             val contact = contactDao.find(contactId) ?: return@launch
             if (contact.contactId in blockedContactIds) return@launch
             dialMutexFor(contactId).withLock {
                 if (outgoingConnections.containsKey(contactId)) return@withLock
-                runCatching { dialAndRegister(contactId, contact.i2pDestination) }
+                runCatching { dialAndRegister(contactId) }
             }
         }
     }
@@ -1308,13 +1510,14 @@ class P2pChatService @Inject constructor(
     private suspend fun heartbeatLoop() {
         while (started) {
             delay(HEARTBEAT_MS)
-            // Only already-open connections: a ping must never dial, or every
+            // Only already-open LAN connections: a ping must never dial, or every
             // heartbeat would wake every dead peer like a retry sweep. The ping
             // still carries the profile stamp, so it doubles as profile refresh.
             outgoingConnections.keys.forEach { contactId ->
                 if (!outgoingConnections.containsKey(contactId)) return@forEach
+                val now = System.currentTimeMillis()
                 runCatching {
-                    trySendPayload(contactId, ChatPayload(UUID.randomUUID().toString(), System.currentTimeMillis(), PayloadKind.PING))
+                    trySendPayload(contactId, ChatPayload(UUID.randomUUID().toString(), now, PayloadKind.PING, seq = nextSeq(now)))
                 }
             }
         }
@@ -1327,11 +1530,11 @@ class P2pChatService @Inject constructor(
         try {
             sweepStaleTransfers()
             // Each thread gets its own lane: the sweep used to walk every unsent
-            // message in one sequence, so a 45s dial timeout to one dead peer
-            // head-of-line-blocked everything behind it and one unreachable
-            // contact starved all the reachable ones for minutes. Within a lane
-            // the sends stay ordered and stop at the first failure - if the
-            // peer were up, the first message would have gone through.
+            // message in one sequence, so a slow peer head-of-line-blocked
+            // everything behind it and one unreachable contact starved all the
+            // reachable ones. Within a lane the sends stay ordered and stop at
+            // the first failure - if the peer were up, the first message would
+            // have gone through.
             coroutineScope {
                 messageDao.findUnsent().groupBy { it.contactId }.values.map { lane ->
                     async {
@@ -1371,13 +1574,19 @@ class P2pChatService @Inject constructor(
      * blocked, unknown, file gone) returns true so the lane keeps moving.
      */
     private suspend fun retryMessage(message: MessageEntity): Boolean {
+        val age = System.currentTimeMillis() - message.timestamp
         // SENT without a receipt past the grace period means the peer runs a version
         // that never sends receipts (or is gone) - confirm optimistically instead of
         // spinning under the message forever.
-        if (message.deliveryState == DeliveryState.SENT && System.currentTimeMillis() - message.timestamp > ACK_GRACE_MS) {
+        if (message.deliveryState == DeliveryState.SENT && age > ACK_GRACE_MS) {
             messageDao.updateState(message.messageId, DeliveryState.DELIVERED)
             return true
         }
+        // SENT but only briefly unacked: re-send the payload to solicit a fresh
+        // receipt. Relay events are fire-and-forget, so a lost ack must never
+        // wedge the message at "sent" forever - and re-sends are idempotent on
+        // the receiving side (same message id, just another ack).
+        val resolicit = message.deliveryState == DeliveryState.SENT && age > ACK_RESOLICIT_MS
         // Group threads live under the group id, not a contact id - resolving them as
         // contacts silently skipped every failed group message forever.
         if (groupDao.find(message.contactId) != null) {
@@ -1386,19 +1595,20 @@ class P2pChatService @Inject constructor(
         val contact = contactDao.find(message.contactId) ?: return true
         if (contact.contactId in blockedContactIds) return true
         val delivered = if (message.type == MessageType.TEXT) {
-            trySendPayload(message.contactId, ChatPayload(message.messageId, message.timestamp, PayloadKind.TEXT, text = message.text))
+            trySendPayload(message.contactId, ChatPayload(message.messageId, message.timestamp, PayloadKind.TEXT, seq = message.seq, text = message.text))
         } else {
             val file = message.mediaPath?.let { File(it) }?.takeIf { it.exists() && it.length() > 0 }
-            file != null && resendMedia(message, file, contact.i2pDestination, groupId = null, toContactId = message.contactId)
+            file != null && resendMedia(message, file, groupId = null, toContactId = message.contactId)
         }
-        if (delivered) messageDao.updateState(message.messageId, DeliveryState.SENT)
+        if (delivered && !resolicit) messageDao.updateState(message.messageId, DeliveryState.SENT)
         return delivered
     }
 
     private suspend fun retryGroupMessage(groupId: String, message: MessageEntity): Boolean {
+        val resolicit = message.deliveryState == DeliveryState.SENT
         val members = groupMemberDao.findMembers(groupId)
         val delivered = if (message.type == MessageType.TEXT) {
-            val payload = ChatPayload(message.messageId, message.timestamp, PayloadKind.TEXT, text = message.text, groupId = groupId)
+            val payload = ChatPayload(message.messageId, message.timestamp, PayloadKind.TEXT, seq = message.seq, text = message.text, groupId = groupId)
             coroutineScope {
                 members.map { async { trySendPayload(it.contactId, payload) } }.awaitAll().any { it }
             }
@@ -1409,16 +1619,16 @@ class P2pChatService @Inject constructor(
                     async {
                         val contact = contactDao.find(member.contactId) ?: return@async false
                         if (contact.contactId in blockedContactIds) return@async false
-                        resendMedia(message, file, contact.i2pDestination, groupId = groupId, toContactId = member.contactId)
+                        resendMedia(message, file, groupId = groupId, toContactId = member.contactId)
                     }
                 }.awaitAll().any { it }
             }
         }
-        if (delivered) messageDao.updateState(message.messageId, DeliveryState.SENT)
+        if (delivered && !resolicit) messageDao.updateState(message.messageId, DeliveryState.SENT)
         return delivered
     }
 
-    private suspend fun resendMedia(message: MessageEntity, sourceFile: File, i2pDestination: String, groupId: String?, toContactId: String): Boolean {
+    private suspend fun resendMedia(message: MessageEntity, sourceFile: File, groupId: String?, toContactId: String): Boolean {
         // A retried media message reuses a fresh transfer id/key - the original attempt may have
         // partially landed on the peer's side, and re-keying is simpler and just as cheap as
         // trying to resume a specific byte offset.
@@ -1436,6 +1646,7 @@ class P2pChatService @Inject constructor(
                 MessageType.VOICE -> PayloadKind.VOICE
                 else -> PayloadKind.FILE
             },
+            seq = message.seq,
             mediaMimeType = message.mediaMimeType,
             mediaFileName = message.mediaFileName,
             mediaSizeBytes = size,
@@ -1448,18 +1659,49 @@ class P2pChatService @Inject constructor(
         )
         return runCatching {
             check(trySendPayload(toContactId, control))
-            check(sendChunkStreamFromFile(toContactId, i2pDestination, transferId, key, nonceSalt, sourceFile, chunkCount))
+            check(sendChunkStreamFromFile(toContactId, transferId, key, nonceSalt, sourceFile, chunkCount))
         }.isSuccess
     }
 
-    /** Confirms receipt back to the sender - this is what stops their spinner. Fire-and-forget: a lost receipt just means another retry cycle, never lost data. */
+    /**
+     * Confirms receipt back to the sender - this is what stops their spinner. Goes
+     * out as a small burst: relay delivery is fire-and-forget, and one lost ack
+     * used to wedge the sender's message at "sent" even though it had arrived.
+     */
     private fun sendDeliveredAck(contactId: String, ackForMessageId: String) {
         scope.launch {
-            runCatching {
-                trySendPayload(
-                    contactId,
-                    ChatPayload(UUID.randomUUID().toString(), System.currentTimeMillis(), PayloadKind.DELIVERED_ACK, ackForMessageId = ackForMessageId),
-                )
+            repeat(3) { attempt ->
+                if (attempt > 0) delay(300)
+                runCatching {
+                    val now = System.currentTimeMillis()
+                    trySendPayload(
+                        contactId,
+                        ChatPayload(UUID.randomUUID().toString(), now, PayloadKind.DELIVERED_ACK, seq = nextSeq(now), ackForMessageId = ackForMessageId),
+                    )
+                }
+            }
+        }
+    }
+
+    /**
+     * Tells a 1:1 contact that everything they sent up to now has been seen -
+     * this is what turns their double tick blue. Called when the chat screen's
+     * read watermark advances; group threads are skipped (no group read
+     * receipts - "seen by whom" needs a roster the receipts don't carry).
+     */
+    fun sendReadAcks(threadId: String) {
+        scope.launch {
+            if (groupDao.find(threadId) != null) return@launch
+            contactDao.find(threadId) ?: return@launch
+            messageDao.findDeliveredIncoming(threadId).forEach { message ->
+                val now = System.currentTimeMillis()
+                runCatching {
+                    trySendPayload(
+                        threadId,
+                        ChatPayload(UUID.randomUUID().toString(), now, PayloadKind.READ_ACK, seq = nextSeq(now), ackForMessageId = message.messageId),
+                    )
+                }
+                messageDao.updateState(message.messageId, DeliveryState.READ)
             }
         }
     }
@@ -1467,18 +1709,58 @@ class P2pChatService @Inject constructor(
     /** Drops transfers whose chunks stopped arriving mid-photo: closes the leaked file handle and deletes the partial file. */
     private fun sweepStaleTransfers() {
         val cutoff = System.currentTimeMillis() - STALE_TRANSFER_MS
-        val staleIds = incomingTransfers.filterValues { it.startedAt < cutoff }.keys.toList()
-        staleIds.forEach { id ->
-            incomingTransfers.remove(id)?.let { transfer ->
-                runCatching { transfer.out.close() }
-                runCatching { transfer.outputFile.delete() }
-            }
+        incomingTransfers.entries.removeIf { (_, transfer) ->
+            if (transfer.startedAt >= cutoff) return@removeIf false
+            runCatching { transfer.out.close() }
+            runCatching { transfer.outputFile.delete() }
+            true
+        }
+        pendingChunks.entries.removeIf { (_, pending) -> pending.startedAt < cutoff }
+    }
+
+    // --- Relay receive path ---
+
+    private fun onRelayIncoming(incoming: RelayTransport.Incoming) {
+        val sealedTag = incoming.tagValue(NostrProtocol.TAG_SEALED)
+        if (sealedTag != null) {
+            onSealedIncoming(incoming)
+            return
+        }
+        val routeTag = incoming.tagValue(NostrProtocol.TAG_ROUTE) ?: return
+        val contactId = routeTagCache[routeTag] ?: return
+        if (contactId in blockedContactIds) return
+        val bytes = runCatching { Base64.decode(incoming.contentBase64, Base64.NO_WRAP) }.getOrNull() ?: return
+        if (bytes.isEmpty()) return
+        maybeSyncGroupState(contactId)
+        when (bytes[0]) {
+            FRAME_MEDIA_CHUNK -> onMediaChunkReceived(bytes)
+            FRAME_MESSAGE, FRAME_PREKEY -> onEnvelopeReceived(contactId, bytes)
+            else -> Unit
         }
     }
 
-    // --- Connection handling ---
+    /** Trial-opens a sealed handshake envelope with our identity key - strangers have no pairwise tag yet, so every sealed envelope is attempted. */
+    private fun onSealedIncoming(incoming: RelayTransport.Incoming) {
+        val wire = runCatching {
+            val decoded = Base64.decode(incoming.contentBase64, Base64.NO_WRAP).decodeToString()
+            json.decodeFromString(SealedWire.serializer(), decoded)
+        }.getOrNull() ?: return
+        val sealed = NostrCrypto.SealedRequest(wire.ephemeralPublicHex, wire.nonceBase64, wire.ciphertextBase64)
+        val plaintext = NostrCrypto.openSealedRequest(sealed, identityKeyManager.identityKeyPair().privateKey.serialize()) ?: return
+        val text = plaintext.decodeToString()
+        // A response carries `accepted`; a request doesn't - try the shapes in order.
+        runCatching { json.decodeFromString(FriendResponsePayload.serializer(), text) }.getOrNull()?.let {
+            handleFriendResponsePayload(it)
+            return
+        }
+        runCatching { json.decodeFromString(FriendRequestPayload.serializer(), text) }.getOrNull()?.let {
+            handleFriendRequestPayload(it)
+        }
+    }
 
-    private fun handleIncomingSocket(socket: Socket, viaLan: Boolean) {
+    // --- LAN connection handling ---
+
+    private fun handleIncomingSocket(socket: Socket) {
         scope.launch {
             val connection = P2pConnection(socket)
             var fromContactId: String? = null
@@ -1489,10 +1771,10 @@ class P2pChatService @Inject constructor(
                     when (bytes[0]) {
                         FRAME_HELLO -> {
                             val claimed = bytes.copyOfRange(1, bytes.size).decodeToString()
-                            // Over I2P the destination that dialled us is itself proof of identity.
-                            // A LAN socket proves nothing, so only honour the claim if mDNS actually
-                            // announced that contact at this address - see LanTransport.matchesDiscovered.
-                            val identityPlausible = !viaLan || lanTransport.matchesDiscovered(claimed, socket.inetAddress)
+                            // A LAN socket proves nothing on its own, so only honour the claim
+                            // if mDNS actually announced that contact at this address - see
+                            // LanTransport.matchesDiscovered.
+                            val identityPlausible = lanTransport.matchesDiscovered(claimed, socket.inetAddress)
                             if (!identityPlausible || claimed in blockedContactIds) return@launch
                             fromContactId = claimed
                             registerIncoming(claimed, connection)
@@ -1505,11 +1787,16 @@ class P2pChatService @Inject constructor(
                             syncGroupStateTo(claimed)
                         }
                         FRAME_MEDIA_CHUNK -> onMediaChunkReceived(bytes)
-                        FRAME_FRIEND_REQUEST -> handleFriendRequestFrame(bytes)
-                        FRAME_FRIEND_RESPONSE -> handleFriendResponseFrame(bytes)
+                        FRAME_FRIEND_REQUEST -> runCatching {
+                            json.decodeFromString(FriendRequestPayload.serializer(), bytes.copyOfRange(1, bytes.size).decodeToString())
+                        }.getOrNull()?.let { handleFriendRequestPayload(it) }
+                        FRAME_FRIEND_RESPONSE -> runCatching {
+                            json.decodeFromString(FriendResponsePayload.serializer(), bytes.copyOfRange(1, bytes.size).decodeToString())
+                        }.getOrNull()?.let { handleFriendResponsePayload(it) }
                         FRAME_MESSAGE, FRAME_PREKEY -> {
                             val senderId = fromContactId ?: continue
                             if (senderId in blockedContactIds) continue
+                            maybeSyncGroupState(senderId)
                             onEnvelopeReceived(senderId, bytes)
                         }
                     }
@@ -1532,7 +1819,9 @@ class P2pChatService @Inject constructor(
                 if (bytes.isEmpty()) continue
                 when (bytes[0]) {
                     FRAME_MEDIA_CHUNK -> onMediaChunkReceived(bytes)
-                    FRAME_FRIEND_RESPONSE -> handleFriendResponseFrame(bytes)
+                    FRAME_FRIEND_RESPONSE -> runCatching {
+                        json.decodeFromString(FriendResponsePayload.serializer(), bytes.copyOfRange(1, bytes.size).decodeToString())
+                    }.getOrNull()?.let { handleFriendResponsePayload(it) }
                     FRAME_MESSAGE, FRAME_PREKEY -> if (contactId !in blockedContactIds) onEnvelopeReceived(contactId, bytes)
                     else -> Unit
                 }
@@ -1557,12 +1846,22 @@ class P2pChatService @Inject constructor(
                 _events.tryEmit(ChatServiceEvent.CallSignaling(contactId, payload))
             // Heartbeat: nothing to do - the profile stamp was already applied above.
             PayloadKind.PING -> Unit
-            PayloadKind.IMAGE, PayloadKind.VIDEO, PayloadKind.VOICE, PayloadKind.FILE, PayloadKind.AVATAR -> beginIncomingTransfer(contactId, payload)
+            PayloadKind.IMAGE, PayloadKind.VIDEO, PayloadKind.VOICE, PayloadKind.FILE, PayloadKind.AVATAR -> scope.launch {
+                // A re-solicited control for a transfer that already finished just re-acks.
+                if (messageDao.find(payload.messageId) == null) {
+                    beginIncomingTransfer(contactId, payload)
+                } else {
+                    sendDeliveredAck(contactId, payload.messageId)
+                }
+            }
             PayloadKind.GROUP_INVITE -> scope.launch { handleGroupInvite(contactId, payload) }
             PayloadKind.GROUP_ROSTER_UPDATE -> scope.launch { handleGroupRosterUpdate(contactId, payload) }
             PayloadKind.GROUP_DELETE -> scope.launch { handleGroupDelete(contactId, payload) }
             PayloadKind.DELIVERED_ACK -> scope.launch {
                 payload.ackForMessageId?.let { messageDao.updateState(it, DeliveryState.DELIVERED) }
+            }
+            PayloadKind.READ_ACK -> scope.launch {
+                payload.ackForMessageId?.let { messageDao.updateState(it, DeliveryState.READ) }
             }
             PayloadKind.PROFILE_UPDATE -> scope.launch {
                 val nickname = payload.profileNickname?.trim().orEmpty()
@@ -1584,6 +1883,7 @@ class P2pChatService @Inject constructor(
                             type = MessageType.TEXT,
                             text = payload.text,
                             timestamp = payload.sentAt,
+                            seq = payload.seq,
                             deliveryState = DeliveryState.DELIVERED,
                             senderContactId = if (payload.groupId != null) contactId else null,
                             mentionedContactIds = mentions.takeIf { it.isNotEmpty() }?.joinToString(","),
@@ -1598,10 +1898,7 @@ class P2pChatService @Inject constructor(
         }
     }
 
-    private fun handleFriendRequestFrame(bytes: ByteArray) {
-        val request = runCatching {
-            json.decodeFromString(FriendRequestPayload.serializer(), bytes.copyOfRange(1, bytes.size).decodeToString())
-        }.getOrNull() ?: return
+    private fun handleFriendRequestPayload(request: FriendRequestPayload) {
         val senderContactId = identityKeyManager.contactIdFor(Base64.decode(request.identityKeyBase64, Base64.NO_WRAP))
         if (senderContactId in blockedContactIds) return
         val incoming = IncomingFriendRequest(senderContactId, request.nickname, request)
@@ -1618,14 +1915,12 @@ class P2pChatService @Inject constructor(
         }
     }
 
-    private fun handleFriendResponseFrame(bytes: ByteArray) {
-        val response = runCatching {
-            json.decodeFromString(FriendResponsePayload.serializer(), bytes.copyOfRange(1, bytes.size).decodeToString())
-        }.getOrNull() ?: return
+    private fun handleFriendResponsePayload(response: FriendResponsePayload) {
         if (!response.accepted) return
         val senderContactId = identityKeyManager.contactIdFor(Base64.decode(response.identityKeyBase64, Base64.NO_WRAP))
+        forgetPendingRequest(senderContactId)
         scope.launch {
-            addTrustedContact(senderContactId, response.nickname, response.identityKeyBase64, response.i2pDestination)
+            addTrustedContact(senderContactId, response.nickname, response.identityKeyBase64, response.nostrPubkeyHex)
             // Mirrors what the accepter did with our bundle in respondFriendRequest - without
             // this, we (the original requester) would have no session and encrypt() to this
             // contact would throw NoSessionException on the very first message we sent.

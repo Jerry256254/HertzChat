@@ -33,6 +33,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
@@ -132,6 +133,17 @@ fun SettingsScreen(onBack: () -> Unit, viewModel: SettingsViewModel = hiltViewMo
                 }
             }
 
+            item { SectionTitle(Icons.Filled.Wifi, stringResource(R.string.settings_section_network)) }
+            item {
+                SettingsCard {
+                    RelayRow(
+                        current = settings.relayUrls,
+                        onSave = viewModel::setRelayUrls,
+                        onReset = viewModel::resetRelayUrls,
+                    )
+                }
+            }
+
             item { SectionTitle(Icons.Filled.SystemUpdate, stringResource(R.string.settings_section_updates)) }
             item {
                 SettingsCard {
@@ -175,6 +187,37 @@ fun SettingsScreen(onBack: () -> Unit, viewModel: SettingsViewModel = hiltViewMo
             onBack = onBack,
             modifier = Modifier.align(Alignment.TopCenter),
         )
+        }
+    }
+}
+
+@Composable
+private fun RelayRow(current: List<String>, onSave: (String) -> Unit, onReset: () -> Unit) {
+    var draft by remember(current) { mutableStateOf(current.joinToString("\n")) }
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Icon(Icons.Filled.Wifi, contentDescription = null, modifier = Modifier.padding(end = 8.dp))
+        Text(stringResource(R.string.settings_relays_title), fontWeight = FontWeight.SemiBold)
+    }
+    Text(
+        stringResource(R.string.settings_relays_subtitle),
+        style = MaterialTheme.typography.labelSmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        modifier = Modifier.padding(top = 4.dp),
+    )
+    OutlinedTextField(
+        value = draft,
+        onValueChange = { draft = it },
+        placeholder = { Text("wss://…") },
+        minLines = 2,
+        maxLines = 5,
+        modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+    )
+    Row(modifier = Modifier.fillMaxWidth().padding(top = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        Button(onClick = { onSave(draft) }, modifier = Modifier.weight(1f)) {
+            Text(stringResource(R.string.settings_relays_save))
+        }
+        OutlinedButton(onClick = { draft = ""; onReset() }, modifier = Modifier.weight(1f)) {
+            Text(stringResource(R.string.settings_relays_reset))
         }
     }
 }

@@ -2,12 +2,11 @@
 
 ## 1. Povaha aplikace
 
-Hertz Chat je peer-to-peer (P2P) komunikační aplikace s koncovým šifrováním.
-Neexistuje žádný centrální server - ani provozovaný autorem aplikace, ani
-třetí stranou - který by ukládal, četl nebo zprostředkovával tvoje zprávy,
-kontakty či média. Zařízení se navzájem nachází a spojují přímo přes veřejnou
-síť Tor; zprávy a soubory se přenáší přímo mezi zařízeními a zůstávají
-uložené pouze lokálně na zařízeních účastníků konverzace.
+Hertz Chat je komunikační aplikace s koncovým šifrováním. Zprávy mezi
+zařízeními přenášejí rychlé relay servery (veřejné zdarma, nebo vlastní),
+které fungují jen jako slepá přepážka: přeposílají zašifrované bloby právě
+připojeným zařízením a nic neukládají - žádné zprávy, časy, adresy ani logy.
+Obsah zůstává uložený pouze lokálně na zařízeních účastníků konverzace.
 
 ## 2. Identita a účet
 

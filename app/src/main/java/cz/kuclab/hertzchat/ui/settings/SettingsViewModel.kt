@@ -71,6 +71,13 @@ class SettingsViewModel @Inject constructor(
     fun setThemeMode(value: String) = viewModelScope.launch { settingsRepository.setThemeMode(value) }
     fun setAutoAcceptFriendRequests(value: Boolean) = viewModelScope.launch { settingsRepository.setAutoAcceptFriendRequests(value) }
 
+    /** One URL per line from the editor; blank lines dropped, emptied whole means "use the built-in defaults". */
+    fun setRelayUrls(text: String) = viewModelScope.launch {
+        settingsRepository.setRelayUrls(text.lines().map { it.trim() }.filter { it.isNotEmpty() })
+    }
+
+    fun resetRelayUrls() = viewModelScope.launch { settingsRepository.setRelayUrls(emptyList()) }
+
     /** Persists the choice to both stores - the reactive DataStore copy and the fast synchronous one [MainActivity][cz.kuclab.hertzchat.MainActivity] reads at cold start. The caller is responsible for recreating the Activity to apply it immediately. */
     fun setLanguageCode(value: String) {
         LocalePrefs.setLanguageCode(context, value)
