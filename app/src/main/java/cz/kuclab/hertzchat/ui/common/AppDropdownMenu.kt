@@ -6,8 +6,8 @@ import androidx.compose.ui.Modifier
 
 /**
  * A drop-in replacement for [androidx.compose.material3.DropdownMenu]: the same
- * centered glass card as every other menu in the app instead of an anchored
- * popup whose position and surface never matched anything.
+ * anchored popup with the app's opaque menu surface instead of Material3's
+ * default tonal fill, which reads as barely-there in this dark palette.
  */
 @Composable
 fun AppDropdownMenu(
@@ -16,7 +16,7 @@ fun AppDropdownMenu(
     modifier: Modifier = Modifier,
     content: @Composable ColumnScope.() -> Unit,
 ) {
-    CenteredGlassMenu(
+    GlassPopupMenu(
         expanded = expanded,
         onDismissRequest = onDismissRequest,
         modifier = modifier,

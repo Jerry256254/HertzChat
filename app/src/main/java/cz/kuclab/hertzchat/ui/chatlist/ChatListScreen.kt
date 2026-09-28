@@ -64,6 +64,7 @@ import cz.kuclab.hertzchat.ui.common.GlassAmbientBackground
 import cz.kuclab.hertzchat.ui.common.GlassCircleButton
 import cz.kuclab.hertzchat.ui.common.GlassSurface
 import cz.kuclab.hertzchat.ui.common.HertzGlass
+import cz.kuclab.hertzchat.ui.common.TopBarScrim
 import cz.kuclab.hertzchat.ui.common.ActionMenuItem
 import cz.kuclab.hertzchat.ui.common.AppCard
 import cz.kuclab.hertzchat.ui.theme.HertzMatte
@@ -209,6 +210,7 @@ fun ChatListScreen(
             }
             }
             }
+            TopBarScrim(modifier = Modifier.align(Alignment.TopCenter))
             FloatingHomeBar(
                 myAvatarPath = myAvatarPath,
                 onOpenProfile = onOpenProfile,

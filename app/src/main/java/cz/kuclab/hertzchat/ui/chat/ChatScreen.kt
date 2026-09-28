@@ -84,6 +84,7 @@ import cz.kuclab.hertzchat.ui.common.GlassCircleButton
 import cz.kuclab.hertzchat.ui.common.GlassDialogTheme
 import cz.kuclab.hertzchat.ui.common.GlassSurface
 import cz.kuclab.hertzchat.ui.common.HertzGlass
+import cz.kuclab.hertzchat.ui.common.TopBarScrim
 import cz.kuclab.hertzchat.ui.common.MarkdownText
 import cz.kuclab.hertzchat.ui.common.ThreadInputBar
 import cz.kuclab.hertzchat.ui.common.highlightQuery
@@ -308,6 +309,7 @@ fun ChatScreen(contactId: String, onBack: () -> Unit, onOpenFile: (String) -> Un
                 }
             }
             }
+            TopBarScrim(modifier = Modifier.align(Alignment.TopCenter))
             if (searchOpen) {
                 ChatSearchBar(
                     query = searchQuery,

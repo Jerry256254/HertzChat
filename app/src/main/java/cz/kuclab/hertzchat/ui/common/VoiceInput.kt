@@ -1,7 +1,6 @@
 package cz.kuclab.hertzchat.ui.common
 
 import android.media.MediaPlayer
-import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Box
@@ -10,7 +9,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.material.icons.Icons
@@ -42,9 +40,9 @@ import kotlinx.coroutines.delay
 
 /**
  * The mic button inside the input pill: press-and-hold to record, release to stop.
- * Glass at rest, solid red with a grow the moment the press lands. Nothing is ever
- * sent automatically - the finished clip lands in the pill's preview, where it can
- * be played back, deleted, or sent.
+ * Glass at rest, solid red the moment the press lands. Nothing is ever sent
+ * automatically - the finished clip lands in the pill's preview, where it can be
+ * played back, deleted, or sent.
  */
 @Composable
 fun HoldToRecordButton(
@@ -54,21 +52,16 @@ fun HoldToRecordButton(
 ) {
     var held by remember { mutableStateOf(false) }
     val haptics = LocalHapticFeedback.current
-    val scale by animateFloatAsState(
-        targetValue = if (held) 1.18f else 1f,
-        animationSpec = androidx.compose.animation.core.tween(durationMillis = 120),
-        label = "micHeldScale",
-    )
     val fill = if (held) MaterialTheme.colorScheme.error else HertzGlass.fill()
     val iconTint = if (held) MaterialTheme.colorScheme.onError else HertzGlass.contentOnGlass()
     // A plain Box on purpose: nesting detectTapGestures around IconButton's own
     // clickable lets the inner clickable swallow the press, so holding the mic
     // silently did nothing. The single pointerInput here is the only consumer.
+    // The held state is color-only - the button is never scaled or deformed.
     Box(
         contentAlignment = Alignment.Center,
         modifier = modifier
             .size(48.dp)
-            .graphicsLayer { scaleX = scale; scaleY = scale }
             .shadow(8.dp, CircleShape, clip = false)
             .clip(CircleShape)
             .background(fill)

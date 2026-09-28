@@ -83,6 +83,7 @@ import cz.kuclab.hertzchat.ui.common.GlassCircleButton
 import cz.kuclab.hertzchat.ui.common.GlassDialogTheme
 import cz.kuclab.hertzchat.ui.common.GlassSurface
 import cz.kuclab.hertzchat.ui.common.HertzGlass
+import cz.kuclab.hertzchat.ui.common.TopBarScrim
 import cz.kuclab.hertzchat.ui.common.MarkdownText
 import cz.kuclab.hertzchat.ui.common.ThreadInputBar
 import cz.kuclab.hertzchat.ui.common.highlightQuery
@@ -337,6 +338,7 @@ fun GroupChatScreen(groupId: String, onBack: () -> Unit, onLeft: () -> Unit, onO
                 }
             }
             }
+            TopBarScrim(modifier = Modifier.align(Alignment.TopCenter))
             if (searchOpen) {
                 ChatSearchBar(
                     query = searchQuery,
@@ -347,6 +349,7 @@ fun GroupChatScreen(groupId: String, onBack: () -> Unit, onLeft: () -> Unit, onO
                     onNext = { if (matchIds.isNotEmpty()) matchPos = (matchPos + 1) % matchIds.size },
                     onClose = { searchOpen = false; searchQuery = "" },
                     modifier = Modifier.align(Alignment.TopCenter).padding(top = 4.dp),
+
                 )
             } else {
                 FloatingGroupBar(
