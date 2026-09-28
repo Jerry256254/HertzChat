@@ -46,7 +46,7 @@ import cz.kuclab.hertzchat.ui.common.AppCard
 import cz.kuclab.hertzchat.ui.common.GlassBar
 
 @Composable
-fun ProfileScreen(onOpenQrExport: () -> Unit, viewModel: ProfileViewModel = hiltViewModel()) {
+fun ProfileScreen(onBack: () -> Unit, onOpenQrExport: () -> Unit, viewModel: ProfileViewModel = hiltViewModel()) {
     val nickname by viewModel.nickname.collectAsState()
     val committedNickname by viewModel.committedNickname.collectAsState()
     val avatarVersion by viewModel.avatarVersion.collectAsState()
@@ -137,7 +137,7 @@ fun ProfileScreen(onOpenQrExport: () -> Unit, viewModel: ProfileViewModel = hilt
                 Text("Přenést identitu na nové zařízení (QR)")
             }
         }
-        GlassBar(title = "Profil", hazeState = null, modifier = Modifier.align(Alignment.TopCenter))
+        GlassBar(title = "Profil", hazeState = null, onBack = onBack, modifier = Modifier.align(Alignment.TopCenter))
         }
     }
 

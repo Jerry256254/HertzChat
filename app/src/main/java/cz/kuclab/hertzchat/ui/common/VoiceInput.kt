@@ -4,7 +4,6 @@ import android.media.MediaPlayer
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -96,21 +95,27 @@ fun HoldToRecordButton(
  * The pill's center while the mic is held: audio strands streaming with the
  * live mic level, plus elapsed time and a hint that releasing stops (not
  * sends). Surface-less - the pill behind it is the surface.
+ *
+ * A single fixed-height row, deliberately shorter than the 40dp end circles:
+ * the pill keeps the exact size it had before the press landed instead of
+ * jumping taller the moment recording starts.
  */
 @Composable
 fun VoiceRecordingContent(elapsedMs: Long, level: Float, modifier: Modifier = Modifier) {
-    Column(
-        modifier = modifier.fillMaxWidth().padding(horizontal = 12.dp),
+    Row(
+        modifier = modifier.fillMaxWidth().height(32.dp).padding(horizontal = 12.dp),
+        verticalAlignment = Alignment.CenterVertically,
     ) {
         Strands(
             level = level,
             color = MaterialTheme.colorScheme.error,
-            modifier = Modifier.fillMaxWidth().height(30.dp),
+            modifier = Modifier.weight(1f).height(24.dp),
         )
         Text(
-            "${formatVoiceDuration(elapsedMs)} · pusť pro náhled",
+            "${formatVoiceDuration(elapsedMs)} · pusť",
             style = MaterialTheme.typography.labelSmall,
             color = HertzGlass.contentOnGlass().copy(alpha = 0.7f),
+            modifier = Modifier.padding(start = 8.dp),
         )
     }
 }

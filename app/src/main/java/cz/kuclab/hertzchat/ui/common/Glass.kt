@@ -58,15 +58,32 @@ object HertzGlass {
      * Translucent container for anchored popup menus. The blur behind comes
      * from [WindowBlurBehind], which only exists on Android 12+ - below that
      * the menu stays near-opaque so the rows behind never collide with the
-     * item text.
+     * item text. On 12+ the fill stays deliberately sheer: an almost-opaque
+     * menu would hide the blur it floats over and read as a flat card.
      */
     @Composable
     fun menuFill(): Color {
         val dark = isSystemInDarkTheme()
         return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            if (dark) Color(0xFF202028).copy(alpha = 0.72f) else Color(0xFFEFF1F5).copy(alpha = 0.72f)
+            if (dark) Color(0xFF202028).copy(alpha = 0.60f) else Color(0xFFEFF1F5).copy(alpha = 0.60f)
         } else {
             if (dark) Color(0xFF202028).copy(alpha = 0.96f) else Color(0xFFEFF1F5).copy(alpha = 0.97f)
+        }
+    }
+
+    /**
+     * Translucent container for modal dialogs and bottom sheets - the same
+     * deal as [menuFill]: sheer over the platform blur on Android 12+, solid
+     * below it. Dialogs carry more text than menus, so the fill sits a touch
+     * heavier to keep long copy readable.
+     */
+    @Composable
+    fun dialogFill(): Color {
+        val dark = isSystemInDarkTheme()
+        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            if (dark) Color(0xFF1E1E26).copy(alpha = 0.80f) else Color(0xFFF2F4F8).copy(alpha = 0.80f)
+        } else {
+            if (dark) Color(0xFF1E1E26) else Color(0xFFF2F4F8)
         }
     }
 
@@ -244,11 +261,10 @@ private fun applyWindowBlurBehind(view: android.view.View, radiusPx: Int) {
     }
 }
 
-/** Glass-tinted container for the modal confirmation dialogs, so they sit in the same material family as the menus. */
+/** Glass-tinted container for the modal confirmation dialogs, so they sit in the same material family as the menus: sheer over the platform blur (callers add [WindowBlurBehind]), solid below Android 12. */
 @Composable
 fun GlassDialogTheme(content: @Composable () -> Unit) {
-    val dark = isSystemInDarkTheme()
-    val container = if (dark) Color(0xFF1E1E26) else Color(0xFFF2F4F8)
+    val container = HertzGlass.dialogFill()
     MaterialTheme(
         colorScheme = MaterialTheme.colorScheme.copy(surfaceContainerHigh = container),
         shapes = MaterialTheme.shapes,

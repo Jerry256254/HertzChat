@@ -77,7 +77,7 @@ fun HertzNavHost(viewModel: RootViewModel = hiltViewModel()) {
             )
         }
         composable(Routes.SETTINGS) {
-            SettingsScreen()
+            SettingsScreen(onBack = { navController.popBackStack() })
         }
         composable(Routes.ASSISTANT_CHAT) {
             HertzAssistantScreen(onBack = { navController.popBackStack() })
@@ -89,7 +89,7 @@ fun HertzNavHost(viewModel: RootViewModel = hiltViewModel()) {
             FileViewerScreen(onBack = { navController.popBackStack() })
         }
         composable(Routes.PROFILE) {
-            ProfileScreen(onOpenQrExport = { navController.navigate(Routes.QR_EXPORT) })
+            ProfileScreen(onBack = { navController.popBackStack() }, onOpenQrExport = { navController.navigate(Routes.QR_EXPORT) })
         }
         composable(Routes.QR_EXPORT) {
             QrExportScreen(onDone = { navController.popBackStack() })

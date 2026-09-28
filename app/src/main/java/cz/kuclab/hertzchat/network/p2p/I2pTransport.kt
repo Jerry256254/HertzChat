@@ -273,22 +273,17 @@ class I2pTransport @Inject constructor(
     }
 
     /**
-     * Tunnel settings for our own destination, tuned for how this app is actually used:
-     * a chat client that has to be reachable within seconds of opening, on a phone.
-     *
-     * Two hops each way instead of I2P's default three. The property that matters for a
-     * messenger is preserved at two - neither the person you're talking to nor any single
-     * relay learns your IP - while dropping a hop cuts both the time to build a working
-     * tunnel and the latency of every message through it. Going to one hop would be
-     * faster still but lets a single relay see your IP and your destination at once,
-     * which is too much to give up here.
+     * Tunnel settings for our own destination: three hops each way, I2P's default
+     * and the safer choice - no single relay (or pair of relays) can correlate
+     * either endpoint. The cost is one extra hop of latency per message versus
+     * two-hop tunnels, paid deliberately for the stronger anonymity.
      *
      * Tunnels are also kept alive rather than torn down when idle: rebuilding them on the
      * next message is exactly the multi-second stall this is meant to avoid.
      */
     private fun tunnelOptions(): Properties = Properties().apply {
-        setProperty("inbound.length", "2")
-        setProperty("outbound.length", "2")
+        setProperty("inbound.length", "3")
+        setProperty("outbound.length", "3")
         setProperty("inbound.lengthVariance", "0")
         setProperty("outbound.lengthVariance", "0")
         setProperty("inbound.quantity", "3")

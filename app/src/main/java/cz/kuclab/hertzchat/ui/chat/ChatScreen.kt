@@ -212,17 +212,6 @@ fun ChatScreen(contactId: String, onBack: () -> Unit, onOpenFile: (String) -> Un
 
     Scaffold(
         snackbarHost = { SnackbarHost(snackbar) },
-        floatingActionButton = {
-            if (showScrollDown && !searchOpen && pending.isEmpty()) {
-                GlassCircleButton(
-                    icon = HertzIcons.ScrollDown,
-                    contentDescription = "Sjet dolů",
-                    onClick = { scope.launch { listState.animateScrollToItem(0) } },
-                    size = 48.dp,
-                    modifier = Modifier.padding(bottom = 68.dp),
-                )
-            }
-        },
     ) { padding ->
         val threadMedia = remember(state.messages) {
             state.messages.filter { it.type == MessageType.IMAGE || it.type == MessageType.VIDEO }
@@ -350,6 +339,8 @@ fun ChatScreen(contactId: String, onBack: () -> Unit, onOpenFile: (String) -> Un
                 },
                 hazeState = hazeState,
                 modifier = Modifier.align(Alignment.BottomCenter),
+                scrollDownVisible = showScrollDown && !searchOpen && pending.isEmpty(),
+                onScrollDown = { scope.launch { listState.animateScrollToItem(0) } },
             )
         }
     }
@@ -588,6 +579,9 @@ private fun ContactDetailsSheet(
     ModalBottomSheet(
         onDismissRequest = onDismiss,
         sheetState = androidx.compose.material3.rememberModalBottomSheetState(skipPartiallyExpanded = true),
+        // Sheer like the dialogs, so the blur behind actually shows through
+        // instead of hiding behind an opaque sheet.
+        containerColor = HertzGlass.dialogFill(),
     ) {
         WindowBlurBehind()
         Column(

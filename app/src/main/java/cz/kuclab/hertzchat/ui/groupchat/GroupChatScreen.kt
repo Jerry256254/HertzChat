@@ -214,17 +214,6 @@ fun GroupChatScreen(groupId: String, onBack: () -> Unit, onLeft: () -> Unit, onO
 
     Scaffold(
         snackbarHost = { SnackbarHost(snackbar) },
-        floatingActionButton = {
-            if (showScrollDown && !searchOpen && pending.isEmpty()) {
-                GlassCircleButton(
-                    icon = HertzIcons.ScrollDown,
-                    contentDescription = "Sjet dolů",
-                    onClick = { scope.launch { listState.animateScrollToItem(0) } },
-                    size = 48.dp,
-                    modifier = Modifier.padding(bottom = 68.dp),
-                )
-            }
-        },
     ) { padding ->
         val threadMedia = remember(messages) {
             messages.filter { it.type == MessageType.IMAGE || it.type == MessageType.VIDEO }
@@ -378,6 +367,8 @@ fun GroupChatScreen(groupId: String, onBack: () -> Unit, onLeft: () -> Unit, onO
                         )
                     },
                     hazeState = hazeState,
+                    scrollDownVisible = showScrollDown && !searchOpen && pending.isEmpty(),
+                    onScrollDown = { scope.launch { listState.animateScrollToItem(0) } },
                 )
             }
         }

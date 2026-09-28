@@ -3,5 +3,12 @@
     <style name="Theme.HertzChat" parent="android:Theme.Material.Light.NoActionBar">
         <item name="android:statusBarColor">@color/hertz_bg_light</item>
         <item name="android:windowLightStatusBar">true</item>
+        <!-- Exact Compose background: any transparent pixel (first frames, popup
+             margins) composites over this instead of the parent theme's white,
+             which used to flash through the frosted surfaces as a white artifact. -->
+        <item name="android:windowBackground">#F7F8FA</item>
+        <!-- The overscroll glow at list ends renders under the glass bars - tint
+             it accent instead of the default whitish glow bleeding through. -->
+        <item name="android:colorEdgeEffect">@color/hertz_primary</item>
     </style>
 </resources>

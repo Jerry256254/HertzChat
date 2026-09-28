@@ -62,7 +62,7 @@ import dev.chrisbanes.haze.HazeState
 import dev.chrisbanes.haze.haze
 
 @Composable
-fun SettingsScreen(viewModel: SettingsViewModel = hiltViewModel()) {
+fun SettingsScreen(onBack: () -> Unit, viewModel: SettingsViewModel = hiltViewModel()) {
     val settings by viewModel.settings.collectAsState()
     val mediaBytes by viewModel.mediaBytes.collectAsState()
     val updateCheckState by viewModel.updateCheckState.collectAsState()
@@ -172,6 +172,7 @@ fun SettingsScreen(viewModel: SettingsViewModel = hiltViewModel()) {
         GlassBar(
             title = stringResource(R.string.settings_title),
             hazeState = hazeState,
+            onBack = onBack,
             modifier = Modifier.align(Alignment.TopCenter),
         )
         }

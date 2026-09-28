@@ -1,16 +1,20 @@
 package cz.kuclab.hertzchat.ui.common
 
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.imePadding
-import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.text.BasicTextField
-import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material3.LocalTextStyle
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -21,6 +25,7 @@ import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import cz.kuclab.hertzchat.ui.theme.HertzIcons
 import cz.kuclab.hertzchat.ui.theme.HertzShapes
 import dev.chrisbanes.haze.HazeState
 import java.io.File
@@ -35,6 +40,10 @@ import java.io.File
  * recording indicator and the voice preview; the action slot is the same
  * composition in every mode, so a press-and-hold recording survives the
  * center swapping underneath the finger instead of being disposed mid-press.
+ *
+ * The two end circles never move: they sit at the island's bottom edge, so a
+ * growing paragraph pushes the island's top up while the buttons stay exactly
+ * where the thumb expects them. Only the text center rides vertically.
  */
 @Composable
 fun ThreadInputBar(
@@ -53,6 +62,8 @@ fun ThreadInputBar(
     micButton: @Composable () -> Unit,
     hazeState: HazeState? = null,
     modifier: Modifier = Modifier,
+    scrollDownVisible: Boolean = false,
+    onScrollDown: (() -> Unit)? = null,
 ) {
     val canSend = pendingVoice != null || draft.isNotBlank() || attachments.isNotEmpty()
     val textMode = pendingVoice == null && !isRecording
@@ -63,12 +74,38 @@ fun ThreadInputBar(
     } else {
         HertzShapes.Pill
     }
-    Column(modifier = modifier.fillMaxWidth().imePadding().navigationBarsPadding()) {
+    // No navigationBarsPadding: both host screens sit inside Scaffold content,
+    // which already offsets for the nav bar - adding it again floated the whole
+    // island a nav-bar-height above the thread's bottom clearance and the newest
+    // message hid underneath it, unreachable by scrolling.
+    Column(modifier = modifier.fillMaxWidth().imePadding()) {
         PendingAttachmentsTray(
             attachments = attachments,
             onRemove = onRemoveAttachment,
             modifier = Modifier.padding(bottom = if (attachments.isEmpty()) 0.dp else 8.dp),
         )
+        // The scroll-down dot lives in this column (not in a Scaffold FAB slot),
+        // so it always rides exactly above the send circle - same 40dp glass,
+        // same blur, same x (16dp + half the dot = the send circle's center) -
+        // and lifts with the island above the keyboard instead of sinking under it.
+        AnimatedVisibility(
+            visible = scrollDownVisible && onScrollDown != null,
+            enter = fadeIn() + expandVertically(expandFrom = Alignment.Bottom),
+            exit = fadeOut() + shrinkVertically(shrinkTowards = Alignment.Bottom),
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(end = 16.dp, bottom = 8.dp),
+                horizontalArrangement = Arrangement.End,
+            ) {
+                GlassCircleButton(
+                    icon = HertzIcons.ScrollDown,
+                    contentDescription = "Sjet dolů",
+                    onClick = { onScrollDown?.invoke() },
+                    size = 40.dp,
+                    hazeState = hazeState,
+                )
+            }
+        }
         GlassSurface(
             shape = islandShape,
             modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp).padding(bottom = 8.dp),
@@ -76,7 +113,7 @@ fun ThreadInputBar(
         ) {
             Row(
                 modifier = Modifier.heightIn(min = 48.dp).padding(horizontal = 4.dp, vertical = 4.dp),
-                verticalAlignment = Alignment.CenterVertically,
+                verticalAlignment = Alignment.Bottom,
             ) {
                 if (leading != null) {
                     leading()
@@ -84,7 +121,13 @@ fun ThreadInputBar(
                     Box(modifier = Modifier.size(10.dp))
                 }
                 // Breathing room so the first glyphs never touch the attach circle.
-                Box(modifier = Modifier.weight(1f).padding(start = 10.dp), contentAlignment = Alignment.CenterStart) {
+                // The only child that stays centered: the circles around it are
+                // bottom-anchored, so this override keeps single-line text sitting
+                // in the pill's middle while paragraphs fill the grown sheet.
+                Box(
+                    modifier = Modifier.weight(1f).align(Alignment.CenterVertically).padding(start = 10.dp),
+                    contentAlignment = Alignment.CenterStart,
+                ) {
                     // The field stays composed (and focused) in every mode - it is
                     // only hidden, never removed - so recording with the keyboard
                     // open doesn't drop the keyboard or jump the layout mid-press.
