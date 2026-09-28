@@ -68,6 +68,14 @@ class ChatPayloadCompatTest {
     }
 
     @Test
+    fun `group delete round-trips`() {
+        val delete = ChatPayload("g1", 1L, PayloadKind.GROUP_DELETE, groupId = "group-9")
+        val decoded = json.decodeFromString(ChatPayload.serializer(), json.encodeToString(ChatPayload.serializer(), delete))
+        assertEquals(PayloadKind.GROUP_DELETE, decoded.kind)
+        assertEquals("group-9", decoded.groupId)
+    }
+
+    @Test
     fun `heartbeat ping round-trips`() {
         val ping = ChatPayload("p1", 1L, PayloadKind.PING)
         val decoded = json.decodeFromString(ChatPayload.serializer(), json.encodeToString(ChatPayload.serializer(), ping))

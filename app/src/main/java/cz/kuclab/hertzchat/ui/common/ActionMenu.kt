@@ -1,6 +1,8 @@
 package cz.kuclab.hertzchat.ui.common
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -11,8 +13,10 @@ import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.DpOffset
 import androidx.compose.ui.unit.dp
@@ -73,10 +77,13 @@ fun GlassMenuItem(
         destructive -> MaterialTheme.colorScheme.error
         else -> MaterialTheme.colorScheme.onSurface
     }
+    val interactionSource = remember { MutableInteractionSource() }
+    val press = glassPressAlpha(interactionSource)
     Row(
         modifier = modifier
             .fillMaxWidth()
-            .clickable(enabled = enabled, onClick = onClick)
+            .background(Color.White.copy(alpha = 0.08f * press))
+            .clickable(interactionSource = interactionSource, indication = null, enabled = enabled, onClick = onClick)
             .padding(horizontal = 20.dp, vertical = 13.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {

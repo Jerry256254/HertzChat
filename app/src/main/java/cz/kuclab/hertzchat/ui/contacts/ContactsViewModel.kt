@@ -39,20 +39,10 @@ class ContactsViewModel @Inject constructor(
         p2pChatService.createGroup(name.trim(), memberContactIds)
     }
 
-    /** Only the QR card still needs the network state (its error branch) - the status row moved to the chat list. */
-    val i2pError = p2pChatService.i2pError.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
-
-    fun retryI2p() = p2pChatService.retryI2p()
-
     val blockedContacts = contactDao.observeBlocked()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     fun unblock(contactId: String) = viewModelScope.launch { contactDao.setBlocked(contactId, false) }
-
-    /** Null until I2P has opened our destination - the QR/ID isn't shareable before that. */
-    val myHertzIdQrText: StateFlow<String?> = p2pChatService.i2pDestination
-        .map { it?.let { json.encodeToString(p2pChatService.myHertzId()) } }
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
 
     private val _addError = MutableStateFlow<String?>(null)
     val addError: StateFlow<String?> = _addError

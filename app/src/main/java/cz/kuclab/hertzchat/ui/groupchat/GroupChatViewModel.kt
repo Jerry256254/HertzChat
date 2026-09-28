@@ -274,4 +274,8 @@ class GroupChatViewModel @Inject constructor(
     fun leaveGroup() {
         p2pChatService.leaveGroup(groupId)
     }
+
+    fun deleteGroup() {
+        p2pChatService.deleteGroup(groupId)
+    }
 }

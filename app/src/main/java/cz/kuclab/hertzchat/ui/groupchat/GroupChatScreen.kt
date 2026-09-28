@@ -110,6 +110,7 @@ fun GroupChatScreen(groupId: String, onBack: () -> Unit, onLeft: () -> Unit, onO
     var membersDialogOpen by remember { mutableStateOf(false) }
     var addMembersOpen by remember { mutableStateOf(false) }
     var confirmLeave by remember { mutableStateOf(false) }
+    var confirmDeleteGroup by remember { mutableStateOf(false) }
     var confirmClear by remember { mutableStateOf(false) }
     var searchOpen by remember { mutableStateOf(false) }
     var searchQuery by remember { mutableStateOf("") }
@@ -277,6 +278,8 @@ fun GroupChatScreen(groupId: String, onBack: () -> Unit, onLeft: () -> Unit, onO
                     onSearch = { searchOpen = true },
                     onClear = { confirmClear = true },
                     onLeave = { confirmLeave = true },
+                    isOwner = isOwner,
+                    onDeleteGroup = { confirmDeleteGroup = true },
                     modifier = Modifier.align(Alignment.TopCenter),
                     hazeState = hazeState,
                 )
@@ -508,6 +511,20 @@ fun GroupChatScreen(groupId: String, onBack: () -> Unit, onLeft: () -> Unit, onO
         )
         }
     }
+
+    if (confirmDeleteGroup) {
+        GlassDialogTheme {
+        AlertDialog(
+            onDismissRequest = { confirmDeleteGroup = false },
+            title = { WindowBlurBehind(); Text("Smazat skupinu?") },
+            text = { Text("Skupina se smaže tobě i všem členům včetně jejich historie. Členové, kteří jsou zrovna offline, o ni přijdou, jakmile se připojí. Tohle nejde vzít zpět.") },
+            confirmButton = {
+                TextButton(onClick = { confirmDeleteGroup = false; viewModel.deleteGroup(); onLeft() }) { Text("Smazat", color = MaterialTheme.colorScheme.error) }
+            },
+            dismissButton = { TextButton(onClick = { confirmDeleteGroup = false }) { Text("Zrušit") } },
+        )
+        }
+    }
 }
 
 @Composable
@@ -521,6 +538,8 @@ private fun FloatingGroupBar(
     onSearch: () -> Unit,
     onClear: () -> Unit,
     onLeave: () -> Unit,
+    isOwner: Boolean,
+    onDeleteGroup: () -> Unit,
     modifier: Modifier = Modifier,
     hazeState: HazeState,
 ) {
@@ -588,6 +607,13 @@ private fun FloatingGroupBar(
                     destructive = true,
                     onClick = { onOverflowChange(false); onLeave() },
                 )
+                if (isOwner) {
+                    GlassMenuItem(
+                        text = "Smazat skupinu",
+                        destructive = true,
+                        onClick = { onOverflowChange(false); onDeleteGroup() },
+                    )
+                }
             }
         }
     }

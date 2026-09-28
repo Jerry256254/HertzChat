@@ -273,17 +273,19 @@ class I2pTransport @Inject constructor(
     }
 
     /**
-     * Tunnel settings for our own destination: three hops each way, I2P's default
-     * and the safer choice - no single relay (or pair of relays) can correlate
-     * either endpoint. The cost is one extra hop of latency per message versus
-     * two-hop tunnels, paid deliberately for the stronger anonymity.
+     * Tunnel settings for our own destination: a single hop each way, the fastest
+     * I2P offers - tunnel builds and every message through them take the shortest
+     * possible path. Deliberately traded against anonymity: at one hop a relay can
+     * see one endpoint's IP next to the other endpoint's destination, which two or
+     * three hops would hide. Message *content* is unaffected either way - it stays
+     * Signal-encrypted end to end before it ever touches I2P.
      *
      * Tunnels are also kept alive rather than torn down when idle: rebuilding them on the
      * next message is exactly the multi-second stall this is meant to avoid.
      */
     private fun tunnelOptions(): Properties = Properties().apply {
-        setProperty("inbound.length", "3")
-        setProperty("outbound.length", "3")
+        setProperty("inbound.length", "1")
+        setProperty("outbound.length", "1")
         setProperty("inbound.lengthVariance", "0")
         setProperty("outbound.lengthVariance", "0")
         setProperty("inbound.quantity", "3")

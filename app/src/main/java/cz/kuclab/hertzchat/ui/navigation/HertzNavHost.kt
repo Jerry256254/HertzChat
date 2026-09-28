@@ -8,6 +8,10 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.platform.LocalContext
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
@@ -25,6 +29,8 @@ import cz.kuclab.hertzchat.ui.migration.QrExportScreen
 import cz.kuclab.hertzchat.ui.migration.QrImportScreen
 import cz.kuclab.hertzchat.ui.onboarding.OnboardingScreen
 import cz.kuclab.hertzchat.ui.profile.ProfileScreen
+import cz.kuclab.hertzchat.ui.settings.SettingsViewModel
+import cz.kuclab.hertzchat.ui.update.UpdateAvailableDialog
 import cz.kuclab.hertzchat.ui.settings.SettingsScreen
 
 @Composable
@@ -109,6 +115,7 @@ fun HertzNavHost(viewModel: RootViewModel = hiltViewModel()) {
         }
         composable(Routes.CONTACTS) {
             ContactsScreen(
+                onBack = { navController.popBackStack() },
                 onOpenChat = { contactId -> navController.navigate(Routes.chat(contactId)) },
             )
         }
@@ -133,5 +140,30 @@ fun HertzNavHost(viewModel: RootViewModel = hiltViewModel()) {
         composable(Routes.QR_IMPORT) {
             QrImportScreen(onDone = { navController.popBackStack() })
         }
+    }
+
+    // Cold-start update nudge, once per launch and only past onboarding.
+    val startupUpdate by viewModel.startupUpdate.collectAsState()
+    var updateDismissed by remember { mutableStateOf(false) }
+    if (startupUpdate != null && !updateDismissed && destination == Routes.CHAT_LIST) {
+        val settingsVm: SettingsViewModel = hiltViewModel()
+        val updateState by settingsVm.updateCheckState.collectAsState()
+        val ctx = LocalContext.current
+        UpdateAvailableDialog(
+            info = startupUpdate!!,
+            updateState = updateState,
+            onUpdate = {
+                startupUpdate?.let { info ->
+                    info.apkUrl?.let { settingsVm.downloadAndInstall(it, info.latestVersion) }
+                }
+            },
+            onOpenReleasePage = {
+                startupUpdate?.let { info ->
+                    ctx.startActivity(android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(info.releaseUrl)))
+                }
+            },
+            onOpenInstallSettings = settingsVm::openInstallSettings,
+            onDismiss = { updateDismissed = true },
+        )
     }
 }

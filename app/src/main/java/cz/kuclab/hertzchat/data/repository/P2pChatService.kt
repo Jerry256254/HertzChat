@@ -109,7 +109,15 @@ class P2pChatService @Inject constructor(
     private val json = Json { ignoreUnknownKeys = true }
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
-    private val connections = java.util.concurrent.ConcurrentHashMap<String, P2pConnection>()
+    /**
+     * Sockets we dialled, by contact - the send path. Kept strictly separate from
+     * [incomingConnections]: the old single slot let an inbound dial evict (and close)
+     * our outbound socket mid-write, which read exactly as "receiving works but
+     * sending is stuck" whenever both sides talked at once.
+     */
+    private val outgoingConnections = java.util.concurrent.ConcurrentHashMap<String, P2pConnection>()
+    /** Sockets peers dialled to us, by contact - the receive path. Never used for sending. */
+    private val incomingConnections = java.util.concurrent.ConcurrentHashMap<String, P2pConnection>()
     private val ciphers = mutableMapOf<String, MessageCipher>()
     /** Serializes retry sweeps - the loop, the event-driven flushes and a manual send may all fire at once. */
     private val retryMutex = Mutex()
@@ -253,8 +261,10 @@ class P2pChatService @Inject constructor(
     fun stop() {
         i2pTransport.stop()
         lanTransport.stop()
-        connections.values.forEach { it.close() }
-        connections.clear()
+        outgoingConnections.values.forEach { it.close() }
+        outgoingConnections.clear()
+        incomingConnections.values.forEach { it.close() }
+        incomingConnections.clear()
         started = false
     }
 
@@ -376,11 +386,36 @@ class P2pChatService @Inject constructor(
     }
 
     fun leaveGroup(groupId: String) {
+        scope.launch { wipeGroupLocally(groupId) }
+    }
+
+    /**
+     * Owner-only: deletes the group everywhere - every member gets a GROUP_DELETE
+     * (which their client honours only from the recorded owner) and this device
+     * wipes it too. Offline members catch up later: the delete leaves a tombstone
+     * that is re-sent to anyone reaching us afterwards (see [syncGroupStateTo]).
+     */
+    fun deleteGroup(groupId: String) {
         scope.launch {
-            groupMemberDao.deleteAllForGroup(groupId)
-            groupDao.delete(groupId)
-            messageDao.deleteAllForContact(groupId)
+            val group = groupDao.find(groupId) ?: return@launch
+            if (group.ownerId != identityKeyManager.contactId()) return@launch
+            val members = groupMemberDao.findMembers(groupId)
+            val payload = ChatPayload(
+                UUID.randomUUID().toString(), System.currentTimeMillis(), PayloadKind.GROUP_DELETE,
+                groupId = groupId,
+            )
+            coroutineScope {
+                members.map { async { trySendPayload(it.contactId, payload) } }.awaitAll()
+            }
+            identityKeyManager.deletedGroupIds = identityKeyManager.deletedGroupIds + groupId
+            wipeGroupLocally(groupId)
         }
+    }
+
+    private suspend fun wipeGroupLocally(groupId: String) {
+        groupMemberDao.deleteAllForGroup(groupId)
+        groupDao.delete(groupId)
+        messageDao.deleteAllForContact(groupId)
     }
 
     /**
@@ -435,6 +470,46 @@ class P2pChatService @Inject constructor(
         }
     }
 
+    /**
+     * Pushes everything group-shaped that [contactId] may have missed while away:
+     * a fresh invite for every group we own with them in it (invites are
+     * fire-and-forget, so without this a member added while offline never sees
+     * the group appear), plus a GROUP_DELETE per tombstone. Called when they prove
+     * reachable - a HELLO - never on a timer, so it costs nothing when idle.
+     */
+    fun syncGroupStateTo(contactId: String) {
+        scope.launch {
+            val myId = identityKeyManager.contactId()
+            runCatching { groupDao.allGroups() }.getOrDefault(emptyList())
+                .filter { it.ownerId == myId }
+                .forEach { group ->
+                    val members = groupMemberDao.findMembers(group.groupId)
+                    if (members.none { it.contactId == contactId }) return@forEach
+                    groupInvitePayload(group)?.let { trySendPayload(contactId, it) }
+                }
+            identityKeyManager.deletedGroupIds.forEach { groupId ->
+                trySendPayload(
+                    contactId,
+                    ChatPayload(UUID.randomUUID().toString(), System.currentTimeMillis(), PayloadKind.GROUP_DELETE, groupId = groupId),
+                )
+            }
+        }
+    }
+
+    /** The same bootstrap invite [addGroupMembers] sends - extracted so late joiners get the identical shape. */
+    private suspend fun groupInvitePayload(group: GroupEntity): ChatPayload? {
+        val myId = identityKeyManager.contactId()
+        val me = myHertzId() ?: return null
+        val members = groupMemberDao.findMembers(group.groupId)
+        val roster = listOf(me) + members.mapNotNull { m ->
+            contactDao.find(m.contactId)?.let { HertzId(it.contactId, it.nickname, Base64.encodeToString(it.identityKeyBytes, Base64.NO_WRAP), it.i2pDestination) }
+        }
+        return ChatPayload(
+            UUID.randomUUID().toString(), System.currentTimeMillis(), PayloadKind.GROUP_INVITE,
+            groupId = group.groupId, groupName = group.name, groupMembers = roster, groupOwnerId = myId,
+        )
+    }
+
     private suspend fun broadcastRoster(group: GroupEntity) {
         val myId = identityKeyManager.contactId()
         val me = myHertzId() ?: return
@@ -477,6 +552,17 @@ class P2pChatService @Inject constructor(
                 scope.launch { sendFriendRequest(member, viaGroupId = groupId) }
             }
         }
+    }
+
+    /**
+     * Honours a group delete only from the owner we recorded - a forged delete
+     * from anyone else would be a one-packet nuke of somebody's group.
+     */
+    private suspend fun handleGroupDelete(fromContactId: String, payload: ChatPayload) {
+        val groupId = payload.groupId ?: return
+        val group = groupDao.find(groupId) ?: return
+        if (fromContactId != group.ownerId) return
+        wipeGroupLocally(groupId)
     }
 
     private suspend fun handleGroupInvite(fromContactId: String, payload: ChatPayload) {
@@ -596,14 +682,14 @@ class P2pChatService @Inject constructor(
     }.getOrDefault(false)
 
     private suspend fun sendFrameTo(contactId: String, i2pDestination: String, bytes: ByteArray): Boolean {
-        val cached = connections[contactId]
+        val cached = outgoingConnections[contactId]
         if (cached != null) {
             val ok = runCatching { withTimeout(SEND_TIMEOUT_MS) { cached.send(bytes) } }.isSuccess
             if (ok) return true
             // Dead connection: drop it so the re-dial below (and the next send)
             // doesn't trip over the same corpse again. Closing also unblocks the
             // timed-out write still stuck in its socket.
-            connections.remove(contactId, cached)
+            outgoingConnections.remove(contactId, cached)
             runCatching { cached.close() }
         }
         // Parallel sends to the same peer (a tap on send racing the retry sweep
@@ -615,9 +701,9 @@ class P2pChatService @Inject constructor(
         // The dial keeps its own (longer) connect timeout - only the write is
         // bounded, so a slow-but-working I2P dial is never cut short.
         return dialMutexFor(contactId).withLock {
-            connections[contactId]?.let { winner ->
+            outgoingConnections[contactId]?.let { winner ->
                 if (runCatching { withTimeout(SEND_TIMEOUT_MS) { winner.send(bytes) } }.isSuccess) return@withLock true
-                connections.remove(contactId, winner)
+                outgoingConnections.remove(contactId, winner)
                 runCatching { winner.close() }
             }
             runCatching {
@@ -637,13 +723,17 @@ class P2pChatService @Inject constructor(
         }
         val connection = P2pConnection(socket)
         connection.send(frame(FRAME_HELLO, identityKeyManager.contactId().encodeToByteArray()))
-        registerConnection(contactId, connection)
+        registerOutgoing(contactId, connection)
         scope.launch { readLoop(contactId, connection) }
         connection
     }
 
-    private fun registerConnection(contactId: String, connection: P2pConnection) {
-        connections.put(contactId, connection)?.let { old -> if (old !== connection) old.close() }
+    private fun registerOutgoing(contactId: String, connection: P2pConnection) {
+        outgoingConnections.put(contactId, connection)?.let { old -> if (old !== connection) old.close() }
+    }
+
+    private fun registerIncoming(contactId: String, connection: P2pConnection) {
+        incomingConnections.put(contactId, connection)?.let { old -> if (old !== connection) old.close() }
     }
 
     // --- Media ---
@@ -1196,12 +1286,12 @@ class P2pChatService @Inject constructor(
      * of paying the multi-second I2P dial. No-op when already connected.
      */
     fun warmConnection(contactId: String) {
-        if (connections.containsKey(contactId)) return
+        if (outgoingConnections.containsKey(contactId)) return
         scope.launch {
             val contact = contactDao.find(contactId) ?: return@launch
             if (contact.contactId in blockedContactIds) return@launch
             dialMutexFor(contactId).withLock {
-                if (connections.containsKey(contactId)) return@withLock
+                if (outgoingConnections.containsKey(contactId)) return@withLock
                 runCatching { dialAndRegister(contactId, contact.i2pDestination) }
             }
         }
@@ -1221,8 +1311,8 @@ class P2pChatService @Inject constructor(
             // Only already-open connections: a ping must never dial, or every
             // heartbeat would wake every dead peer like a retry sweep. The ping
             // still carries the profile stamp, so it doubles as profile refresh.
-            connections.keys.forEach { contactId ->
-                if (!connections.containsKey(contactId)) return@forEach
+            outgoingConnections.keys.forEach { contactId ->
+                if (!outgoingConnections.containsKey(contactId)) return@forEach
                 runCatching {
                     trySendPayload(contactId, ChatPayload(UUID.randomUUID().toString(), System.currentTimeMillis(), PayloadKind.PING))
                 }
@@ -1405,13 +1495,14 @@ class P2pChatService @Inject constructor(
                             val identityPlausible = !viaLan || lanTransport.matchesDiscovered(claimed, socket.inetAddress)
                             if (!identityPlausible || claimed in blockedContactIds) return@launch
                             fromContactId = claimed
-                            registerConnection(claimed, connection)
+                            registerIncoming(claimed, connection)
                             // They just proved reachable - flush anything waiting
                             // for them instead of sitting until the retry tick, and
                             // push our profile: they may have missed every broadcast
                             // we sent while they were offline.
                             scope.launch { runCatching { flushFor(claimed) } }
                             sendProfileTo(claimed)
+                            syncGroupStateTo(claimed)
                         }
                         FRAME_MEDIA_CHUNK -> onMediaChunkReceived(bytes)
                         FRAME_FRIEND_REQUEST -> handleFriendRequestFrame(bytes)
@@ -1426,6 +1517,9 @@ class P2pChatService @Inject constructor(
             } catch (_: Exception) {
                 // connection closed by peer, or network error - normal, nothing to do
             } finally {
+                fromContactId?.let { id ->
+                    if (incomingConnections[id] === connection) incomingConnections.remove(id)
+                }
                 connection.close()
             }
         }
@@ -1446,7 +1540,7 @@ class P2pChatService @Inject constructor(
         } catch (_: Exception) {
             // normal on connection close
         } finally {
-            if (connections[contactId] === connection) connections.remove(contactId)
+            if (outgoingConnections[contactId] === connection) outgoingConnections.remove(contactId)
             connection.close()
         }
     }
@@ -1466,6 +1560,7 @@ class P2pChatService @Inject constructor(
             PayloadKind.IMAGE, PayloadKind.VIDEO, PayloadKind.VOICE, PayloadKind.FILE, PayloadKind.AVATAR -> beginIncomingTransfer(contactId, payload)
             PayloadKind.GROUP_INVITE -> scope.launch { handleGroupInvite(contactId, payload) }
             PayloadKind.GROUP_ROSTER_UPDATE -> scope.launch { handleGroupRosterUpdate(contactId, payload) }
+            PayloadKind.GROUP_DELETE -> scope.launch { handleGroupDelete(contactId, payload) }
             PayloadKind.DELIVERED_ACK -> scope.launch {
                 payload.ackForMessageId?.let { messageDao.updateState(it, DeliveryState.DELIVERED) }
             }

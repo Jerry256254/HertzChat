@@ -114,6 +114,9 @@ interface GroupDao {
     @Query("SELECT * FROM groups WHERE groupId = :id")
     suspend fun find(id: String): GroupEntity?
 
+    @Query("SELECT * FROM groups")
+    suspend fun allGroups(): List<GroupEntity>
+
     @Query("SELECT * FROM groups WHERE groupId = :id")
     fun observeGroup(id: String): Flow<GroupEntity?>
 

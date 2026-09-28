@@ -4,9 +4,13 @@ import android.content.Context
 import android.os.Build
 import android.view.WindowManager
 import androidx.annotation.RequiresApi
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
@@ -17,6 +21,8 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.SideEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.composed
@@ -146,8 +152,10 @@ fun GlassSurface(
     hazeState: HazeState? = null,
     content: @Composable BoxScope.() -> Unit,
 ) {
+    val interactionSource = remember { MutableInteractionSource() }
+    val press = if (onClick != null) glassPressAlpha(interactionSource) else 0f
     val clickableMod = if (onClick != null) {
-        Modifier.clip(shape).clickable(onClick = onClick)
+        Modifier.clip(shape).glassClickable(interactionSource, onClick)
     } else {
         Modifier
     }
@@ -160,9 +168,28 @@ fun GlassSurface(
             .background(if (hazeState != null) Color.Transparent else fill)
             .then(clickableMod)
             .glassEdge(shape),
-        content = content,
-    )
+    ) {
+        content()
+        if (press > 0f) {
+            Box(Modifier.matchParentSize().background(Color.White.copy(alpha = 0.10f * press), shape))
+        }
+    }
 }
+
+/**
+ * Press feedback for glass: no ripple wash (gone app-wide, it read as a grey
+ * shadow blooming over the frost). Instead the surface tints a breath brighter
+ * while held. Returns the animated pressed-ness 0..1 for overlays.
+ */
+@Composable
+internal fun glassPressAlpha(interactionSource: MutableInteractionSource): Float {
+    val pressed by interactionSource.collectIsPressedAsState()
+    return animateFloatAsState(if (pressed) 1f else 0f, tween(120), label = "glassPress").value
+}
+
+/** Click handling with no ripple indication - the caller draws the press tint itself. */
+internal fun Modifier.glassClickable(interactionSource: MutableInteractionSource, onClick: () -> Unit): Modifier =
+    this.clickable(interactionSource = interactionSource, indication = null, onClick = onClick)
 
 /** Round glass icon button for bars and menus (back, options, settings, mic). */
 @Composable
@@ -192,8 +219,10 @@ fun GlassCircleButton(
         else -> HertzGlass.contentOnGlass()
     }
     val hazeMod = if (blurred) Modifier.hazeChild(hazeState!!, CircleShape) else Modifier
-    // Press feedback is the bounded ripple only - icons and buttons are never
-    // scaled or otherwise deformed.
+    // Press feedback is a breath of brightness only - no ripple wash, and icons
+    // and buttons are never scaled or otherwise deformed.
+    val interactionSource = remember { MutableInteractionSource() }
+    val press = glassPressAlpha(interactionSource)
     Box(
         modifier = modifier
             .then(hazeMod)
@@ -201,11 +230,14 @@ fun GlassCircleButton(
             .shadow(8.dp, CircleShape, clip = false, ambientColor = Color.Black.copy(alpha = 0.30f), spotColor = Color.Black.copy(alpha = 0.40f))
             .clip(CircleShape)
             .background(fill)
-            .clickable(onClick = onClick)
+            .glassClickable(interactionSource, onClick)
             .glassEdge(CircleShape),
         contentAlignment = Alignment.Center,
     ) {
         Icon(icon, contentDescription = contentDescription, tint = iconTint, modifier = Modifier.size(22.dp))
+        if (press > 0f) {
+            Box(Modifier.matchParentSize().background(Color.White.copy(alpha = 0.12f * press), CircleShape))
+        }
     }
 }
 

@@ -1,6 +1,7 @@
 package cz.kuclab.hertzchat.ui.profile
 
 import androidx.lifecycle.ViewModel
+import androidx.lifecycle.viewModelScope
 import cz.kuclab.hertzchat.crypto.IdentityKeyManager
 import cz.kuclab.hertzchat.data.repository.P2pChatService
 import cz.kuclab.hertzchat.media.MediaStorage
@@ -8,7 +9,12 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import java.io.File
 import javax.inject.Inject
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.stateIn
+import kotlinx.serialization.encodeToString
+import kotlinx.serialization.json.Json
 
 @HiltViewModel
 class ProfileViewModel @Inject constructor(
@@ -33,6 +39,17 @@ class ProfileViewModel @Inject constructor(
     /** Last saved nickname - the draft in [_nickname] only commits on explicit save. */
     private val _committedNickname = MutableStateFlow(identityKeyManager.nickname)
     val committedNickname: StateFlow<String> = _committedNickname
+
+    private val json = Json { ignoreUnknownKeys = true }
+
+    val i2pError = p2pChatService.i2pError.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
+
+    fun retryI2p() = p2pChatService.retryI2p()
+
+    /** Null until I2P has opened our destination - the QR/ID isn't shareable before that. */
+    val myHertzIdQrText: StateFlow<String?> = p2pChatService.i2pDestination
+        .map { it?.let { json.encodeToString(p2pChatService.myHertzId()) } }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
 
     /** Draft only - typing never writes through, so half-typed names can't leak to contacts. */
     fun onNicknameChange(value: String) {

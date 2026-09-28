@@ -8,6 +8,7 @@ import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -88,7 +89,11 @@ fun ChatListScreen(
 
     Scaffold(
         floatingActionButton = {
+            // IntrinsicSize.Max stretches the column to the wider pill and both
+            // pills fill it - Hertz Agent and Nový chat are exactly the same
+            // width however long their labels are.
             Column(
+                modifier = Modifier.width(IntrinsicSize.Max),
                 horizontalAlignment = Alignment.End,
                 verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
@@ -96,12 +101,12 @@ fun ChatListScreen(
                     shape = HertzShapes.Pill,
                     hazeState = hazeState,
                     onClick = onOpenAssistant,
+                    modifier = Modifier.fillMaxWidth(),
                 ) {
-                    // Same metrics as the Nový chat pill below - the two buttons
-                    // are exactly the same size, only the fill differs.
                     Row(
-                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
+                        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp),
                         verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.Center,
                     ) {
                         Icon(Icons.Filled.SmartToy, contentDescription = null, tint = HertzGlass.contentOnGlass(), modifier = Modifier.size(20.dp))
                         Text("  Hertz Agent", style = MaterialTheme.typography.labelLarge, color = HertzGlass.contentOnGlass())
@@ -111,10 +116,12 @@ fun ChatListScreen(
                     shape = HertzShapes.Pill,
                     fill = MaterialTheme.colorScheme.primary,
                     onClick = onOpenContacts,
+                    modifier = Modifier.fillMaxWidth(),
                 ) {
                     Row(
-                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
+                        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp),
                         verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.Center,
                     ) {
                         Icon(Icons.Filled.Add, contentDescription = null, tint = MaterialTheme.colorScheme.onPrimary, modifier = Modifier.size(20.dp))
                         Text("  Nový chat", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onPrimary)

@@ -19,6 +19,18 @@ private data class GithubRelease(val tag_name: String, val html_url: String, val
 
 private const val LATEST_RELEASE_API_URL = "https://api.github.com/repos/Jerry256254/HertzChat/releases/latest"
 
+/** Dotted-version compare shared by the settings check and the cold-start check. */
+internal fun isNewerVersion(remote: String, local: String): Boolean {
+    val remoteParts = remote.split(".").map { it.toIntOrNull() ?: 0 }
+    val localParts = local.split(".").map { it.toIntOrNull() ?: 0 }
+    for (i in 0 until maxOf(remoteParts.size, localParts.size)) {
+        val r = remoteParts.getOrElse(i) { 0 }
+        val l = localParts.getOrElse(i) { 0 }
+        if (r != l) return r > l
+    }
+    return false
+}
+
 /**
  * Checks GitHub Releases for the newest published version. There's no update
  * server of our own (there's no server of any kind in this app) - GitHub's

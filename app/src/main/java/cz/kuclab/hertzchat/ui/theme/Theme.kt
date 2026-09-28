@@ -3,12 +3,16 @@ package cz.kuclab.hertzchat.ui.theme
 import android.app.Activity
 import android.os.Build
 import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.material.ripple.LocalRippleTheme
+import androidx.compose.material.ripple.RippleAlpha
+import androidx.compose.material.ripple.RippleTheme
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.dynamicDarkColorScheme
 import androidx.compose.material3.dynamicLightColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.SideEffect
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
@@ -73,10 +77,24 @@ fun HertzChatTheme(
         }
     }
 
-    MaterialTheme(
-        colorScheme = colorScheme,
-        typography = HertzTypography,
-        shapes = HertzThemeShapes,
-        content = content,
-    )
+    // No ripple anywhere: the Material wash reads as a grey shadow blooming
+    // over the frost. Press feedback is a breath of brightness instead, drawn
+    // by the glass components themselves (see glassPressAlpha). Material3 1.2
+    // still reads the M2 ripple theme, hence this import, not M3's own.
+    CompositionLocalProvider(LocalRippleTheme provides NoRippleTheme) {
+        MaterialTheme(
+            colorScheme = colorScheme,
+            typography = HertzTypography,
+            shapes = HertzThemeShapes,
+            content = content,
+        )
+    }
+}
+
+private object NoRippleTheme : RippleTheme {
+    @Composable
+    override fun defaultColor() = Color.Transparent
+
+    @Composable
+    override fun rippleAlpha() = RippleAlpha(0f, 0f, 0f, 0f)
 }

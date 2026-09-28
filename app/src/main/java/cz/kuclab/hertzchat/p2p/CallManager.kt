@@ -35,13 +35,24 @@ import kotlin.math.sqrt
 
 private const val CALL_SAMPLE_RATE = 8000
 private const val CALL_FRAME_SAMPLES = 160
-private const val CALL_RING_TIMEOUT_MS = 30_000L
+private const val CALL_RING_TIMEOUT_MS = 60_000L
+private const val OFFER_RESEND_MS = 5_000L
+private const val ANSWER_RESEND_MS = 5_000L
+/** An active call with no packets at all for this long is dead - hang it up instead of showing a fake live call. */
+private const val ACTIVE_WATCHDOG_MS = 15_000L
 /** Outbound frames past this backlog are dropped, never queued - stale audio is worse than a gap. */
 private const val SEND_QUEUE_CAPACITY = 50
 /** Inbound jitter buffer in 20ms frames - ~half a second, then old frames drop. */
 private const val PLAY_QUEUE_CAPACITY = 25
 
 enum class CallEndReason { DECLINED, MISSED, NO_ANSWER, HANGUP, FAILED, BUSY }
+
+/**
+ * Glare rule for two phones ringing each other at once: the lexicographically
+ * smaller call id wins, so both sides deterministically agree on which ringing
+ * survives without any extra round trip. Pure for CallGlareTest.
+ */
+internal fun incomingOfferWins(localCallId: String, remoteCallId: String): Boolean = remoteCallId < localCallId
 
 sealed interface CallState {
     data object Idle : CallState
@@ -84,14 +95,19 @@ class CallManager @Inject constructor(
     val micLevel: StateFlow<Float> = _micLevel
 
     private var ringJob: Job? = null
+    private var answerJob: Job? = null
+    private var watchdogJob: Job? = null
     private var senderJob: Job? = null
     private var captureThread: Thread? = null
     private var playbackThread: Thread? = null
     @Volatile private var audioRunning = false
     private val sendQueue = ArrayBlockingQueue<ShortArray>(SEND_QUEUE_CAPACITY)
     private val playQueue = ArrayBlockingQueue<ShortArray>(PLAY_QUEUE_CAPACITY)
+    private val zeroFrame = ShortArray(CALL_FRAME_SAMPLES)
     private var audioSeq = 0L
     private var lastPlayedSeq = -1L
+    @Volatile private var answerAcked = false
+    @Volatile private var lastRxAtMs = 0L
 
     init {
         scope.launch {
@@ -110,12 +126,20 @@ class CallManager @Inject constructor(
         _state.value = CallState.Outgoing(contactId, callId)
         _muted.value = false
         _speaker.value = false
-        scope.launch { sendPacket(contactId, PayloadKind.CALL_OFFER, callId) }
+        // The offer retransmits until it is answered, rejected, or times out -
+        // one fire-and-forget packet over a slow dial is exactly how "they never
+        // even rang" happens.
         ringJob?.cancel()
         ringJob = scope.launch {
-            delay(CALL_RING_TIMEOUT_MS)
-            if (_state.value is CallState.Outgoing) {
-                scope.launch { sendPacket(contactId, PayloadKind.CALL_HANGUP, callId) }
+            val deadline = System.currentTimeMillis() + CALL_RING_TIMEOUT_MS
+            while (System.currentTimeMillis() < deadline) {
+                val current = _state.value
+                if (current !is CallState.Outgoing || current.callId != callId) return@launch
+                sendPacket(contactId, PayloadKind.CALL_OFFER, callId)
+                delay(OFFER_RESEND_MS)
+            }
+            if ((_state.value as? CallState.Outgoing)?.callId == callId) {
+                sendHangupBurst(contactId, callId)
                 endCall(CallEndReason.NO_ANSWER)
             }
         }
@@ -127,20 +151,39 @@ class CallManager @Inject constructor(
         val incoming = _state.value as? CallState.Incoming ?: return
         ringJob?.cancel()
         stopVibration()
-        scope.launch { sendPacket(incoming.contactId, PayloadKind.CALL_ANSWER, incoming.callId) }
         if (!startAudio(incoming.contactId, incoming.callId)) {
-            scope.launch { sendPacket(incoming.contactId, PayloadKind.CALL_HANGUP, incoming.callId) }
+            sendHangupBurst(incoming.contactId, incoming.callId)
             endCall(CallEndReason.FAILED)
             return
         }
+        answerAcked = false
         _state.value = CallState.Active(incoming.contactId, incoming.callId, System.currentTimeMillis())
+        lastRxAtMs = System.currentTimeMillis()
+        // The answer retransmits until the caller's first audio frame proves it
+        // landed - otherwise "I picked up but they still see ringing".
+        answerJob?.cancel()
+        answerJob = scope.launch {
+            while (!answerAcked) {
+                val current = _state.value
+                if (current !is CallState.Active || current.callId != incoming.callId) return@launch
+                sendPacket(incoming.contactId, PayloadKind.CALL_ANSWER, incoming.callId)
+                delay(ANSWER_RESEND_MS)
+            }
+        }
+        startWatchdog(incoming.contactId, incoming.callId)
     }
 
     fun reject() {
         val incoming = _state.value as? CallState.Incoming ?: return
         ringJob?.cancel()
         stopVibration()
-        scope.launch { sendPacket(incoming.contactId, PayloadKind.CALL_REJECT, incoming.callId) }
+        // Twice: a single reject lost on a slow link leaves the caller ringing
+        // at a phone whose owner already declined.
+        scope.launch {
+            sendPacket(incoming.contactId, PayloadKind.CALL_REJECT, incoming.callId)
+            delay(1_000)
+            sendPacket(incoming.contactId, PayloadKind.CALL_REJECT, incoming.callId)
+        }
         _state.value = CallState.Idle
     }
 
@@ -161,9 +204,36 @@ class CallManager @Inject constructor(
         ringJob?.cancel()
         stopVibration()
         if (contactId != null && callId != null) {
-            scope.launch { sendPacket(contactId, PayloadKind.CALL_HANGUP, callId) }
+            sendHangupBurst(contactId, callId)
         }
         endCall(CallEndReason.HANGUP)
+    }
+
+    /** A hangup goes out three times - it is the one packet that must land, or the other side stays in a ghost call. */
+    private fun sendHangupBurst(contactId: String, callId: String) {
+        scope.launch {
+            repeat(3) {
+                sendPacket(contactId, PayloadKind.CALL_HANGUP, callId)
+                delay(1_000)
+            }
+        }
+    }
+
+    /** Ends an active call that went fully silent - both sides always stream, even muted, so silence means death. */
+    private fun startWatchdog(contactId: String, callId: String) {
+        watchdogJob?.cancel()
+        watchdogJob = scope.launch {
+            while (true) {
+                delay(2_000)
+                val current = _state.value
+                if (current !is CallState.Active || current.callId != callId) return@launch
+                if (System.currentTimeMillis() - lastRxAtMs > ACTIVE_WATCHDOG_MS) {
+                    sendHangupBurst(contactId, callId)
+                    endCall(CallEndReason.FAILED)
+                    return@launch
+                }
+            }
+        }
     }
 
     /** Clears a terminal [CallState.Ended] back to idle - the UI calls it when leaving the call screen. */
@@ -184,22 +254,22 @@ class CallManager @Inject constructor(
         val callId = payload.callId ?: return
         when (payload.kind) {
             PayloadKind.CALL_OFFER -> {
-                if (_state.value != CallState.Idle) {
-                    // Busy on another call - decline, don't queue.
-                    scope.launch { sendPacket(contactId, PayloadKind.CALL_REJECT, callId) }
-                    return
-                }
-                _muted.value = false
-                _speaker.value = false
-                _state.value = CallState.Incoming(contactId, callId)
-                startVibration()
-                ringJob?.cancel()
-                ringJob = scope.launch {
-                    delay(CALL_RING_TIMEOUT_MS)
-                    if (_state.value is CallState.Incoming) {
-                        stopVibration()
-                        endCall(CallEndReason.MISSED)
+                val current = _state.value
+                when {
+                    current is CallState.Idle -> startIncomingRing(contactId, callId)
+                    // Glare: both sides rang at once - the deterministic winner is
+                    // whichever call id sorts first, so both ends agree with no
+                    // extra round trip. Retransmits of the already-ringing offer
+                    // just re-arm the same state, harmlessly.
+                    current is CallState.Outgoing && current.contactId == contactId && incomingOfferWins(current.callId, callId) -> {
+                        ringJob?.cancel()
+                        startIncomingRing(contactId, callId)
                     }
+                    // Stray retransmits of an offer we already rang for or answered -
+                    // acknowledging them with a reject would kill a live call.
+                    current is CallState.Incoming && current.callId == callId -> Unit
+                    current is CallState.Active && current.callId == callId -> Unit
+                    else -> scope.launch { sendPacket(contactId, PayloadKind.CALL_REJECT, callId) }
                 }
             }
             PayloadKind.CALL_ANSWER -> {
@@ -207,11 +277,13 @@ class CallManager @Inject constructor(
                 if (outgoing.callId != callId || outgoing.contactId != contactId) return
                 ringJob?.cancel()
                 if (!startAudio(contactId, callId)) {
-                    scope.launch { sendPacket(contactId, PayloadKind.CALL_HANGUP, callId) }
+                    sendHangupBurst(contactId, callId)
                     endCall(CallEndReason.FAILED)
                     return
                 }
                 _state.value = CallState.Active(contactId, callId, System.currentTimeMillis())
+                lastRxAtMs = System.currentTimeMillis()
+                startWatchdog(contactId, callId)
             }
             PayloadKind.CALL_REJECT -> {
                 val outgoing = _state.value as? CallState.Outgoing ?: return
@@ -241,6 +313,8 @@ class CallManager @Inject constructor(
                 val pcm = payload.audioBase64?.let { runCatching { Base64.decode(it, Base64.NO_WRAP) }.getOrNull() } ?: return
                 if (pcm.size != CALL_FRAME_SAMPLES * 2) return
                 lastPlayedSeq = seq
+                lastRxAtMs = System.currentTimeMillis()
+                answerAcked = true
                 val shorts = ShortArray(CALL_FRAME_SAMPLES) { i ->
                     ((pcm[i * 2 + 1].toInt() shl 8) or (pcm[i * 2].toInt() and 0xFF)).toShort()
                 }
@@ -253,7 +327,25 @@ class CallManager @Inject constructor(
         }
     }
 
+    private fun startIncomingRing(contactId: String, callId: String) {
+        _muted.value = false
+        _speaker.value = false
+        _state.value = CallState.Incoming(contactId, callId)
+        startVibration()
+        ringJob?.cancel()
+        ringJob = scope.launch {
+            delay(CALL_RING_TIMEOUT_MS)
+            if ((_state.value as? CallState.Incoming)?.callId == callId) {
+                stopVibration()
+                endCall(CallEndReason.MISSED)
+            }
+        }
+    }
+
     private fun endCall(reason: CallEndReason) {
+        ringJob?.cancel()
+        answerJob?.cancel()
+        watchdogJob?.cancel()
         stopAudio()
         val contactId = when (val s = _state.value) {
             is CallState.Outgoing -> s.contactId
@@ -338,14 +430,21 @@ class CallManager @Inject constructor(
                     val now = System.currentTimeMillis()
                     if (now - lastLevelAt >= 100) {
                         lastLevelAt = now
-                        var sum = 0.0
-                        for (s in frame) sum += (s / 32768.0) * (s / 32768.0)
-                        _micLevel.value = sqrt((sum / frame.size).coerceIn(0.0, 1.0)).toFloat()
+                        if (_muted.value) {
+                            _micLevel.value = 0f
+                        } else {
+                            var sum = 0.0
+                            for (s in frame) sum += (s / 32768.0) * (s / 32768.0)
+                            _micLevel.value = sqrt((sum / frame.size).coerceIn(0.0, 1.0)).toFloat()
+                        }
                     }
-                    if (_muted.value) continue
-                    if (!sendQueue.offer(frame.copyOf())) {
+                    // Muted still streams (silence): the frames double as the
+                    // liveness signal the watchdog watches, and the far end's
+                    // jitter buffer never starves into underrun crackle.
+                    val out = if (_muted.value) zeroFrame else frame.copyOf()
+                    if (!sendQueue.offer(out)) {
                         sendQueue.poll()
-                        sendQueue.offer(frame.copyOf())
+                        sendQueue.offer(out)
                     }
                 }
                 runCatching { recorder.stop() }

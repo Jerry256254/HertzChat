@@ -13,7 +13,6 @@ import androidx.camera.core.resolutionselector.ResolutionStrategy
 import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.camera.view.PreviewView
 import androidx.compose.foundation.Canvas
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -33,7 +32,6 @@ import coil.compose.AsyncImage
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Groups
 import androidx.compose.material.icons.filled.FlashlightOff
 import androidx.compose.material.icons.filled.FlashlightOn
@@ -42,7 +40,6 @@ import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Checkbox
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -63,11 +60,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.asImageBitmap
-import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLifecycleOwner
-import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
@@ -85,22 +79,19 @@ import dev.chrisbanes.haze.HazeState
 import dev.chrisbanes.haze.haze
 import cz.kuclab.hertzchat.ui.migration.QrCodeScannerAnalyzer
 import cz.kuclab.hertzchat.ui.theme.HertzShapes
-import cz.kuclab.hertzchat.ui.migration.generateQrBitmap
 import java.util.concurrent.Executors
 import kotlinx.coroutines.delay
 
 @Composable
 fun ContactsScreen(
+    onBack: () -> Unit,
     onOpenChat: (String) -> Unit,
     viewModel: ContactsViewModel = hiltViewModel(),
 ) {
-    val i2pError by viewModel.i2pError.collectAsState()
     val addError by viewModel.addError.collectAsState()
     val addSuccess by viewModel.addSuccess.collectAsState()
-    val myQrText by viewModel.myHertzIdQrText.collectAsState()
     val contacts by viewModel.contacts.collectAsState()
     val blocked by viewModel.blockedContacts.collectAsState()
-    val clipboard = LocalClipboardManager.current
 
     var pastedId by remember { mutableStateOf("") }
     var scannerOpen by remember { mutableStateOf(false) }
@@ -126,65 +117,6 @@ fun ContactsScreen(
             contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 92.dp, bottom = 16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            item {
-                AppCard {
-                    Column(
-                        modifier = Modifier.padding(20.dp).fillMaxWidth(),
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                    ) {
-                        Text("Moje Hertz ID", fontWeight = FontWeight.SemiBold)
-                        Box(modifier = Modifier.padding(vertical = 12.dp), contentAlignment = Alignment.Center) {
-                            val qrText = myQrText
-                            when {
-                                qrText != null -> {
-                                    val bitmap = remember(qrText) { generateQrBitmap(qrText) }
-                                    Image(bitmap = bitmap.asImageBitmap(), contentDescription = "Moje Hertz ID QR kód")
-                                }
-                                i2pError != null -> {
-                                    Column(
-                                        horizontalAlignment = Alignment.CenterHorizontally,
-                                        modifier = Modifier.size(220.dp),
-                                        verticalArrangement = Arrangement.Center,
-                                    ) {
-                                        Text(
-                                            "Připojení k síti I2P selhalo",
-                                            style = MaterialTheme.typography.labelSmall,
-                                            color = MaterialTheme.colorScheme.error,
-                                            textAlign = androidx.compose.ui.text.style.TextAlign.Center,
-                                        )
-                                        OutlinedButton(onClick = viewModel::retryI2p, modifier = Modifier.padding(top = 12.dp)) {
-                                            Text("Zkusit znovu")
-                                        }
-                                    }
-                                }
-                                else -> {
-                                    Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.size(220.dp)) {
-                                        CircularProgressIndicator(modifier = Modifier.padding(bottom = 12.dp))
-                                        Text(
-                                            "Připravuje se tvoje adresa v síti I2P...",
-                                            style = MaterialTheme.typography.labelSmall,
-                                            textAlign = androidx.compose.ui.text.style.TextAlign.Center,
-                                        )
-                                    }
-                                }
-                            }
-                        }
-                        Text(
-                            "Ukaž tenhle QR kód příteli (nebo mu ID zkopíruj a pošli), ať tě může přidat. Bez toho tě nikdo nenajde - není tu žádný adresář uživatelů.",
-                            style = MaterialTheme.typography.labelSmall,
-                            textAlign = androidx.compose.ui.text.style.TextAlign.Center,
-                        )
-                        TextButton(
-                            onClick = { myQrText?.let { clipboard.setText(AnnotatedString(it)) } },
-                            enabled = myQrText != null,
-                        ) {
-                            Icon(Icons.Filled.ContentCopy, contentDescription = null, modifier = Modifier.size(18.dp))
-                            Text("  Zkopírovat ID")
-                        }
-                    }
-                }
-            }
-
             item {
                 AppCard {
                     Column(modifier = Modifier.padding(20.dp)) {
@@ -322,7 +254,7 @@ fun ContactsScreen(
             }
 
         }
-        GlassBar(title = "Kontakty", hazeState = hazeState, modifier = Modifier.align(Alignment.TopCenter))
+        GlassBar(title = "Kontakty", hazeState = hazeState, onBack = onBack, modifier = Modifier.align(Alignment.TopCenter))
         }
     }
 

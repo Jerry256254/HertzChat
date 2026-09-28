@@ -29,6 +29,7 @@ private const val KEY_REGISTRATION_ID = "registration_id"
 private const val KEY_NICKNAME = "nickname"
 private const val KEY_I2P_PRIVATE_KEY = "i2p_private_key"
 private const val KEY_I2P_DESTINATION = "i2p_destination"
+private const val KEY_DELETED_GROUPS = "deleted_group_ids"
 
 private const val ONE_TIME_PREKEY_COUNT = 100
 private const val ONE_TIME_PREKEY_LOW_WATERMARK = 20
@@ -98,6 +99,15 @@ class IdentityKeyManager @Inject constructor(
     var i2pDestination: String
         get() = prefs.getString(KEY_I2P_DESTINATION, "") ?: ""
         set(value) = prefs.edit().putString(KEY_I2P_DESTINATION, value).apply()
+
+    /**
+     * Ids of groups this device deleted as owner. Deletes are re-sent to anyone
+     * reaching us afterwards, so members offline at delete time still converge -
+     * without tombstones their rows would sit dead forever.
+     */
+    var deletedGroupIds: Set<String>
+        get() = prefs.getStringSet(KEY_DELETED_GROUPS, emptySet()) ?: emptySet()
+        set(value) = prefs.edit().putStringSet(KEY_DELETED_GROUPS, value.take(50).toSet()).apply()
 
     fun contactIdFor(identityKeyBytes: ByteArray): String {
         val digest = MessageDigest.getInstance("SHA-256").digest(identityKeyBytes)
