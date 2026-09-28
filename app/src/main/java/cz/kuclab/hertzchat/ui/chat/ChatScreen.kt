@@ -85,6 +85,7 @@ import cz.kuclab.hertzchat.ui.common.GlassSurface
 import cz.kuclab.hertzchat.ui.common.HertzGlass
 import cz.kuclab.hertzchat.ui.common.WindowBlurBehind
 import cz.kuclab.hertzchat.ui.common.CollapsibleMessageText
+import cz.kuclab.hertzchat.ui.common.MessageEntrance
 import cz.kuclab.hertzchat.ui.common.ThreadInputBar
 import cz.kuclab.hertzchat.ui.common.highlightQuery
 import cz.kuclab.hertzchat.ui.theme.HertzIcons
@@ -125,6 +126,8 @@ fun ChatScreen(contactId: String, onBack: () -> Unit, onOpenFile: (String) -> Un
 
     val listState = rememberLazyListState()
     val hazeState = remember { HazeState() }
+    // Messages newer than this animate in; history renders directly.
+    val openedAt = remember { System.currentTimeMillis() }
     val showScrollDown by remember { derivedStateOf { listState.firstVisibleItemIndex > 2 } }
     val snackbar = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
@@ -235,14 +238,16 @@ fun ChatScreen(contactId: String, onBack: () -> Unit, onOpenFile: (String) -> Un
                     verticalArrangement = Arrangement.spacedBy(4.dp),
                 ) {
                 items(displayItems, key = { it.messageId }) { message ->
-                    MessageBubble(
-                        message = message,
-                        searchQuery = if (searchOpen) searchQuery else "",
-                        isCurrentMatch = searchOpen && matchIds.getOrNull(matchPos) == message.messageId,
-                        threadMedia = threadMedia,
-                        onDownload = viewModel::downloadMessage,
-                        onOpenFile = { onOpenFile(it.messageId) },
-                    )
+                    MessageEntrance(isNew = message.timestamp > openedAt) {
+                        MessageBubble(
+                            message = message,
+                            searchQuery = if (searchOpen) searchQuery else "",
+                            isCurrentMatch = searchOpen && matchIds.getOrNull(matchPos) == message.messageId,
+                            threadMedia = threadMedia,
+                            onDownload = viewModel::downloadMessage,
+                            onOpenFile = { onOpenFile(it.messageId) },
+                        )
+                    }
                 }
             }
             }

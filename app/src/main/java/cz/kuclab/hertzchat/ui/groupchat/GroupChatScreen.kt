@@ -82,6 +82,7 @@ import cz.kuclab.hertzchat.ui.common.GlassSurface
 import cz.kuclab.hertzchat.ui.common.HertzGlass
 import cz.kuclab.hertzchat.ui.common.WindowBlurBehind
 import cz.kuclab.hertzchat.ui.common.CollapsibleMessageText
+import cz.kuclab.hertzchat.ui.common.MessageEntrance
 import cz.kuclab.hertzchat.ui.common.ThreadInputBar
 import cz.kuclab.hertzchat.ui.common.highlightQuery
 import cz.kuclab.hertzchat.ui.theme.HertzIcons
@@ -126,6 +127,8 @@ fun GroupChatScreen(groupId: String, onBack: () -> Unit, onLeft: () -> Unit, onO
     val voiceRecorder = remember { VoiceRecorder(context) }
     val listState = rememberLazyListState()
     val hazeState = remember { HazeState() }
+    // Messages newer than this animate in; history renders directly.
+    val openedAt = remember { System.currentTimeMillis() }
     val showScrollDown by remember { derivedStateOf { listState.firstVisibleItemIndex > 2 } }
     val snackbar = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
@@ -236,16 +239,18 @@ fun GroupChatScreen(groupId: String, onBack: () -> Unit, onLeft: () -> Unit, onO
                     verticalArrangement = Arrangement.spacedBy(4.dp),
                 ) {
                 items(displayItems, key = { it.messageId }) { message ->
-                    GroupMessageBubble(
-                        message,
-                        senderNickname = message.senderContactId?.let { nicknamesById[it] },
-                        senderAvatarPath = message.senderContactId?.let { avatarsById[it] },
-                        searchQuery = if (searchOpen) searchQuery else "",
-                        isCurrentMatch = searchOpen && matchIds.getOrNull(matchPos) == message.messageId,
-                        threadMedia = threadMedia,
-                        onDownload = viewModel::downloadMessage,
-                        onOpenFile = { onOpenFile(it.messageId) },
-                    )
+                    MessageEntrance(isNew = message.timestamp > openedAt) {
+                        GroupMessageBubble(
+                            message,
+                            senderNickname = message.senderContactId?.let { nicknamesById[it] },
+                            senderAvatarPath = message.senderContactId?.let { avatarsById[it] },
+                            searchQuery = if (searchOpen) searchQuery else "",
+                            isCurrentMatch = searchOpen && matchIds.getOrNull(matchPos) == message.messageId,
+                            threadMedia = threadMedia,
+                            onDownload = viewModel::downloadMessage,
+                            onOpenFile = { onOpenFile(it.messageId) },
+                        )
+                    }
                 }
             }
             }

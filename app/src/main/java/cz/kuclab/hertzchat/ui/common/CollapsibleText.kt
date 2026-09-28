@@ -1,5 +1,6 @@
 package cz.kuclab.hertzchat.ui.common
 
+import androidx.compose.animation.animateContentSize
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.MaterialTheme
@@ -52,7 +53,7 @@ fun CollapsibleMessageText(text: String, color: Color, modifier: Modifier = Modi
         return
     }
     var expanded by remember(text) { mutableStateOf(false) }
-    Column(modifier = modifier) {
+    Column(modifier = modifier.animateContentSize()) {
         MarkdownText(if (expanded) text else collapsedPreview(text), color = color)
         TextButton(
             onClick = { expanded = !expanded },

@@ -66,6 +66,8 @@ private const val FRAME_FRIEND_REQUEST: Byte = 4
 private const val FRAME_FRIEND_RESPONSE: Byte = 5
 
 private const val RETRY_INTERVAL_MS = 15_000L
+/** Idle open connections get a tiny ping on this cadence, so tunnels and NAT bindings stay warm instead of dying between messages. */
+private const val HEARTBEAT_MS = 180_000L
 /** A send that doesn't leave the device within this long is treated as a dead connection and re-dialled, instead of blocking behind TCP retransmits. */
 private const val SEND_TIMEOUT_MS = 12_000L
 /** How long a SENT message waits for a delivery receipt before it's confirmed optimistically (the peer may run a version that never sends receipts). */
@@ -179,6 +181,7 @@ class P2pChatService @Inject constructor(
             lanTransport.incomingConnections.collect { socket -> handleIncomingSocket(socket, viaLan = true) }
         }
         scope.launch { retryPendingLoop() }
+        scope.launch { heartbeatLoop() }
         // Event-driven flushes: the moment the network (or a specific peer)
         // proves reachable, anything waiting goes out immediately instead of
         // sitting until the next retry tick.
@@ -1187,6 +1190,46 @@ class P2pChatService @Inject constructor(
         }
     }
 
+    /**
+     * Dials [contactId] in the background without sending anything - opening a chat
+     * warms its peer, so the first message usually finds a live connection instead
+     * of paying the multi-second I2P dial. No-op when already connected.
+     */
+    fun warmConnection(contactId: String) {
+        if (connections.containsKey(contactId)) return
+        scope.launch {
+            val contact = contactDao.find(contactId) ?: return@launch
+            if (contact.contactId in blockedContactIds) return@launch
+            dialMutexFor(contactId).withLock {
+                if (connections.containsKey(contactId)) return@withLock
+                runCatching { dialAndRegister(contactId, contact.i2pDestination) }
+            }
+        }
+    }
+
+    /** Warms every member of [groupId] - a group send fans out, so its dials warm up the same way. */
+    fun warmGroup(groupId: String) {
+        scope.launch {
+            runCatching { groupMemberDao.findMembers(groupId) }.getOrDefault(emptyList())
+                .forEach { warmConnection(it.contactId) }
+        }
+    }
+
+    private suspend fun heartbeatLoop() {
+        while (started) {
+            delay(HEARTBEAT_MS)
+            // Only already-open connections: a ping must never dial, or every
+            // heartbeat would wake every dead peer like a retry sweep. The ping
+            // still carries the profile stamp, so it doubles as profile refresh.
+            connections.keys.forEach { contactId ->
+                if (!connections.containsKey(contactId)) return@forEach
+                runCatching {
+                    trySendPayload(contactId, ChatPayload(UUID.randomUUID().toString(), System.currentTimeMillis(), PayloadKind.PING))
+                }
+            }
+        }
+    }
+
     private suspend fun retryPendingNow() {
         // Overlapping sweeps would double-send everything; whoever is already
         // sweeping covers the newcomer, so a contended sweep just skips.
@@ -1418,6 +1461,8 @@ class P2pChatService @Inject constructor(
         when (payload.kind) {
             PayloadKind.CALL_OFFER, PayloadKind.CALL_ANSWER, PayloadKind.CALL_REJECT, PayloadKind.CALL_HANGUP, PayloadKind.CALL_AUDIO ->
                 _events.tryEmit(ChatServiceEvent.CallSignaling(contactId, payload))
+            // Heartbeat: nothing to do - the profile stamp was already applied above.
+            PayloadKind.PING -> Unit
             PayloadKind.IMAGE, PayloadKind.VIDEO, PayloadKind.VOICE, PayloadKind.FILE, PayloadKind.AVATAR -> beginIncomingTransfer(contactId, payload)
             PayloadKind.GROUP_INVITE -> scope.launch { handleGroupInvite(contactId, payload) }
             PayloadKind.GROUP_ROSTER_UPDATE -> scope.launch { handleGroupRosterUpdate(contactId, payload) }

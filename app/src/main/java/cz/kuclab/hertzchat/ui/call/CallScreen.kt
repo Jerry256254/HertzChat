@@ -4,6 +4,11 @@ import android.Manifest
 import android.content.pm.PackageManager
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -28,6 +33,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
@@ -111,9 +117,22 @@ fun CallScreen(contactId: String, onDone: () -> Unit, viewModel: CallViewModel =
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.Center,
         ) {
+            // While ringing, the photo breathes gently - alive, not static.
+            val ringing = state is CallState.Outgoing || state is CallState.Incoming
+            val pulse by rememberInfiniteTransition(label = "ring").animateFloat(
+                initialValue = 1f,
+                targetValue = 1.07f,
+                animationSpec = infiniteRepeatable(tween(900), RepeatMode.Reverse),
+                label = "pulse",
+            )
             Box(
                 modifier = Modifier
                     .size(112.dp)
+                    .graphicsLayer {
+                        val s = if (ringing) pulse else 1f
+                        scaleX = s
+                        scaleY = s
+                    }
                     .clip(CircleShape)
                     .background(MaterialTheme.colorScheme.primaryContainer),
                 contentAlignment = Alignment.Center,

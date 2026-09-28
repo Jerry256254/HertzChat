@@ -124,6 +124,9 @@ fun VoiceRecordingContent(elapsedMs: Long, level: Float, modifier: Modifier = Mo
  * The recorded-but-unsent clip as the pill's center: play/pause with scrub, the
  * duration, and delete. Surface-less - the pill behind it is the surface, and
  * sending stays on the pill's send button beside this preview.
+ *
+ * Capped at exactly the 40dp the end circles occupy: the slider's 48dp touch
+ * target used to stretch the whole island the moment a clip landed in it.
  */
 @Composable
 fun VoicePreviewContent(
@@ -171,7 +174,7 @@ fun VoicePreviewContent(
     }
 
     Row(
-        modifier = modifier.fillMaxWidth().padding(end = 2.dp),
+        modifier = modifier.fillMaxWidth().height(40.dp).padding(end = 2.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         IconButton(
@@ -182,11 +185,11 @@ fun VoicePreviewContent(
                 }
                 onDelete()
             },
-            modifier = Modifier.size(38.dp),
+            modifier = Modifier.size(32.dp),
         ) {
             Icon(Icons.Filled.Delete, contentDescription = "Smazat nahrávku", tint = MaterialTheme.colorScheme.error)
         }
-        IconButton(onClick = ::toggle, modifier = Modifier.size(38.dp)) {
+        IconButton(onClick = ::toggle, modifier = Modifier.size(32.dp)) {
             Icon(
                 if (isPlaying) HertzIcons.Pause else HertzIcons.Play,
                 contentDescription = if (isPlaying) "Pozastavit" else "Přehrát",

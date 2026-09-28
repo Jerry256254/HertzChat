@@ -68,6 +68,13 @@ class ChatPayloadCompatTest {
     }
 
     @Test
+    fun `heartbeat ping round-trips`() {
+        val ping = ChatPayload("p1", 1L, PayloadKind.PING)
+        val decoded = json.decodeFromString(ChatPayload.serializer(), json.encodeToString(ChatPayload.serializer(), ping))
+        assertEquals(PayloadKind.PING, decoded.kind)
+    }
+
+    @Test
     fun `per-payload profile stamp round-trips and defaults to null for old peers`() {
         val stamped = ChatPayload("m7", 1L, PayloadKind.TEXT, text = "x", senderNickname = "Jerry", senderAvatarHash = "ab12")
         val decoded = json.decodeFromString(ChatPayload.serializer(), json.encodeToString(ChatPayload.serializer(), stamped))

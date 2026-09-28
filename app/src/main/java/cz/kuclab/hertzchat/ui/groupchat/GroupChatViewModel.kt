@@ -73,6 +73,9 @@ class GroupChatViewModel @Inject constructor(
 
     init {
         activeChatTracker.activeThreadId.value = groupId
+        // Members dial while the user reads/types - the first send fans out over
+        // live connections instead of paying a dial per member.
+        p2pChatService.warmGroup(groupId)
         viewModelScope.launch {
             messageDao.observeMessages(groupId).collect { list ->
                 list.maxOfOrNull { it.timestamp }?.let { newest ->

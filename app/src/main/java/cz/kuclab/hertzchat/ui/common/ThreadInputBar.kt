@@ -1,6 +1,7 @@
 package cz.kuclab.hertzchat.ui.common
 
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -108,7 +109,9 @@ fun ThreadInputBar(
         }
         GlassSurface(
             shape = islandShape,
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp).padding(bottom = 8.dp),
+            // The island breathes with the text instead of snapping - paragraphs
+            // grow it smoothly, sending shrinks it back the same way.
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp).padding(bottom = 8.dp).animateContentSize(),
             hazeState = hazeState,
         ) {
             Row(

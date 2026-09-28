@@ -58,6 +58,9 @@ class ChatViewModel @Inject constructor(
         // Suppresses the notification MessageNotifier would otherwise fire for a message
         // arriving in the exact thread already open on screen.
         activeChatTracker.activeThreadId.value = contactId
+        // The peer dials while the user reads/types - the first send then finds
+        // a live connection instead of paying the multi-second I2P dial.
+        p2pChatService.warmConnection(contactId)
         // While this screen is alive everything shown is "seen" - the watermark follows
         // the newest visible message, which clears the chat-list unread dot live.
         viewModelScope.launch {
