@@ -70,9 +70,15 @@ fun HoldToRecordButton(
                         if (onPressStart()) {
                             held = true
                             haptics.performHapticFeedback(HapticFeedbackType.LongPress)
-                            tryAwaitRelease()
-                            held = false
-                            onPressEnd()
+                            try {
+                                tryAwaitRelease()
+                            } finally {
+                                // The press scope can be cancelled without a release
+                                // (window focus lost, navigation) - the recorder must
+                                // still stop, or it records forever in a stuck UI.
+                                held = false
+                                onPressEnd()
+                            }
                         }
                     },
                 )

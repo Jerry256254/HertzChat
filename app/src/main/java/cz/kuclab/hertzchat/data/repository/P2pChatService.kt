@@ -19,6 +19,8 @@ import cz.kuclab.hertzchat.data.db.MessageEntity
 import cz.kuclab.hertzchat.data.db.MessageType
 import cz.kuclab.hertzchat.data.model.ChatPayload
 import cz.kuclab.hertzchat.data.model.PayloadKind
+import cz.kuclab.hertzchat.media.FileChunks
+import cz.kuclab.hertzchat.media.ImageEditor
 import cz.kuclab.hertzchat.media.MediaCrypto
 import cz.kuclab.hertzchat.media.MediaStorage
 import cz.kuclab.hertzchat.network.p2p.FriendRequestPayload
@@ -560,6 +562,71 @@ class P2pChatService @Inject constructor(
 
     // --- Media ---
 
+    /**
+     * Large-file variant: the staged file is copied and chunked straight off disk,
+     * so sending a video or APK holds one 16KB chunk in RAM instead of the whole
+     * file. Chunks stream from the local copy (not the staged file, which the caller
+     * deletes right after this returns). Must be called off the main thread.
+     */
+    fun sendMedia(contactId: String, sourceFile: File, mimeType: String, kind: PayloadKind, fileName: String?, durationMs: Long? = null) {
+        val size = sourceFile.length()
+        val transferId = UUID.randomUUID()
+        val key = MediaCrypto.generateKey()
+        val nonceSalt = MediaCrypto.generateNonceSalt()
+        val extension = mediaStorage.extensionFor(mimeType)
+        val localCopy = runCatching { mediaStorage.newOutgoingCopyFromFile(sourceFile, extension) }.getOrNull()
+        val messageId = UUID.randomUUID().toString()
+        val chunkCount = FileChunks.chunkCount(size, MediaCrypto.CHUNK_SIZE).coerceAtLeast(1)
+
+        val control = ChatPayload(
+            messageId = messageId,
+            sentAt = System.currentTimeMillis(),
+            kind = kind,
+            mediaMimeType = mimeType,
+            mediaFileName = fileName,
+            mediaSizeBytes = size,
+            mediaDurationMs = durationMs,
+            mediaTransferId = transferId.toString(),
+            mediaKeyBase64 = Base64.encodeToString(key, Base64.NO_WRAP),
+            mediaNonceSaltBase64 = Base64.encodeToString(nonceSalt, Base64.NO_WRAP),
+            mediaChunkCount = chunkCount,
+        )
+
+        scope.launch {
+            messageDao.upsert(
+                MessageEntity(
+                    messageId = messageId,
+                    contactId = contactId,
+                    fromMe = true,
+                    type = kind.toMessageType(),
+                    mediaPath = localCopy?.absolutePath,
+                    mediaMimeType = mimeType,
+                    mediaFileName = fileName,
+                    mediaDurationMs = durationMs,
+                    timestamp = control.sentAt,
+                    deliveryState = DeliveryState.PENDING,
+                ),
+            )
+
+            if (localCopy == null || size <= 0) {
+                messageDao.updateState(messageId, DeliveryState.FAILED)
+                return@launch
+            }
+
+            if (isSelf(contactId)) {
+                messageDao.updateState(messageId, DeliveryState.DELIVERED)
+                return@launch
+            }
+
+            val contact = contactDao.find(contactId)
+            val delivered = contact != null && runCatching {
+                check(trySendPayload(contactId, control))
+                check(sendChunkStreamFromFile(contactId, contact.i2pDestination, transferId, key, nonceSalt, localCopy, chunkCount))
+            }.isSuccess
+            messageDao.updateState(messageId, if (delivered) DeliveryState.SENT else DeliveryState.PENDING)
+        }
+    }
+
     fun sendMedia(contactId: String, sourceBytes: ByteArray, mimeType: String, kind: PayloadKind, fileName: String?, durationMs: Long? = null) {
         val transferId = UUID.randomUUID()
         val key = MediaCrypto.generateKey()
@@ -624,18 +691,40 @@ class P2pChatService @Inject constructor(
         var index = 0
         while (offset < sourceBytes.size) {
             val end = minOf(offset + MediaCrypto.CHUNK_SIZE, sourceBytes.size)
-            val cipherChunk = MediaCrypto.encryptChunk(key, nonceSalt, index, sourceBytes.copyOfRange(offset, end))
-            var sent = false
-            var attempts = 0
-            while (!sent && attempts < CHUNK_ATTEMPTS) {
-                sent = sendFrameTo(contactId, i2pDestination, frameMediaChunk(transferId, index, cipherChunk))
-                attempts++
-            }
-            if (!sent) return false
+            if (!sendOneChunk(contactId, i2pDestination, transferId, key, nonceSalt, index, sourceBytes.copyOfRange(offset, end))) return false
             offset = end
             index++
         }
         return true
+    }
+
+    /**
+     * The large-file variant: reads 16KB slices straight off disk, so sending a
+     * video or APK holds one chunk in RAM instead of the whole file. Random access
+     * (not a forward stream) so a retried chunk re-reads the same bytes.
+     */
+    private suspend fun sendChunkStreamFromFile(contactId: String, i2pDestination: String, transferId: UUID, key: ByteArray, nonceSalt: ByteArray, sourceFile: File, chunkCount: Int): Boolean {
+        return runCatching {
+            FileChunks.Reader(sourceFile, MediaCrypto.CHUNK_SIZE).use { reader ->
+                if (reader.chunkCount != chunkCount) return@runCatching false
+                repeat(chunkCount) { index ->
+                    if (!sendOneChunk(contactId, i2pDestination, transferId, key, nonceSalt, index, reader.readChunk(index))) return@runCatching false
+                }
+            }
+            true
+        }.getOrDefault(false)
+    }
+
+    /** Encrypts one chunk and pushes it through the per-chunk retry loop. */
+    private suspend fun sendOneChunk(contactId: String, i2pDestination: String, transferId: UUID, key: ByteArray, nonceSalt: ByteArray, index: Int, plaintext: ByteArray): Boolean {
+        val cipherChunk = MediaCrypto.encryptChunk(key, nonceSalt, index, plaintext)
+        var sent = false
+        var attempts = 0
+        while (!sent && attempts < CHUNK_ATTEMPTS) {
+            sent = sendFrameTo(contactId, i2pDestination, frameMediaChunk(transferId, index, cipherChunk))
+            attempts++
+        }
+        return sent
     }
 
     /**
@@ -645,6 +734,68 @@ class P2pChatService @Inject constructor(
      * payload - so each member unwraps it through their own ratchet and there's still no
      * shared group key anywhere.
      */
+    /**
+     * Large-file variant of group send - same off-disk chunking as [sendMedia],
+     * fanned out per member. Must be called off the main thread.
+     */
+    fun sendGroupMedia(groupId: String, sourceFile: File, mimeType: String, kind: PayloadKind, fileName: String?, durationMs: Long? = null) {
+        val size = sourceFile.length()
+        val transferId = UUID.randomUUID()
+        val key = MediaCrypto.generateKey()
+        val nonceSalt = MediaCrypto.generateNonceSalt()
+        val extension = mediaStorage.extensionFor(mimeType)
+        val localCopy = runCatching { mediaStorage.newOutgoingCopyFromFile(sourceFile, extension) }.getOrNull()
+        val messageId = UUID.randomUUID().toString()
+        val chunkCount = FileChunks.chunkCount(size, MediaCrypto.CHUNK_SIZE).coerceAtLeast(1)
+
+        val control = ChatPayload(
+            messageId = messageId,
+            sentAt = System.currentTimeMillis(),
+            kind = kind,
+            mediaMimeType = mimeType,
+            mediaFileName = fileName,
+            mediaSizeBytes = size,
+            mediaDurationMs = durationMs,
+            mediaTransferId = transferId.toString(),
+            mediaKeyBase64 = Base64.encodeToString(key, Base64.NO_WRAP),
+            mediaNonceSaltBase64 = Base64.encodeToString(nonceSalt, Base64.NO_WRAP),
+            mediaChunkCount = chunkCount,
+            groupId = groupId,
+        )
+
+        scope.launch {
+            messageDao.upsert(
+                MessageEntity(
+                    messageId = messageId,
+                    contactId = groupId,
+                    fromMe = true,
+                    type = kind.toMessageType(),
+                    mediaPath = localCopy?.absolutePath,
+                    mediaMimeType = mimeType,
+                    mediaFileName = fileName,
+                    mediaDurationMs = durationMs,
+                    timestamp = control.sentAt,
+                    deliveryState = DeliveryState.PENDING,
+                ),
+            )
+
+            if (localCopy == null || size <= 0) {
+                messageDao.updateState(messageId, DeliveryState.FAILED)
+                return@launch
+            }
+
+            val members = groupMemberDao.findMembers(groupId)
+            val delivered = members.map { member ->
+                val contact = contactDao.find(member.contactId)
+                contact != null && runCatching {
+                    check(trySendPayload(member.contactId, control))
+                    check(sendChunkStreamFromFile(member.contactId, contact.i2pDestination, transferId, key, nonceSalt, localCopy, chunkCount))
+                }.isSuccess
+            }.any { it }
+            messageDao.updateState(messageId, if (delivered) DeliveryState.SENT else DeliveryState.PENDING)
+        }
+    }
+
     fun sendGroupMedia(groupId: String, sourceBytes: ByteArray, mimeType: String, kind: PayloadKind, fileName: String?, durationMs: Long? = null) {
         val transferId = UUID.randomUUID()
         val key = MediaCrypto.generateKey()
@@ -704,7 +855,7 @@ class P2pChatService @Inject constructor(
         // Called from the profile screen: writing a full-size JPEG is disk I/O and
         // belongs off the main thread, same as everything else in here.
         scope.launch {
-            mediaStorage.selfAvatarFile().writeBytes(jpegBytes)
+            mediaStorage.selfAvatarFile().writeBytes(ImageEditor.downscaleAvatar(jpegBytes))
             broadcastProfile()
         }
     }
@@ -733,7 +884,7 @@ class P2pChatService @Inject constructor(
                     ChatPayload(UUID.randomUUID().toString(), System.currentTimeMillis(), PayloadKind.PROFILE_UPDATE, profileNickname = identityKeyManager.nickname),
                 )
             }
-            mediaStorage.selfAvatarFile().takeIf { it.exists() }?.let { sendAvatarTo(contactId, it.readBytes()) }
+            mediaStorage.selfAvatarFile().takeIf { it.exists() }?.let { sendAvatarTo(contactId, ImageEditor.downscaleAvatar(it.readBytes())) }
         }
     }
 
@@ -909,8 +1060,8 @@ class P2pChatService @Inject constructor(
             val delivered = if (message.type == MessageType.TEXT) {
                 trySendPayload(message.contactId, ChatPayload(message.messageId, message.timestamp, PayloadKind.TEXT, text = message.text))
             } else {
-                val bytes = message.mediaPath?.let { runCatching { File(it).readBytes() }.getOrNull() }
-                bytes != null && resendMedia(message, bytes, contact.i2pDestination, groupId = null, toContactId = message.contactId)
+                val file = message.mediaPath?.let { File(it) }?.takeIf { it.exists() && it.length() > 0 }
+                file != null && resendMedia(message, file, contact.i2pDestination, groupId = null, toContactId = message.contactId)
             }
             if (delivered) messageDao.updateState(message.messageId, DeliveryState.SENT)
         }
@@ -922,24 +1073,25 @@ class P2pChatService @Inject constructor(
             val payload = ChatPayload(message.messageId, message.timestamp, PayloadKind.TEXT, text = message.text, groupId = groupId)
             members.map { trySendPayload(it.contactId, payload) }.any { it }
         } else {
-            val bytes = message.mediaPath?.let { runCatching { File(it).readBytes() }.getOrNull() } ?: return
+            val file = message.mediaPath?.let { File(it) }?.takeIf { it.exists() && it.length() > 0 } ?: return
             members.map { member ->
                 val contact = contactDao.find(member.contactId) ?: return@map false
                 if (contact.contactId in blockedContactIds) return@map false
-                resendMedia(message, bytes, contact.i2pDestination, groupId = groupId, toContactId = member.contactId)
+                resendMedia(message, file, contact.i2pDestination, groupId = groupId, toContactId = member.contactId)
             }.any { it }
         }
         if (delivered) messageDao.updateState(message.messageId, DeliveryState.SENT)
     }
 
-    private suspend fun resendMedia(message: MessageEntity, sourceBytes: ByteArray, i2pDestination: String, groupId: String?, toContactId: String): Boolean {
+    private suspend fun resendMedia(message: MessageEntity, sourceFile: File, i2pDestination: String, groupId: String?, toContactId: String): Boolean {
         // A retried media message reuses a fresh transfer id/key - the original attempt may have
         // partially landed on the peer's side, and re-keying is simpler and just as cheap as
         // trying to resume a specific byte offset.
         val transferId = UUID.randomUUID()
         val key = MediaCrypto.generateKey()
         val nonceSalt = MediaCrypto.generateNonceSalt()
-        val chunkCount = (sourceBytes.size + MediaCrypto.CHUNK_SIZE - 1) / MediaCrypto.CHUNK_SIZE
+        val size = sourceFile.length()
+        val chunkCount = FileChunks.chunkCount(size, MediaCrypto.CHUNK_SIZE).coerceAtLeast(1)
         val control = ChatPayload(
             messageId = message.messageId,
             sentAt = message.timestamp,
@@ -951,7 +1103,7 @@ class P2pChatService @Inject constructor(
             },
             mediaMimeType = message.mediaMimeType,
             mediaFileName = message.mediaFileName,
-            mediaSizeBytes = sourceBytes.size.toLong(),
+            mediaSizeBytes = size,
             mediaDurationMs = message.mediaDurationMs,
             mediaTransferId = transferId.toString(),
             mediaKeyBase64 = Base64.encodeToString(key, Base64.NO_WRAP),
@@ -961,7 +1113,7 @@ class P2pChatService @Inject constructor(
         )
         return runCatching {
             check(trySendPayload(toContactId, control))
-            check(sendChunkStream(toContactId, i2pDestination, transferId, key, nonceSalt, sourceBytes))
+            check(sendChunkStreamFromFile(toContactId, i2pDestination, transferId, key, nonceSalt, sourceFile, chunkCount))
         }.isSuccess
     }
 

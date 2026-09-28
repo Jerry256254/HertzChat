@@ -37,7 +37,6 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 
 data class MentionSuggestion(val id: String, val label: String)
 
@@ -154,9 +153,9 @@ class GroupChatViewModel @Inject constructor(
         if (text.isEmpty() && staged.isEmpty()) return
         warnIfOffline()
         if (text.isNotEmpty()) p2pChatService.sendGroupText(groupId, text)
-        // Reading staged files is disk I/O - a video would freeze the UI for seconds.
+        // Staged files stream straight off disk - a video or APK never sits in RAM.
         viewModelScope.launch(Dispatchers.IO) {
-            staged.forEach { p2pChatService.sendGroupMedia(groupId, it.file.readBytes(), it.mimeType, it.kind, it.fileName) }
+            staged.forEach { p2pChatService.sendGroupMedia(groupId, it.file, it.mimeType, it.kind, it.fileName) }
             clearPending()
         }
         _draft.value = ""
@@ -174,16 +173,31 @@ class GroupChatViewModel @Inject constructor(
         }
     }
 
+    /**
+     * Stages a picked document/video straight off its content stream - copying to
+     * the pending file in 64KB blocks, so a large attachment never sits in RAM.
+     * (Edited photos still arrive as bytes via [stageAttachment]; those already
+     * went through an in-memory editor and are JPEG-capped.)
+     */
     fun stageAttachmentUri(uri: Uri, kind: PayloadKind) {
-        viewModelScope.launch {
+        viewModelScope.launch(Dispatchers.IO) {
             val resolver = context.contentResolver
             val mimeType = resolver.getType(uri) ?: MimeTypeMap.getSingleton()
                 .getMimeTypeFromExtension(uri.toString().substringAfterLast('.', ""))
                 ?: "application/octet-stream"
-            val bytes = withContext(Dispatchers.IO) {
-                resolver.openInputStream(uri)?.use { it.readBytes() }
-            } ?: return@launch
-            stageAttachment(bytes, mimeType, kind, fileName = displayNameOf(uri).takeIf { kind == PayloadKind.FILE })
+            val dir = File(context.cacheDir, "pending").apply { mkdirs() }
+            val ext = mediaStorage.extensionFor(mimeType)
+            val file = File(dir, "pending_${System.currentTimeMillis()}_${(0..9999).random()}.$ext")
+            val staged = runCatching {
+                resolver.openInputStream(uri)?.use { input ->
+                    file.outputStream().use { output -> input.copyTo(output) }
+                } ?: error("Nelze otevřít vybraný soubor")
+            }.isSuccess
+            if (!staged || file.length() <= 0) {
+                runCatching { file.delete() }
+                return@launch
+            }
+            _pending.value = _pending.value + PendingAttachment(file, mimeType, kind, displayNameOf(uri).takeIf { kind == PayloadKind.FILE })
         }
     }
 
@@ -201,8 +215,7 @@ class GroupChatViewModel @Inject constructor(
     fun sendVoice(file: File, durationMs: Long) {
         warnIfOffline()
         viewModelScope.launch(Dispatchers.IO) {
-            val bytes = file.readBytes()
-            p2pChatService.sendGroupMedia(groupId, bytes, "audio/mp4", PayloadKind.VOICE, file.name, durationMs)
+            p2pChatService.sendGroupMedia(groupId, file, "audio/mp4", PayloadKind.VOICE, file.name, durationMs)
             file.delete()
         }
     }

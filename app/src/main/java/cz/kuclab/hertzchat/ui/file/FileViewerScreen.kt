@@ -151,9 +151,20 @@ private fun TextPreview(file: File) {
     var truncated by remember(file) { mutableStateOf(false) }
     LaunchedEffect(file) {
         withContext(Dispatchers.IO) {
-            val bytes = file.readBytes()
-            truncated = bytes.size > MAX_TEXT_PREVIEW_BYTES
-            text = bytes.take(MAX_TEXT_PREVIEW_BYTES).toByteArray().toString(Charsets.UTF_8)
+            // Capped read: opening a huge log must not load the whole file into RAM.
+            val buf = ByteArray(MAX_TEXT_PREVIEW_BYTES + 1)
+            var read = 0
+            runCatching {
+                file.inputStream().use { input ->
+                    while (read < buf.size) {
+                        val n = input.read(buf, read, buf.size - read)
+                        if (n < 0) break
+                        read += n
+                    }
+                }
+            }
+            truncated = read > MAX_TEXT_PREVIEW_BYTES
+            text = buf.copyOf(minOf(read, MAX_TEXT_PREVIEW_BYTES)).toString(Charsets.UTF_8)
         }
     }
     val content = text

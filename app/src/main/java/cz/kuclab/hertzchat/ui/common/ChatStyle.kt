@@ -7,6 +7,8 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
@@ -19,13 +21,17 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.positionInRoot
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
@@ -87,7 +93,11 @@ fun messageTimeLabel(timestamp: Long): String =
     Instant.ofEpochMilli(timestamp).atZone(ZoneId.systemDefault())
         .format(DateTimeFormatter.ofPattern("H:mm", Locale.getDefault()))
 
-/** Subtle tiled doodles over the theme background - the Telegram-night thread look. */
+/**
+ * Subtle tiled doodles over the theme background - the Telegram-night thread look.
+ * The tile grid is locked to the window origin so [FrostedBackdrop] tiles line up
+ * seamlessly with it anywhere on screen.
+ */
 @Composable
 fun ChatDoodleBackground(modifier: Modifier = Modifier) {
     val context = LocalContext.current
@@ -96,16 +106,21 @@ fun ChatDoodleBackground(modifier: Modifier = Modifier) {
             BitmapFactory.decodeResource(context.resources, R.drawable.chat_bg_tile)?.asImageBitmap()
         }.getOrNull()
     }
+    var tileOrigin by remember { mutableStateOf(Offset.Zero) }
     Box(modifier = modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
         if (tile != null) {
-            Canvas(modifier = Modifier.fillMaxSize()) {
+            Canvas(modifier = Modifier.fillMaxSize().onGloballyPositioned { tileOrigin = it.positionInRoot() }) {
                 val tw = tile.width.toFloat()
                 val th = tile.height.toFloat()
-                var y = 0f
+                var startX = -tileOrigin.x % tw
+                if (startX > 0f) startX -= tw
+                var startY = -tileOrigin.y % th
+                if (startY > 0f) startY -= th
+                var y = startY
                 while (y < size.height) {
-                    var x = 0f
+                    var x = startX
                     while (x < size.width) {
-                        drawImage(tile, topLeft = androidx.compose.ui.geometry.Offset(x, y))
+                        drawImage(tile, topLeft = Offset(x, y))
                         x += tw
                     }
                     y += th
@@ -209,10 +224,54 @@ fun FloatingCircleButton(
         modifier = modifier
             .size(size)
             .clip(CircleShape)
-            .background(TelegramFloat.copy(alpha = 0.85f))
+            .background(TelegramFloat.copy(alpha = 0.82f))
             .clickable(onClick = onClick),
         contentAlignment = Alignment.Center,
     ) {
+        FrostedBackdrop(modifier = Modifier.fillMaxSize())
         Icon(icon, contentDescription = contentDescription, tint = Color.White, modifier = Modifier.size(22.dp))
+    }
+}
+
+/**
+ * Frosted glass without any dependency: draws the pre-blurred background tile
+ * locked to the same window-origin grid as [ChatDoodleBackground], so floating
+ * bars look like a blurred continuation of the wallpaper, plus a dark tint for
+ * legibility. Works on every API level with zero per-frame GPU cost - the
+ * parent's translucent fill stays as a fallback when the tile is missing.
+ * Must be a same-sized child of the frosted surface; the parent's clip shape
+ * applies, so pills and circles frost cleanly to their edge.
+ */
+@Composable
+fun FrostedBackdrop(
+    modifier: Modifier = Modifier,
+    tint: Color = TelegramFloat.copy(alpha = 0.55f),
+) {
+    val context = LocalContext.current
+    val tile = remember {
+        runCatching {
+            BitmapFactory.decodeResource(context.resources, R.drawable.chat_bg_tile_blurred)?.asImageBitmap()
+        }.getOrNull()
+    }
+    var offset by remember { mutableStateOf(Offset.Zero) }
+    Canvas(modifier = modifier.onGloballyPositioned { offset = it.positionInRoot() }) {
+        if (tile != null) {
+            val tw = tile.width.toFloat()
+            val th = tile.height.toFloat()
+            var startX = -offset.x % tw
+            if (startX > 0f) startX -= tw
+            var startY = -offset.y % th
+            if (startY > 0f) startY -= th
+            var y = startY
+            while (y < size.height) {
+                var x = startX
+                while (x < size.width) {
+                    drawImage(tile, topLeft = Offset(x, y))
+                    x += tw
+                }
+                y += th
+            }
+        }
+        drawRect(tint)
     }
 }

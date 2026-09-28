@@ -1,6 +1,7 @@
 package cz.kuclab.hertzchat.media
 
 import android.graphics.Bitmap
+import android.graphics.BitmapFactory
 import android.graphics.Matrix
 import java.io.ByteArrayOutputStream
 
@@ -48,4 +49,36 @@ object ImageEditor {
             bitmap.compress(Bitmap.CompressFormat.JPEG, quality, stream)
             stream.toByteArray()
         }
+
+    /**
+     * Profile photos travel over I2P chunk-by-chunk - a full camera JPEG means
+     * dozens of slow chunks that often never finish, which is why new contacts'
+     * photos never appeared. Avatars render at ~96dp at most, so anything over
+     * [maxSidePx] or [maxBytes] is downscaled to a 256px JPEG q80 (a few KB, a
+     * couple of chunks); small images pass through untouched. Never throws -
+     * undecodable input comes back as-is.
+     */
+    fun downscaleAvatar(jpegBytes: ByteArray, maxSidePx: Int = 256, maxBytes: Int = 64 * 1024): ByteArray {
+        if (jpegBytes.isEmpty()) return jpegBytes
+        return runCatching {
+            val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+            BitmapFactory.decodeByteArray(jpegBytes, 0, jpegBytes.size, bounds)
+            val width = bounds.outWidth
+            val height = bounds.outHeight
+            if (width <= 0 || height <= 0) return@runCatching jpegBytes
+            if (maxOf(width, height) <= maxSidePx && jpegBytes.size <= maxBytes) return@runCatching jpegBytes
+            var sample = 1
+            while (maxOf(width / (sample * 2), height / (sample * 2)) > maxSidePx) sample *= 2
+            val opts = BitmapFactory.Options().apply { inSampleSize = sample }
+            val decoded = BitmapFactory.decodeByteArray(jpegBytes, 0, jpegBytes.size, opts) ?: return@runCatching jpegBytes
+            val scale = maxSidePx.toFloat() / maxOf(decoded.width, decoded.height).toFloat()
+            val scaled = if (scale < 1f) {
+                Bitmap.createScaledBitmap(decoded, (decoded.width * scale).toInt().coerceAtLeast(1), (decoded.height * scale).toInt().coerceAtLeast(1), true)
+                    .also { if (it !== decoded) decoded.recycle() }
+            } else {
+                decoded
+            }
+            toJpegBytes(scaled, 80).also { scaled.recycle() }
+        }.getOrDefault(jpegBytes)
+    }
 }

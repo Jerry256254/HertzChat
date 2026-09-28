@@ -83,6 +83,7 @@ import cz.kuclab.hertzchat.ui.common.ChatDisplayItem
 import cz.kuclab.hertzchat.ui.common.ChatDoodleBackground
 import cz.kuclab.hertzchat.ui.common.DayChip
 import cz.kuclab.hertzchat.ui.common.FloatingCircleButton
+import cz.kuclab.hertzchat.ui.common.FrostedBackdrop
 import cz.kuclab.hertzchat.ui.common.HoldToRecordButton
 import cz.kuclab.hertzchat.ui.common.MarkdownText
 import cz.kuclab.hertzchat.ui.common.MediaTimeChip
@@ -129,10 +130,27 @@ fun ChatScreen(contactId: String, onBack: () -> Unit, onOpenFile: (String) -> Un
     val snackbar = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
 
+    // Single idempotent stop path: release, auto-stop and gesture-cancel all land
+    // here, so a stuck or over-long recording can never wedge the UI.
+    val endRecording = {
+        if (isRecording) {
+            isRecording = false
+            val clip = voiceRecorder.stop()
+            if (clip != null && clip.second > 400) {
+                pendingVoice = clip
+            } else {
+                clip?.first?.delete()
+            }
+        }
+    }
     LaunchedEffect(isRecording) {
         while (isRecording) {
             recordElapsed = System.currentTimeMillis() - recordStartedAt
-            delay(250)
+            if (recordElapsed > 120_000) {
+                endRecording()
+            } else {
+                delay(250)
+            }
         }
     }
 
@@ -187,6 +205,7 @@ fun ChatScreen(contactId: String, onBack: () -> Unit, onOpenFile: (String) -> Un
     val micPermissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
         if (!granted) scope.launch { snackbar.showSnackbar("Hlasové zprávy potřebují oprávnění k mikrofonu.") }
     }
+
 
     Scaffold(
         snackbarHost = { SnackbarHost(snackbar) },
@@ -260,15 +279,7 @@ fun ChatScreen(contactId: String, onBack: () -> Unit, onOpenFile: (String) -> Un
                             }
                             started
                         },
-                        onPressEnd = {
-                            isRecording = false
-                            val clip = voiceRecorder.stop()
-                            if (clip != null && clip.second > 400) {
-                                pendingVoice = clip
-                            } else {
-                                clip?.first?.delete()
-                            }
-                        },
+                        onPressEnd = { endRecording() },
                     )
                 },
             )
@@ -278,17 +289,20 @@ fun ChatScreen(contactId: String, onBack: () -> Unit, onOpenFile: (String) -> Un
             state.messages.filter { it.type == MessageType.IMAGE || it.type == MessageType.VIDEO }
         }
         Box(modifier = Modifier.fillMaxSize().padding(padding)) {
-            ChatDoodleBackground()
-            // Reversed so the thread opens at the newest message and sticks there -
-            // index 0 is always the bottom, which is also what the scroll-down
-            // button and search jumps animate to.
-            LazyColumn(
-                state = listState,
-                reverseLayout = true,
-                modifier = Modifier.fillMaxSize(),
-                contentPadding = PaddingValues(start = 12.dp, end = 12.dp, top = 76.dp, bottom = 12.dp),
-                verticalArrangement = Arrangement.spacedBy(4.dp),
-            ) {
+            // The thread records into the frost layer so the floating chrome above
+            // can draw its blurred slice; content scrolls underneath it.
+            Box(modifier = Modifier.fillMaxSize()) {
+                ChatDoodleBackground()
+                // Reversed so the thread opens at the newest message and sticks there -
+                // index 0 is always the bottom, which is also what the scroll-down
+                // button and search jumps animate to.
+                LazyColumn(
+                    state = listState,
+                    reverseLayout = true,
+                    modifier = Modifier.fillMaxSize(),
+                    contentPadding = PaddingValues(start = 12.dp, end = 12.dp, top = 100.dp, bottom = 12.dp),
+                    verticalArrangement = Arrangement.spacedBy(4.dp),
+                ) {
                 items(displayItems, key = { item -> if (item is ChatDisplayItem.Msg) item.message.messageId else (item as ChatDisplayItem.Day).key }) { item ->
                     when (item) {
                         is ChatDisplayItem.Day -> Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
@@ -307,6 +321,7 @@ fun ChatScreen(contactId: String, onBack: () -> Unit, onOpenFile: (String) -> Un
                         }
                     }
                 }
+            }
             }
             if (searchOpen) {
                 ChatSearchBar(
@@ -400,47 +415,51 @@ private fun FloatingChatBar(
             contentDescription = "Zpět",
             onClick = onBack,
         )
-        Row(
+        Box(
             modifier = Modifier
                 .weight(1f)
                 .padding(horizontal = 8.dp)
                 .clip(HertzShapes.Pill)
-                .background(TelegramFloat.copy(alpha = 0.85f))
-                .clickable(onClick = onOpenDetails)
-                .padding(horizontal = 6.dp, vertical = 5.dp),
-            verticalAlignment = Alignment.CenterVertically,
+                .background(TelegramFloat.copy(alpha = 0.82f))
+                .clickable(onClick = onOpenDetails),
         ) {
-            Box(
-                modifier = Modifier
-                    .size(34.dp)
-                    .clip(CircleShape)
-                    .background(MaterialTheme.colorScheme.primaryContainer),
-                contentAlignment = Alignment.Center,
+            FrostedBackdrop(modifier = Modifier.matchParentSize())
+            Row(
+                modifier = Modifier.padding(horizontal = 6.dp, vertical = 5.dp),
+                verticalAlignment = Alignment.CenterVertically,
             ) {
-                if (avatarPath != null) {
-                    AsyncImage(
-                        model = File(avatarPath),
-                        contentDescription = null,
-                        contentScale = ContentScale.Crop,
-                        modifier = Modifier.size(34.dp).clip(CircleShape),
-                    )
-                } else {
-                    Text(
-                        nickname.take(1).uppercase(),
-                        color = MaterialTheme.colorScheme.onPrimaryContainer,
-                        style = MaterialTheme.typography.labelLarge,
-                        fontWeight = FontWeight.Bold,
-                    )
+                Box(
+                    modifier = Modifier
+                        .size(34.dp)
+                        .clip(CircleShape)
+                        .background(MaterialTheme.colorScheme.primaryContainer),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    if (avatarPath != null) {
+                        AsyncImage(
+                            model = File(avatarPath),
+                            contentDescription = null,
+                            contentScale = ContentScale.Crop,
+                            modifier = Modifier.size(34.dp).clip(CircleShape),
+                        )
+                    } else {
+                        Text(
+                            nickname.take(1).uppercase(),
+                            color = MaterialTheme.colorScheme.onPrimaryContainer,
+                            style = MaterialTheme.typography.labelLarge,
+                            fontWeight = FontWeight.Bold,
+                        )
+                    }
                 }
+                Text(
+                    nickname,
+                    modifier = Modifier.weight(1f).padding(start = 10.dp),
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.SemiBold,
+                    color = androidx.compose.ui.graphics.Color.White,
+                    maxLines = 1,
+                )
             }
-            Text(
-                nickname,
-                modifier = Modifier.weight(1f).padding(start = 10.dp),
-                style = MaterialTheme.typography.titleSmall,
-                fontWeight = FontWeight.SemiBold,
-                color = androidx.compose.ui.graphics.Color.White,
-                maxLines = 1,
-            )
         }
         Box {
             FloatingCircleButton(

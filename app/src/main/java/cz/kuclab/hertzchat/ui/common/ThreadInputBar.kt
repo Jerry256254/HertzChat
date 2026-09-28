@@ -26,10 +26,12 @@ import cz.kuclab.hertzchat.ui.theme.HertzShapes
 import java.io.File
 
 /**
- * The shared message composer for 1:1 and group threads. One layout whose center
- * swaps between the text pill, the recording indicator and the voice preview -
- * the action button slot on the right stays composed across modes, which is what
- * lets a press-and-hold recording survive the pill swapping underneath the finger.
+ * The shared message composer for 1:1 and group threads, WhatsApp-style: the text
+ * pill (attach + text) on the left, the send/mic action in its own circle on the
+ * right. Only the center swaps between the text pill, the recording indicator and
+ * the voice preview - the action slot is the same composition in every mode, so a
+ * press-and-hold recording survives the pill swapping underneath the finger instead
+ * of being disposed mid-press (which used to wedge the recorder on forever).
  */
 @Composable
 fun ThreadInputBar(
@@ -58,7 +60,6 @@ fun ThreadInputBar(
             modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp).padding(bottom = 12.dp),
             verticalAlignment = Alignment.Bottom,
         ) {
-            val inTextMode = pendingVoice == null && !isRecording
             Box(modifier = Modifier.weight(1f)) {
                 when {
                     pendingVoice != null -> VoicePreviewBar(
@@ -67,19 +68,20 @@ fun ThreadInputBar(
                         onDelete = onDeleteVoice,
                     )
                     isRecording -> VoiceRecordingIndicator(elapsedMs = recordElapsedMs)
-                    // One connected pill: attach, text, and the send/mic action all
-                    // live inside the same rounded surface, not as separate buttons.
                     else -> Surface(shape = HertzShapes.Pill, color = HertzMatte.input()) {
                         Row(
                             modifier = Modifier.heightIn(min = 56.dp).padding(horizontal = 6.dp, vertical = 4.dp),
-                            verticalAlignment = Alignment.CenterVertically,
+                            verticalAlignment = Alignment.Bottom,
                         ) {
                             if (leading != null) {
                                 leading()
                             } else {
                                 Box(modifier = Modifier.size(10.dp))
                             }
-                            Box(modifier = Modifier.weight(1f), contentAlignment = Alignment.CenterStart) {
+                            Box(
+                                modifier = Modifier.weight(1f).align(Alignment.CenterVertically),
+                                contentAlignment = Alignment.CenterStart,
+                            ) {
                                 BasicTextField(
                                     value = draft,
                                     onValueChange = onDraftChange,
@@ -100,34 +102,21 @@ fun ThreadInputBar(
                                     },
                                 )
                             }
-                            Box(modifier = Modifier.padding(start = 4.dp)) {
-                                if (canSend) {
-                                    ChatInputAccentButton(
-                                        onClick = onSend,
-                                        icon = androidx.compose.material.icons.Icons.AutoMirrored.Filled.Send,
-                                        contentDescription = "Odeslat",
-                                    )
-                                } else {
-                                    micButton()
-                                }
-                            }
                         }
                     }
                 }
             }
-            // Recording/preview modes keep their own full-width surfaces, so the
-            // action sits beside them - including the mic button being held.
-            if (!inTextMode) {
-                Box(modifier = Modifier.padding(start = 8.dp, bottom = 2.dp)) {
-                    if (canSend) {
-                        ChatInputAccentButton(
-                            onClick = onSend,
-                            icon = androidx.compose.material.icons.Icons.AutoMirrored.Filled.Send,
-                            contentDescription = "Odeslat",
-                        )
-                    } else {
-                        micButton()
-                    }
+            // The action slot is unconditional: the same composition in every mode,
+            // so a held mic press is never disposed and cancelled by a mode swap.
+            Box(modifier = Modifier.padding(start = 8.dp)) {
+                if (canSend) {
+                    ChatInputAccentButton(
+                        onClick = onSend,
+                        icon = androidx.compose.material.icons.Icons.AutoMirrored.Filled.Send,
+                        contentDescription = "Odeslat",
+                    )
+                } else {
+                    micButton()
                 }
             }
         }

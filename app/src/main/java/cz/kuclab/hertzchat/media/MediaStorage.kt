@@ -18,6 +18,17 @@ class MediaStorage @Inject constructor(@ApplicationContext private val context: 
         return file
     }
 
+    /**
+     * Same as [newOutgoingCopy] but streams file-to-file - a video or APK staged
+     * for sending must never be loaded into RAM just to make the local copy.
+     * Must be called off the main thread.
+     */
+    fun newOutgoingCopyFromFile(src: File, extension: String): File {
+        val file = File(root, "out_${System.currentTimeMillis()}_${(0..9999).random()}.$extension")
+        src.inputStream().use { input -> file.outputStream().use { output -> input.copyTo(output) } }
+        return file
+    }
+
     fun fileFor(transferId: String, extension: String): File = File(root, "$transferId.$extension")
 
     private val avatarsRoot: File by lazy { File(context.filesDir, "avatars").apply { mkdirs() } }

@@ -65,6 +65,7 @@ import cz.kuclab.hertzchat.ui.common.ActionMenuItem
 import cz.kuclab.hertzchat.ui.common.AppCard
 import cz.kuclab.hertzchat.ui.common.ChatDoodleBackground
 import cz.kuclab.hertzchat.ui.common.FloatingCircleButton
+import cz.kuclab.hertzchat.ui.common.FrostedBackdrop
 import cz.kuclab.hertzchat.ui.common.TelegramFloat
 import cz.kuclab.hertzchat.ui.theme.HertzMatte
 import cz.kuclab.hertzchat.ui.theme.HertzShapes
@@ -113,6 +114,7 @@ fun ChatListScreen(
         },
     ) { padding ->
         Box(modifier = Modifier.fillMaxSize().padding(padding)) {
+            Box(modifier = Modifier.fillMaxSize()) {
             ChatDoodleBackground()
             if (items.isEmpty() && requests.isEmpty() && i2pState == I2pState.CONNECTED) {
                 Column(
@@ -150,7 +152,7 @@ fun ChatListScreen(
             } else {
                 LazyColumn(
                     modifier = Modifier.fillMaxSize(),
-                    contentPadding = PaddingValues(start = 12.dp, end = 12.dp, top = 76.dp, bottom = 96.dp),
+                    contentPadding = PaddingValues(start = 12.dp, end = 12.dp, top = 100.dp, bottom = 96.dp),
                     verticalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
                 item {
@@ -207,6 +209,7 @@ fun ChatListScreen(
                 }
             }
             }
+            }
             FloatingHomeBar(
                 myAvatarPath = myAvatarPath,
                 onOpenProfile = onOpenProfile,
@@ -232,10 +235,11 @@ private fun FloatingHomeBar(
             modifier = Modifier
                 .size(44.dp)
                 .clip(CircleShape)
-                .background(TelegramFloat.copy(alpha = 0.85f))
+                .background(TelegramFloat.copy(alpha = 0.82f))
                 .clickable(onClick = onOpenProfile),
             contentAlignment = Alignment.Center,
         ) {
+            if (myAvatarPath == null) FrostedBackdrop(modifier = Modifier.fillMaxSize())
             if (myAvatarPath != null) {
                 AsyncImage(
                     model = java.io.File(myAvatarPath),
@@ -252,15 +256,16 @@ private fun FloatingHomeBar(
                 .weight(1f)
                 .padding(horizontal = 8.dp)
                 .clip(HertzShapes.Pill)
-                .background(TelegramFloat.copy(alpha = 0.85f))
-                .padding(vertical = 11.dp),
+                .background(TelegramFloat.copy(alpha = 0.82f)),
             contentAlignment = Alignment.Center,
         ) {
+            FrostedBackdrop(modifier = Modifier.matchParentSize())
             Text(
                 "Hertz Chat",
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.Bold,
                 color = androidx.compose.ui.graphics.Color.White,
+                modifier = Modifier.padding(vertical = 11.dp),
             )
         }
         FloatingCircleButton(

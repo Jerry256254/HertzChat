@@ -82,6 +82,7 @@ import cz.kuclab.hertzchat.ui.common.ChatDoodleBackground
 import cz.kuclab.hertzchat.ui.common.ChatSearchBar
 import cz.kuclab.hertzchat.ui.common.DayChip
 import cz.kuclab.hertzchat.ui.common.FloatingCircleButton
+import cz.kuclab.hertzchat.ui.common.FrostedBackdrop
 import cz.kuclab.hertzchat.ui.common.HoldToRecordButton
 import cz.kuclab.hertzchat.ui.common.MarkdownText
 import cz.kuclab.hertzchat.ui.common.MediaTimeChip
@@ -133,10 +134,27 @@ fun GroupChatScreen(groupId: String, onBack: () -> Unit, onLeft: () -> Unit, onO
     val snackbar = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
 
+    // Single idempotent stop path: release, auto-stop and gesture-cancel all land
+    // here, so a stuck or over-long recording can never wedge the UI.
+    val endRecording = {
+        if (isRecording) {
+            isRecording = false
+            val clip = voiceRecorder.stop()
+            if (clip != null && clip.second > 400) {
+                pendingVoice = clip
+            } else {
+                clip?.first?.delete()
+            }
+        }
+    }
     LaunchedEffect(isRecording) {
         while (isRecording) {
             recordElapsed = System.currentTimeMillis() - recordStartedAt
-            delay(250)
+            if (recordElapsed > 120_000) {
+                endRecording()
+            } else {
+                delay(250)
+            }
         }
     }
 
@@ -194,6 +212,7 @@ fun GroupChatScreen(groupId: String, onBack: () -> Unit, onLeft: () -> Unit, onO
 
     val nicknamesById = remember(members) { members.associate { it.contactId to it.nickname } }
     val avatarsById = remember(membersUi) { membersUi.associate { it.contactId to it.avatarPath } }
+
 
     Scaffold(
         snackbarHost = { SnackbarHost(snackbar) },
@@ -292,15 +311,7 @@ fun GroupChatScreen(groupId: String, onBack: () -> Unit, onLeft: () -> Unit, onO
                                 }
                                 started
                             },
-                            onPressEnd = {
-                                isRecording = false
-                                val clip = voiceRecorder.stop()
-                                if (clip != null && clip.second > 400) {
-                                    pendingVoice = clip
-                                } else {
-                                    clip?.first?.delete()
-                                }
-                            },
+                            onPressEnd = { endRecording() },
                         )
                     },
                 )
@@ -311,14 +322,15 @@ fun GroupChatScreen(groupId: String, onBack: () -> Unit, onLeft: () -> Unit, onO
             messages.filter { it.type == MessageType.IMAGE || it.type == MessageType.VIDEO }
         }
         Box(modifier = Modifier.fillMaxSize().padding(padding)) {
-            ChatDoodleBackground()
-            LazyColumn(
-                state = listState,
-                reverseLayout = true,
-                modifier = Modifier.fillMaxSize(),
-                contentPadding = PaddingValues(start = 12.dp, end = 12.dp, top = 76.dp, bottom = 12.dp),
-                verticalArrangement = Arrangement.spacedBy(4.dp),
-            ) {
+            Box(modifier = Modifier.fillMaxSize()) {
+                ChatDoodleBackground()
+                LazyColumn(
+                    state = listState,
+                    reverseLayout = true,
+                    modifier = Modifier.fillMaxSize(),
+                    contentPadding = PaddingValues(start = 12.dp, end = 12.dp, top = 100.dp, bottom = 12.dp),
+                    verticalArrangement = Arrangement.spacedBy(4.dp),
+                ) {
                 items(displayItems, key = { item -> if (item is ChatDisplayItem.Msg) item.message.messageId else (item as ChatDisplayItem.Day).key }) { item ->
                     when (item) {
                         is ChatDisplayItem.Day -> Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
@@ -339,6 +351,7 @@ fun GroupChatScreen(groupId: String, onBack: () -> Unit, onLeft: () -> Unit, onO
                         }
                     }
                 }
+            }
             }
             if (searchOpen) {
                 ChatSearchBar(
@@ -513,29 +526,33 @@ private fun FloatingGroupBar(
             contentDescription = "Zpět",
             onClick = onBack,
         )
-        Row(
+        Box(
             modifier = Modifier
                 .weight(1f)
                 .padding(horizontal = 8.dp)
                 .clip(HertzShapes.Pill)
-                .background(TelegramFloat.copy(alpha = 0.85f))
-                .clickable(onClick = onMembers)
-                .padding(horizontal = 16.dp, vertical = 7.dp),
-            verticalAlignment = Alignment.CenterVertically,
+                .background(TelegramFloat.copy(alpha = 0.82f))
+                .clickable(onClick = onMembers),
         ) {
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    groupName.ifBlank { "Skupina" },
-                    style = MaterialTheme.typography.titleSmall,
-                    fontWeight = FontWeight.SemiBold,
-                    color = androidx.compose.ui.graphics.Color.White,
-                    maxLines = 1,
-                )
-                Text(
-                    "$memberCount členů",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = androidx.compose.ui.graphics.Color.White.copy(alpha = 0.7f),
-                )
+            FrostedBackdrop(modifier = Modifier.matchParentSize())
+            Row(
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 7.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        groupName.ifBlank { "Skupina" },
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.SemiBold,
+                        color = androidx.compose.ui.graphics.Color.White,
+                        maxLines = 1,
+                    )
+                    Text(
+                        "$memberCount členů",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = androidx.compose.ui.graphics.Color.White.copy(alpha = 0.7f),
+                    )
+                }
             }
         }
         Box {

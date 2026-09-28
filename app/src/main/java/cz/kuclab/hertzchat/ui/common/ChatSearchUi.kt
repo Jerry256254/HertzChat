@@ -43,7 +43,9 @@ fun ChatSearchBar(
         shape = HertzShapes.Pill,
         color = HertzMatte.input(),
     ) {
-        Row(
+        androidx.compose.foundation.layout.Box {
+            FrostedBackdrop(modifier = Modifier.matchParentSize())
+            Row(
             modifier = Modifier.fillMaxWidth().padding(horizontal = 6.dp, vertical = 4.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
@@ -75,6 +77,7 @@ fun ChatSearchBar(
             IconButton(onClick = onNext, enabled = matchCount > 0) {
                 Icon(Icons.Filled.KeyboardArrowDown, contentDescription = "Další výskyt")
             }
+        }
         }
     }
 }
