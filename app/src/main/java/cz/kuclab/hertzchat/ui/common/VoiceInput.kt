@@ -22,7 +22,6 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Slider
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -35,15 +34,17 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.unit.dp
 import java.io.File
 import kotlinx.coroutines.delay
 
 /**
- * The mic button beside the input pill: press-and-hold to record, release to stop.
- * Nothing is ever sent automatically - the finished clip lands in [VoicePreviewBar],
- * where it can be played back, deleted, or sent.
+ * The mic button inside the input pill: press-and-hold to record, release to stop.
+ * Glass at rest, solid red with a grow the moment the press lands. Nothing is ever
+ * sent automatically - the finished clip lands in the pill's preview, where it can
+ * be played back, deleted, or sent.
  */
 @Composable
 fun HoldToRecordButton(
@@ -53,7 +54,13 @@ fun HoldToRecordButton(
 ) {
     var held by remember { mutableStateOf(false) }
     val haptics = LocalHapticFeedback.current
-    val scale by animateFloatAsState(if (held) 1.18f else 1f, label = "micHeldScale")
+    val scale by animateFloatAsState(
+        targetValue = if (held) 1.18f else 1f,
+        animationSpec = androidx.compose.animation.core.tween(durationMillis = 120),
+        label = "micHeldScale",
+    )
+    val fill = if (held) MaterialTheme.colorScheme.error else HertzGlass.fill()
+    val iconTint = if (held) MaterialTheme.colorScheme.onError else HertzGlass.contentOnGlass()
     // A plain Box on purpose: nesting detectTapGestures around IconButton's own
     // clickable lets the inner clickable swallow the press, so holding the mic
     // silently did nothing. The single pointerInput here is the only consumer.
@@ -62,8 +69,10 @@ fun HoldToRecordButton(
         modifier = modifier
             .size(48.dp)
             .graphicsLayer { scaleX = scale; scaleY = scale }
+            .shadow(8.dp, CircleShape, clip = false)
             .clip(CircleShape)
-            .background(if (held) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary)
+            .background(fill)
+            .glassEdge(CircleShape)
             .pointerInput(Unit) {
                 detectTapGestures(
                     onPress = {
@@ -84,43 +93,41 @@ fun HoldToRecordButton(
                 )
             },
     ) {
-        Icon(Icons.Filled.Mic, contentDescription = "Podrž pro nahrání hlasovky", tint = MaterialTheme.colorScheme.onPrimary)
-    }
-}
-
-/** Replaces the input pill while the mic button is held: elapsed time plus a hint that releasing stops (not sends). */
-@Composable
-fun VoiceRecordingIndicator(elapsedMs: Long, modifier: Modifier = Modifier) {
-    Surface(
-        modifier = modifier,
-        shape = cz.kuclab.hertzchat.ui.theme.HertzShapes.Pill,
-        color = MaterialTheme.colorScheme.errorContainer,
-    ) {
-        Row(
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 18.dp, vertical = 14.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Box(
-                modifier = Modifier
-                    .size(12.dp)
-                    .clip(CircleShape)
-                    .background(MaterialTheme.colorScheme.error),
-            )
-            Text(
-                "Nahrávám… ${formatVoiceDuration(elapsedMs)} - pusť pro náhled",
-                modifier = Modifier.padding(start = 12.dp),
-                color = MaterialTheme.colorScheme.onErrorContainer,
-            )
-        }
+        Icon(Icons.Filled.Mic, contentDescription = "Podrž pro nahrání hlasovky", tint = iconTint)
     }
 }
 
 /**
- * The recorded-but-unsent clip: play/pause with scrub, the duration, and delete.
- * Sending stays on the input bar's send button, next to this preview.
+ * The pill's center while the mic is held: elapsed time plus a hint that
+ * releasing stops (not sends). Surface-less - the pill behind it is the surface.
  */
 @Composable
-fun VoicePreviewBar(
+fun VoiceRecordingContent(elapsedMs: Long, modifier: Modifier = Modifier) {
+    Row(
+        modifier = modifier.fillMaxWidth().padding(horizontal = 12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Box(
+            modifier = Modifier
+                .size(12.dp)
+                .clip(CircleShape)
+                .background(MaterialTheme.colorScheme.error),
+        )
+        Text(
+            "Nahrávám… ${formatVoiceDuration(elapsedMs)} - pusť pro náhled",
+            modifier = Modifier.padding(start = 12.dp),
+            color = HertzGlass.contentOnGlass(),
+        )
+    }
+}
+
+/**
+ * The recorded-but-unsent clip as the pill's center: play/pause with scrub, the
+ * duration, and delete. Surface-less - the pill behind it is the surface, and
+ * sending stays on the pill's send button beside this preview.
+ */
+@Composable
+fun VoicePreviewContent(
     file: File,
     durationMs: Long,
     onDelete: () -> Unit,
@@ -164,50 +171,44 @@ fun VoicePreviewBar(
         }
     }
 
-    Surface(
-        modifier = modifier,
-        shape = cz.kuclab.hertzchat.ui.theme.HertzShapes.Pill,
-        color = cz.kuclab.hertzchat.ui.theme.HertzMatte.input(),
+    Row(
+        modifier = modifier.fillMaxWidth().padding(end = 2.dp),
+        verticalAlignment = Alignment.CenterVertically,
     ) {
-        Row(
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 6.dp, vertical = 4.dp),
-            verticalAlignment = Alignment.CenterVertically,
+        IconButton(
+            onClick = {
+                if (isPlaying) {
+                    player.pause()
+                    isPlaying = false
+                }
+                onDelete()
+            },
+            modifier = Modifier.size(38.dp),
         ) {
-            IconButton(
-                onClick = {
-                    if (isPlaying) {
-                        player.pause()
-                        isPlaying = false
-                    }
-                    onDelete()
-                },
-                modifier = Modifier.size(40.dp),
-            ) {
-                Icon(Icons.Filled.Delete, contentDescription = "Smazat nahrávku", tint = MaterialTheme.colorScheme.error)
-            }
-            IconButton(onClick = ::toggle, modifier = Modifier.size(40.dp)) {
-                Icon(
-                    if (isPlaying) Icons.Filled.Pause else Icons.Filled.PlayArrow,
-                    contentDescription = if (isPlaying) "Pozastavit" else "Přehrát",
-                    tint = MaterialTheme.colorScheme.primary,
-                )
-            }
-            Slider(
-                value = positionMs.toFloat().coerceIn(0f, durationMs.toFloat().coerceAtLeast(1f)),
-                onValueChange = {
-                    positionMs = it.toLong()
-                    if (prepared) runCatching { player.seekTo(it.toInt()) }
-                },
-                valueRange = 0f..durationMs.toFloat().coerceAtLeast(1f),
-                modifier = Modifier.weight(1f),
-            )
-            Text(
-                formatVoiceDuration(durationMs),
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(horizontal = 10.dp),
+            Icon(Icons.Filled.Delete, contentDescription = "Smazat nahrávku", tint = MaterialTheme.colorScheme.error)
+        }
+        IconButton(onClick = ::toggle, modifier = Modifier.size(38.dp)) {
+            Icon(
+                if (isPlaying) Icons.Filled.Pause else Icons.Filled.PlayArrow,
+                contentDescription = if (isPlaying) "Pozastavit" else "Přehrát",
+                tint = MaterialTheme.colorScheme.primary,
             )
         }
+        Slider(
+            value = positionMs.toFloat().coerceIn(0f, durationMs.toFloat().coerceAtLeast(1f)),
+            onValueChange = {
+                positionMs = it.toLong()
+                if (prepared) runCatching { player.seekTo(it.toInt()) }
+            },
+            valueRange = 0f..durationMs.toFloat().coerceAtLeast(1f),
+            modifier = Modifier.weight(1f),
+        )
+        Text(
+            formatVoiceDuration(durationMs),
+            style = MaterialTheme.typography.labelSmall,
+            color = HertzGlass.contentOnGlass().copy(alpha = 0.7f),
+            modifier = Modifier.padding(horizontal = 8.dp),
+        )
     }
 }
 

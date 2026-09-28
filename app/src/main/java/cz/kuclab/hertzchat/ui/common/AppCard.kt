@@ -1,25 +1,28 @@
 package cz.kuclab.hertzchat.ui.common
 
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
-import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.ElevatedCard
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import cz.kuclab.hertzchat.ui.theme.HertzMatte
+import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.dp
 import cz.kuclab.hertzchat.ui.theme.HertzShapes
 
-/** The one card style used across the whole app - matte-translucent and uniformly rounded (see [HertzShapes]). */
+/** The one card style used across the whole app - the shared glass material (see [GlassSurface]). */
 @Composable
 fun AppCard(
     modifier: Modifier = Modifier,
-    containerColor: Color = HertzMatte.card(),
+    containerColor: Color = HertzGlass.fill(),
+    shadowElevation: Dp = 10.dp,
     content: @Composable ColumnScope.() -> Unit,
 ) {
-    ElevatedCard(
+    GlassSurface(
         modifier = modifier,
         shape = HertzShapes.Card,
-        colors = CardDefaults.elevatedCardColors(containerColor = containerColor),
-        content = content,
-    )
+        fill = containerColor,
+        shadowElevation = shadowElevation,
+    ) {
+        Column(content = content)
+    }
 }

@@ -21,6 +21,7 @@ import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import cz.kuclab.hertzchat.ui.common.GlassDialogTheme
 
 /**
  * Shows the previous run's crash, if there was one, as soon as the app comes back up.
@@ -36,6 +37,7 @@ fun CrashReportDialog() {
 
     val text = report ?: return
 
+    GlassDialogTheme {
     AlertDialog(
         onDismissRequest = { },
         title = { Text("Aplikace minule spadla") },
@@ -61,4 +63,5 @@ fun CrashReportDialog() {
             TextButton(onClick = { CrashReporter.clear(context); report = null }) { Text("Zavřít") }
         },
     )
+    }
 }

@@ -78,6 +78,7 @@ import androidx.compose.ui.window.DialogProperties
 import androidx.core.content.ContextCompat
 import androidx.hilt.navigation.compose.hiltViewModel
 import cz.kuclab.hertzchat.ui.common.AppCard
+import cz.kuclab.hertzchat.ui.common.GlassDialogTheme
 import cz.kuclab.hertzchat.ui.migration.QrCodeScannerAnalyzer
 import cz.kuclab.hertzchat.ui.theme.HertzMatte
 import cz.kuclab.hertzchat.ui.theme.HertzShapes
@@ -517,6 +518,7 @@ private fun CreateGroupDialog(
     var name by remember { mutableStateOf("") }
     val selected = remember { mutableStateOf(setOf<String>()) }
 
+    GlassDialogTheme {
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text("Vytvořit skupinu") },
@@ -562,4 +564,5 @@ private fun CreateGroupDialog(
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Zrušit") } },
     )
+    }
 }

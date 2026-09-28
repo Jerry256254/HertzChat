@@ -13,7 +13,6 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LocalTextStyle
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -23,7 +22,6 @@ import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.unit.dp
-import cz.kuclab.hertzchat.ui.theme.HertzMatte
 import cz.kuclab.hertzchat.ui.theme.HertzShapes
 
 /** In-chat find bar: query field plus match counter with up/down navigation. */
@@ -38,29 +36,26 @@ fun ChatSearchBar(
     onClose: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    Surface(
+    GlassSurface(
         modifier = modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 6.dp),
         shape = HertzShapes.Pill,
-        color = HertzMatte.input(),
     ) {
-        androidx.compose.foundation.layout.Box {
-            FrostedBackdrop(modifier = Modifier.matchParentSize())
-            Row(
+        Row(
             modifier = Modifier.fillMaxWidth().padding(horizontal = 6.dp, vertical = 4.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            IconButton(onClick = onClose, modifier = Modifier.size(androidx.compose.ui.unit.Dp(40f))) {
-                Icon(Icons.Filled.Close, contentDescription = "Zavřít hledání")
+            IconButton(onClick = onClose, modifier = Modifier.size(40.dp)) {
+                Icon(Icons.Filled.Close, contentDescription = "Zavřít hledání", tint = HertzGlass.contentOnGlass())
             }
             BasicTextField(
                 value = query,
                 onValueChange = onQueryChange,
                 modifier = Modifier.weight(1f),
                 singleLine = true,
-                textStyle = LocalTextStyle.current.copy(color = MaterialTheme.colorScheme.onSurface),
+                textStyle = LocalTextStyle.current.copy(color = HertzGlass.contentOnGlass()),
                 cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
                 decorationBox = { inner ->
-                    if (query.isEmpty()) Text("Hledat v konverzaci…", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    if (query.isEmpty()) Text("Hledat v konverzaci…", color = HertzGlass.contentOnGlass().copy(alpha = 0.55f))
                     inner()
                 },
             )
@@ -68,16 +63,15 @@ fun ChatSearchBar(
                 Text(
                     "${matchIndex + 1}/${matchCount}",
                     style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    color = HertzGlass.contentOnGlass().copy(alpha = 0.7f),
                 )
             }
             IconButton(onClick = onPrev, enabled = matchCount > 0) {
-                Icon(Icons.Filled.KeyboardArrowUp, contentDescription = "Předchozí výskyt")
+                Icon(Icons.Filled.KeyboardArrowUp, contentDescription = "Předchozí výskyt", tint = HertzGlass.contentOnGlass().copy(alpha = if (matchCount > 0) 1f else 0.35f))
             }
             IconButton(onClick = onNext, enabled = matchCount > 0) {
-                Icon(Icons.Filled.KeyboardArrowDown, contentDescription = "Další výskyt")
+                Icon(Icons.Filled.KeyboardArrowDown, contentDescription = "Další výskyt", tint = HertzGlass.contentOnGlass().copy(alpha = if (matchCount > 0) 1f else 0.35f))
             }
-        }
         }
     }
 }

@@ -1,18 +1,13 @@
 package cz.kuclab.hertzchat.ui.common
 
 import androidx.compose.foundation.layout.ColumnScope
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
-import cz.kuclab.hertzchat.ui.theme.HertzMatte
-import cz.kuclab.hertzchat.ui.theme.HertzShapes
 
 /**
- * A drop-in replacement for [DropdownMenu] with the same shape/elevation language as
- * [AppCard] instead of Material3's default popup surface. In this app's dark palette the
- * stock menu's low tonal elevation reads as barely-there - a flat rectangle that blends
- * into the background rather than reading as a floating card.
+ * A drop-in replacement for [androidx.compose.material3.DropdownMenu]: the same
+ * centered glass card as every other menu in the app instead of an anchored
+ * popup whose position and surface never matched anything.
  */
 @Composable
 fun AppDropdownMenu(
@@ -21,18 +16,10 @@ fun AppDropdownMenu(
     modifier: Modifier = Modifier,
     content: @Composable ColumnScope.() -> Unit,
 ) {
-    // The rounding has to be applied to the menu's own container shape - see
-    // RoundedMenuSurface in ActionMenu.kt for why a Modifier can't do it.
-    MaterialTheme(
-        colorScheme = MaterialTheme.colorScheme.copy(surfaceContainer = HertzMatte.cardRaised()),
-        shapes = MaterialTheme.shapes.copy(extraSmall = HertzShapes.Card),
-        typography = MaterialTheme.typography,
-    ) {
-        DropdownMenu(
-            expanded = expanded,
-            onDismissRequest = onDismissRequest,
-            modifier = modifier,
-            content = content,
-        )
-    }
+    CenteredGlassMenu(
+        expanded = expanded,
+        onDismissRequest = onDismissRequest,
+        modifier = modifier,
+        content = content,
+    )
 }

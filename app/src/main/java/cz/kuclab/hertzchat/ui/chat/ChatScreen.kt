@@ -16,7 +16,6 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
@@ -79,19 +78,13 @@ import cz.kuclab.hertzchat.ui.common.ActionMenuItem
 import cz.kuclab.hertzchat.ui.common.AttachmentMenu
 import cz.kuclab.hertzchat.ui.common.ChatInputPillIcon
 import cz.kuclab.hertzchat.ui.common.ChatSearchBar
-import cz.kuclab.hertzchat.ui.common.ChatDisplayItem
-import cz.kuclab.hertzchat.ui.common.ChatDoodleBackground
-import cz.kuclab.hertzchat.ui.common.DayChip
-import cz.kuclab.hertzchat.ui.common.FloatingCircleButton
-import cz.kuclab.hertzchat.ui.common.FrostedBackdrop
 import cz.kuclab.hertzchat.ui.common.HoldToRecordButton
+import cz.kuclab.hertzchat.ui.common.GlassAmbientBackground
+import cz.kuclab.hertzchat.ui.common.GlassCircleButton
+import cz.kuclab.hertzchat.ui.common.GlassDialogTheme
+import cz.kuclab.hertzchat.ui.common.GlassSurface
+import cz.kuclab.hertzchat.ui.common.HertzGlass
 import cz.kuclab.hertzchat.ui.common.MarkdownText
-import cz.kuclab.hertzchat.ui.common.MediaTimeChip
-import cz.kuclab.hertzchat.ui.common.MessageMetaRow
-import cz.kuclab.hertzchat.ui.common.TelegramFloat
-import cz.kuclab.hertzchat.ui.common.TelegramMine
-import cz.kuclab.hertzchat.ui.common.TelegramTheirs
-import cz.kuclab.hertzchat.ui.common.buildChatDisplayItems
 import cz.kuclab.hertzchat.ui.common.ThreadInputBar
 import cz.kuclab.hertzchat.ui.common.highlightQuery
 import cz.kuclab.hertzchat.ui.theme.HertzShapes
@@ -168,11 +161,11 @@ fun ChatScreen(contactId: String, onBack: () -> Unit, onOpenFile: (String) -> Un
         matchPos = 0
     }
 
-    val displayItems = remember(state.messages) { buildChatDisplayItems(state.messages) }
+    val displayItems = remember(state.messages) { state.messages.asReversed() }
 
     LaunchedEffect(matchIds, matchPos) {
         val id = matchIds.getOrNull(matchPos) ?: return@LaunchedEffect
-        val displayIndex = displayItems.indexOfFirst { it is ChatDisplayItem.Msg && it.message.messageId == id }
+        val displayIndex = displayItems.indexOfFirst { it.messageId == id }
         if (displayIndex != -1) listState.animateScrollToItem(displayIndex)
     }
 
@@ -213,8 +206,8 @@ fun ChatScreen(contactId: String, onBack: () -> Unit, onOpenFile: (String) -> Un
             if (showScrollDown && !searchOpen) {
                 SmallFloatingActionButton(
                     onClick = { scope.launch { listState.animateScrollToItem(0) } },
-                    containerColor = TelegramFloat.copy(alpha = 0.9f),
-                    contentColor = androidx.compose.ui.graphics.Color.White,
+                    containerColor = MaterialTheme.colorScheme.primary,
+                    contentColor = MaterialTheme.colorScheme.onPrimary,
                 ) {
                     Icon(Icons.Filled.KeyboardArrowDown, contentDescription = "Sjet dolů")
                 }
@@ -289,10 +282,10 @@ fun ChatScreen(contactId: String, onBack: () -> Unit, onOpenFile: (String) -> Un
             state.messages.filter { it.type == MessageType.IMAGE || it.type == MessageType.VIDEO }
         }
         Box(modifier = Modifier.fillMaxSize().padding(padding)) {
-            // The thread records into the frost layer so the floating chrome above
-            // can draw its blurred slice; content scrolls underneath it.
+            // Ambient glass backdrop; the floating chrome above is translucent,
+            // so content scrolls underneath it.
             Box(modifier = Modifier.fillMaxSize()) {
-                ChatDoodleBackground()
+                GlassAmbientBackground()
                 // Reversed so the thread opens at the newest message and sticks there -
                 // index 0 is always the bottom, which is also what the scroll-down
                 // button and search jumps animate to.
@@ -300,26 +293,18 @@ fun ChatScreen(contactId: String, onBack: () -> Unit, onOpenFile: (String) -> Un
                     state = listState,
                     reverseLayout = true,
                     modifier = Modifier.fillMaxSize(),
-                    contentPadding = PaddingValues(start = 12.dp, end = 12.dp, top = 100.dp, bottom = 12.dp),
+                    contentPadding = PaddingValues(start = 12.dp, end = 12.dp, top = 92.dp, bottom = 12.dp),
                     verticalArrangement = Arrangement.spacedBy(4.dp),
                 ) {
-                items(displayItems, key = { item -> if (item is ChatDisplayItem.Msg) item.message.messageId else (item as ChatDisplayItem.Day).key }) { item ->
-                    when (item) {
-                        is ChatDisplayItem.Day -> Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
-                            DayChip(label = item.label)
-                        }
-                        is ChatDisplayItem.Msg -> {
-                            val message = item.message
-                            MessageBubble(
-                                message = message,
-                                searchQuery = if (searchOpen) searchQuery else "",
-                                isCurrentMatch = searchOpen && matchIds.getOrNull(matchPos) == message.messageId,
-                                threadMedia = threadMedia,
-                                onDownload = viewModel::downloadMessage,
-                                onOpenFile = { onOpenFile(it.messageId) },
-                            )
-                        }
-                    }
+                items(displayItems, key = { it.messageId }) { message ->
+                    MessageBubble(
+                        message = message,
+                        searchQuery = if (searchOpen) searchQuery else "",
+                        isCurrentMatch = searchOpen && matchIds.getOrNull(matchPos) == message.messageId,
+                        threadMedia = threadMedia,
+                        onDownload = viewModel::downloadMessage,
+                        onOpenFile = { onOpenFile(it.messageId) },
+                    )
                 }
             }
             }
@@ -332,7 +317,7 @@ fun ChatScreen(contactId: String, onBack: () -> Unit, onOpenFile: (String) -> Un
                     onPrev = { if (matchIds.isNotEmpty()) matchPos = (matchPos - 1 + matchIds.size) % matchIds.size },
                     onNext = { if (matchIds.isNotEmpty()) matchPos = (matchPos + 1) % matchIds.size },
                     onClose = { searchOpen = false; searchQuery = "" },
-                    modifier = Modifier.align(Alignment.TopCenter).statusBarsPadding().padding(top = 8.dp),
+                    modifier = Modifier.align(Alignment.TopCenter).padding(top = 4.dp),
                 )
             } else {
                 FloatingChatBar(
@@ -364,17 +349,19 @@ fun ChatScreen(contactId: String, onBack: () -> Unit, onOpenFile: (String) -> Un
     }
 
     if (confirmClear) {
-        AlertDialog(
-            onDismissRequest = { confirmClear = false },
-            title = { Text("Vyčistit konverzaci?") },
-            text = { Text("Smaže se celá historie zpráv v tomto chatu na tomto zařízení. Kontakt zůstane - jen jeho zprávy zmizí.") },
-            confirmButton = {
-                TextButton(onClick = { confirmClear = false; viewModel.clearChat() }) { Text("Vyčistit") }
-            },
-            dismissButton = {
-                TextButton(onClick = { confirmClear = false }) { Text("Zrušit") }
-            },
-        )
+        GlassDialogTheme {
+            AlertDialog(
+                onDismissRequest = { confirmClear = false },
+                title = { Text("Vyčistit konverzaci?") },
+                text = { Text("Smaže se celá historie zpráv v tomto chatu na tomto zařízení. Kontakt zůstane - jen jeho zprávy zmizí.") },
+                confirmButton = {
+                    TextButton(onClick = { confirmClear = false; viewModel.clearChat() }) { Text("Vyčistit") }
+                },
+                dismissButton = {
+                    TextButton(onClick = { confirmClear = false }) { Text("Zrušit") }
+                },
+            )
+        }
     }
 
     if (detailsOpen) {
@@ -406,24 +393,22 @@ private fun FloatingChatBar(
     onClear: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    // No statusBarsPadding: the Scaffold content padding already offsets for the
+    // status bar, and adding it again is what used to push the bar too low.
     Row(
-        modifier = modifier.fillMaxWidth().statusBarsPadding().padding(horizontal = 12.dp, vertical = 8.dp),
+        modifier = modifier.fillMaxWidth().padding(horizontal = 12.dp).padding(top = 4.dp, bottom = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        FloatingCircleButton(
+        GlassCircleButton(
             icon = Icons.AutoMirrored.Filled.ArrowBack,
             contentDescription = "Zpět",
             onClick = onBack,
         )
-        Box(
-            modifier = Modifier
-                .weight(1f)
-                .padding(horizontal = 8.dp)
-                .clip(HertzShapes.Pill)
-                .background(TelegramFloat.copy(alpha = 0.82f))
-                .clickable(onClick = onOpenDetails),
+        GlassSurface(
+            shape = HertzShapes.Pill,
+            onClick = onOpenDetails,
+            modifier = Modifier.weight(1f).padding(horizontal = 8.dp),
         ) {
-            FrostedBackdrop(modifier = Modifier.matchParentSize())
             Row(
                 modifier = Modifier.padding(horizontal = 6.dp, vertical = 5.dp),
                 verticalAlignment = Alignment.CenterVertically,
@@ -456,13 +441,13 @@ private fun FloatingChatBar(
                     modifier = Modifier.weight(1f).padding(start = 10.dp),
                     style = MaterialTheme.typography.titleSmall,
                     fontWeight = FontWeight.SemiBold,
-                    color = androidx.compose.ui.graphics.Color.White,
+                    color = HertzGlass.contentOnGlass(),
                     maxLines = 1,
                 )
             }
         }
         Box {
-            FloatingCircleButton(
+            GlassCircleButton(
                 icon = Icons.Filled.MoreVert,
                 contentDescription = "Možnosti konverzace",
                 onClick = { onOverflowChange(true) },
@@ -493,14 +478,15 @@ private fun MessageBubble(
     onDownload: (MessageEntity) -> Unit = {},
     onOpenFile: (MessageEntity) -> Unit = {},
 ) {
-    val bubbleColor = when {
+    val bubbleFill = when {
         isCurrentMatch -> MaterialTheme.colorScheme.primaryContainer
-        message.fromMe -> TelegramMine.copy(alpha = 0.93f)
-        else -> TelegramTheirs.copy(alpha = 0.9f)
+        message.fromMe -> HertzGlass.bubbleMine()
+        else -> HertzGlass.bubbleTheirs()
     }
     val textColor = when {
         isCurrentMatch -> MaterialTheme.colorScheme.onPrimaryContainer
-        else -> androidx.compose.ui.graphics.Color.White
+        message.fromMe -> androidx.compose.ui.graphics.Color.White
+        else -> HertzGlass.contentOnGlass()
     }
     val alignedRight = message.fromMe
     val alignment = if (alignedRight) Alignment.CenterEnd else Alignment.CenterStart
@@ -508,73 +494,46 @@ private fun MessageBubble(
 
     androidx.compose.foundation.layout.Column(modifier = Modifier.fillMaxWidth(), horizontalAlignment = if (alignedRight) Alignment.End else Alignment.Start) {
         Box(modifier = Modifier.fillMaxWidth(), contentAlignment = alignment) {
+            // Pure content bubbles: no clock, no ticks, no day chips - the message
+            // itself is the whole UI. Glass edges carry the shape instead.
             when (message.type) {
-                MessageType.TEXT -> androidx.compose.foundation.layout.Column(
-                    modifier = Modifier
-                        .clip(bubbleShape)
-                        .background(bubbleColor)
-                        .padding(horizontal = 12.dp, vertical = 8.dp),
-                    horizontalAlignment = Alignment.End,
+                MessageType.TEXT -> GlassSurface(
+                    shape = bubbleShape,
+                    fill = bubbleFill,
+                    shadowElevation = 0.dp,
                 ) {
+                    val pad = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)
                     if (searchQuery.isBlank()) {
-                        MarkdownText(message.text.orEmpty(), color = textColor)
+                        MarkdownText(message.text.orEmpty(), color = textColor, modifier = pad)
                     } else {
-                        Text(highlightQuery(message.text.orEmpty(), searchQuery), color = textColor)
+                        Text(highlightQuery(message.text.orEmpty(), searchQuery), color = textColor, modifier = pad)
                     }
-                    MessageMetaRow(
-                        timestamp = message.timestamp,
-                        fromMe = message.fromMe,
-                        deliveryState = message.deliveryState.takeIf { message.fromMe },
-                        modifier = Modifier.padding(top = 2.dp),
-                    )
                 }
-                MessageType.IMAGE -> Box {
-                    ImageBubble(
-                        message = message,
-                        threadMedia = threadMedia.ifEmpty { listOf(message) },
-                        mediaIndex = threadMedia.indexOfFirst { it.messageId == message.messageId }.coerceAtLeast(0),
-                        onDownload = onDownload,
-                    )
-                    MediaTimeChip(message = message, modifier = Modifier.align(Alignment.BottomStart))
-                }
-                MessageType.VIDEO -> Box {
-                    VideoBubble(
-                        message = message,
-                        threadMedia = threadMedia.ifEmpty { listOf(message) },
-                        mediaIndex = threadMedia.indexOfFirst { it.messageId == message.messageId }.coerceAtLeast(0),
-                        onDownload = onDownload,
-                    )
-                    MediaTimeChip(message = message, modifier = Modifier.align(Alignment.BottomStart))
-                }
-                MessageType.VOICE -> Box(
-                    modifier = Modifier
-                        .clip(bubbleShape)
-                        .background(bubbleColor),
+                MessageType.IMAGE -> ImageBubble(
+                    message = message,
+                    threadMedia = threadMedia.ifEmpty { listOf(message) },
+                    mediaIndex = threadMedia.indexOfFirst { it.messageId == message.messageId }.coerceAtLeast(0),
+                    onDownload = onDownload,
+                )
+                MessageType.VIDEO -> VideoBubble(
+                    message = message,
+                    threadMedia = threadMedia.ifEmpty { listOf(message) },
+                    mediaIndex = threadMedia.indexOfFirst { it.messageId == message.messageId }.coerceAtLeast(0),
+                    onDownload = onDownload,
+                )
+                MessageType.VOICE -> GlassSurface(
+                    shape = bubbleShape,
+                    fill = bubbleFill,
+                    shadowElevation = 0.dp,
                 ) {
-                    androidx.compose.foundation.layout.Column(horizontalAlignment = Alignment.End) {
-                        VoiceBubble(message, onSurface = textColor, accent = textColor, onDownload = onDownload)
-                        MessageMetaRow(
-                            timestamp = message.timestamp,
-                            fromMe = message.fromMe,
-                            deliveryState = message.deliveryState.takeIf { message.fromMe },
-                            modifier = Modifier.padding(end = 12.dp, bottom = 8.dp),
-                        )
-                    }
+                    VoiceBubble(message, onSurface = textColor, accent = textColor, onDownload = onDownload)
                 }
-                MessageType.FILE -> Box(
-                    modifier = Modifier
-                        .clip(bubbleShape)
-                        .background(bubbleColor),
+                MessageType.FILE -> GlassSurface(
+                    shape = bubbleShape,
+                    fill = bubbleFill,
+                    shadowElevation = 0.dp,
                 ) {
-                    androidx.compose.foundation.layout.Column(horizontalAlignment = Alignment.End) {
-                        FileBubble(message, onSurface = textColor, onOpenFile = onOpenFile, onDownload = onDownload)
-                        MessageMetaRow(
-                            timestamp = message.timestamp,
-                            fromMe = message.fromMe,
-                            deliveryState = message.deliveryState.takeIf { message.fromMe },
-                            modifier = Modifier.padding(end = 12.dp, bottom = 8.dp),
-                        )
-                    }
+                    FileBubble(message, onSurface = textColor, onOpenFile = onOpenFile, onDownload = onDownload)
                 }
             }
         }

@@ -8,19 +8,14 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.layout.widthIn
-import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.InsertDriveFile
 import androidx.compose.material.icons.filled.Image
 import androidx.compose.material.icons.filled.PhotoCamera
 import androidx.compose.material.icons.filled.VideoLibrary
-import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -31,39 +26,16 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import cz.kuclab.hertzchat.ui.theme.HertzGreen
-import cz.kuclab.hertzchat.ui.theme.HertzMatte
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 
 /**
- * Replacement for stock `DropdownMenu` used for short action lists (chat-row long-press,
- * per-screen overflow menu): a floating card where every row carries its icon inside a
- * small tinted circle next to the label, the same "icon chip + text" language chat apps
- * like Telegram/WhatsApp use - a bare glyph-and-text [androidx.compose.material3.DropdownMenuItem]
- * row reads as flat and dated against this app's dark surfaces.
+ * Short action lists (chat-row long-press, per-screen overflow menu): a glass
+ * card centered on screen, every row an icon chip plus label. Same material
+ * and entrance as every other menu in the app - see [CenteredGlassMenu].
  */
-/**
- * Rounds the popup surface itself, not just its contents.
- *
- * A menu's container is drawn by a `Surface` inside `DropdownMenu` whose shape comes
- * from `shapes.extraSmall` (Material3 `MenuTokens.ContainerShape` -> `CornerExtraSmall`),
- * and nothing on the menu's own `Modifier` can reach it - clipping there rounds only
- * what's drawn on top, leaving the container's square corners poking out behind.
- * Overriding that one shape for the duration of the popup is what actually rounds it.
- */
-@Composable
-private fun RoundedMenuSurface(radius: Dp, content: @Composable () -> Unit) {
-    MaterialTheme(
-        // This M3's DropdownMenu takes no containerColor - its container is
-        // surfaceContainer, so the matte tone goes in through the local scheme.
-        colorScheme = MaterialTheme.colorScheme.copy(surfaceContainer = HertzMatte.cardRaised()),
-        shapes = MaterialTheme.shapes.copy(extraSmall = RoundedCornerShape(radius)),
-        typography = MaterialTheme.typography,
-        content = content,
-    )
-}
-
 @Composable
 fun ActionMenu(
     expanded: Boolean,
@@ -71,15 +43,12 @@ fun ActionMenu(
     modifier: Modifier = Modifier,
     content: @Composable ColumnScope.() -> Unit,
 ) {
-    RoundedMenuSurface(radius = 24.dp) {
-        DropdownMenu(
-            expanded = expanded,
-            onDismissRequest = onDismissRequest,
-            modifier = modifier.widthIn(min = 220.dp).padding(vertical = 6.dp),
-        ) {
-            Column(content = content)
-        }
-    }
+    CenteredGlassMenu(
+        expanded = expanded,
+        onDismissRequest = onDismissRequest,
+        modifier = modifier,
+        content = content,
+    )
 }
 
 @Composable
@@ -89,38 +58,13 @@ fun ActionMenuItem(
     onClick: () -> Unit,
     destructive: Boolean = false,
 ) {
-    val tint = if (destructive) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary
-    val chipContainer = if (destructive) {
-        MaterialTheme.colorScheme.errorContainer
-    } else {
-        MaterialTheme.colorScheme.primaryContainer
-    }
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable(onClick = onClick)
-            .padding(horizontal = 14.dp, vertical = 10.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Box(
-            modifier = Modifier.size(34.dp).clip(CircleShape).background(chipContainer),
-            contentAlignment = Alignment.Center,
-        ) {
-            Icon(icon, contentDescription = null, tint = tint, modifier = Modifier.size(18.dp))
-        }
-        Spacer(modifier = Modifier.width(12.dp))
-        Text(
-            text,
-            style = MaterialTheme.typography.bodyLarge,
-            color = if (destructive) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface,
-        )
-    }
+    GlassMenuItem(text = text, icon = icon, onClick = onClick, destructive = destructive)
 }
 
 /**
- * The attachment picker: instead of a vertical text list, a row of icon-chip buttons
- * (own tinted color per type, label underneath) in a floating card - a compact grid
- * that reads at a glance rather than a list you have to scan line by line.
+ * The attachment picker: a centered glass card with a row of icon-chip buttons
+ * (own tinted color per type, label underneath) - a compact grid that reads at
+ * a glance rather than a list you have to scan line by line.
  */
 @Composable
 fun AttachmentMenu(
@@ -131,39 +75,37 @@ fun AttachmentMenu(
     onPickFile: () -> Unit,
     onTakePhoto: (() -> Unit)? = null,
 ) {
-    RoundedMenuSurface(radius = 24.dp) {
-        DropdownMenu(expanded = expanded, onDismissRequest = onDismissRequest) {
-            Row(
-                modifier = Modifier.padding(horizontal = 16.dp, vertical = 14.dp),
-                horizontalArrangement = Arrangement.spacedBy(22.dp),
-            ) {
-                if (onTakePhoto != null) {
-                    AttachmentOption(
-                        icon = Icons.Filled.PhotoCamera,
-                        label = "Vyfotit",
-                        color = Color(0xFF03A9F4),
-                        onClick = { onDismissRequest(); onTakePhoto() },
-                    )
-                }
+    CenteredGlassMenu(expanded = expanded, onDismissRequest = onDismissRequest) {
+        Row(
+            modifier = Modifier.padding(horizontal = 20.dp, vertical = 16.dp),
+            horizontalArrangement = Arrangement.spacedBy(20.dp, Alignment.CenterHorizontally),
+        ) {
+            if (onTakePhoto != null) {
                 AttachmentOption(
-                    icon = Icons.Filled.Image,
-                    label = "Obrázek",
-                    color = HertzGreen,
-                    onClick = { onDismissRequest(); onPickImage() },
-                )
-                AttachmentOption(
-                    icon = Icons.Filled.VideoLibrary,
-                    label = "Video",
-                    color = Color(0xFF7C4DFF),
-                    onClick = { onDismissRequest(); onPickVideo() },
-                )
-                AttachmentOption(
-                    icon = Icons.AutoMirrored.Filled.InsertDriveFile,
-                    label = "Soubor",
-                    color = Color(0xFFFF9800),
-                    onClick = { onDismissRequest(); onPickFile() },
+                    icon = Icons.Filled.PhotoCamera,
+                    label = "Vyfotit",
+                    color = Color(0xFF03A9F4),
+                    onClick = { onDismissRequest(); onTakePhoto() },
                 )
             }
+            AttachmentOption(
+                icon = Icons.Filled.Image,
+                label = "Obrázek",
+                color = HertzGreen,
+                onClick = { onDismissRequest(); onPickImage() },
+            )
+            AttachmentOption(
+                icon = Icons.Filled.VideoLibrary,
+                label = "Video",
+                color = Color(0xFF7C4DFF),
+                onClick = { onDismissRequest(); onPickVideo() },
+            )
+            AttachmentOption(
+                icon = Icons.AutoMirrored.Filled.InsertDriveFile,
+                label = "Soubor",
+                color = Color(0xFFFF9800),
+                onClick = { onDismissRequest(); onPickFile() },
+            )
         }
     }
 }
@@ -172,7 +114,9 @@ fun AttachmentMenu(
 private fun AttachmentOption(icon: ImageVector, label: String, color: Color, onClick: () -> Unit) {
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
-        modifier = Modifier.width(64.dp).clickable(onClick = onClick),
+        // Rounded-rect ripple bounds: a circle clip on this tall column would eat
+        // the label's corners (oval clip on a non-square box).
+        modifier = Modifier.width(64.dp).clip(RoundedCornerShape(16.dp)).clickable(onClick = onClick),
     ) {
         Box(
             modifier = Modifier.size(52.dp).clip(CircleShape).background(color.copy(alpha = 0.18f)),
@@ -185,7 +129,7 @@ private fun AttachmentOption(icon: ImageVector, label: String, color: Color, onC
             label,
             style = MaterialTheme.typography.labelMedium,
             textAlign = TextAlign.Center,
-            color = MaterialTheme.colorScheme.onSurface,
+            color = HertzGlass.contentOnGlass(),
         )
     }
 }

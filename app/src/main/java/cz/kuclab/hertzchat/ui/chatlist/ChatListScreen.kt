@@ -15,7 +15,6 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -61,12 +60,12 @@ import coil.compose.AsyncImage
 import cz.kuclab.hertzchat.data.repository.IncomingFriendRequest
 import cz.kuclab.hertzchat.network.p2p.I2pState
 import cz.kuclab.hertzchat.ui.common.ActionMenu
+import cz.kuclab.hertzchat.ui.common.GlassAmbientBackground
+import cz.kuclab.hertzchat.ui.common.GlassCircleButton
+import cz.kuclab.hertzchat.ui.common.GlassSurface
+import cz.kuclab.hertzchat.ui.common.HertzGlass
 import cz.kuclab.hertzchat.ui.common.ActionMenuItem
 import cz.kuclab.hertzchat.ui.common.AppCard
-import cz.kuclab.hertzchat.ui.common.ChatDoodleBackground
-import cz.kuclab.hertzchat.ui.common.FloatingCircleButton
-import cz.kuclab.hertzchat.ui.common.FrostedBackdrop
-import cz.kuclab.hertzchat.ui.common.TelegramFloat
 import cz.kuclab.hertzchat.ui.theme.HertzMatte
 import cz.kuclab.hertzchat.ui.theme.HertzShapes
 
@@ -115,10 +114,10 @@ fun ChatListScreen(
     ) { padding ->
         Box(modifier = Modifier.fillMaxSize().padding(padding)) {
             Box(modifier = Modifier.fillMaxSize()) {
-            ChatDoodleBackground()
+            GlassAmbientBackground()
             if (items.isEmpty() && requests.isEmpty() && i2pState == I2pState.CONNECTED) {
                 Column(
-                    modifier = Modifier.fillMaxSize().padding(top = 76.dp).padding(horizontal = 32.dp),
+                    modifier = Modifier.fillMaxSize().padding(top = 56.dp).padding(horizontal = 32.dp),
                     horizontalAlignment = Alignment.CenterHorizontally,
                     verticalArrangement = Arrangement.Center,
                 ) {
@@ -152,7 +151,7 @@ fun ChatListScreen(
             } else {
                 LazyColumn(
                     modifier = Modifier.fillMaxSize(),
-                    contentPadding = PaddingValues(start = 12.dp, end = 12.dp, top = 100.dp, bottom = 96.dp),
+                    contentPadding = PaddingValues(start = 12.dp, end = 12.dp, top = 92.dp, bottom = 96.dp),
                     verticalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
                 item {
@@ -227,19 +226,18 @@ private fun FloatingHomeBar(
     onOpenSettings: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    // No statusBarsPadding: the Scaffold content padding already offsets for the
+    // status bar, and adding it again is what used to push the bar too low.
     Row(
-        modifier = modifier.fillMaxWidth().statusBarsPadding().padding(horizontal = 12.dp, vertical = 8.dp),
+        modifier = modifier.fillMaxWidth().padding(horizontal = 12.dp).padding(top = 4.dp, bottom = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Box(
-            modifier = Modifier
-                .size(44.dp)
-                .clip(CircleShape)
-                .background(TelegramFloat.copy(alpha = 0.82f))
-                .clickable(onClick = onOpenProfile),
-            contentAlignment = Alignment.Center,
+        GlassSurface(
+            shape = CircleShape,
+            shadowElevation = 8.dp,
+            onClick = onOpenProfile,
+            modifier = Modifier.size(44.dp),
         ) {
-            if (myAvatarPath == null) FrostedBackdrop(modifier = Modifier.fillMaxSize())
             if (myAvatarPath != null) {
                 AsyncImage(
                     model = java.io.File(myAvatarPath),
@@ -248,27 +246,24 @@ private fun FloatingHomeBar(
                     modifier = Modifier.size(44.dp).clip(CircleShape),
                 )
             } else {
-                Icon(Icons.Filled.Person, contentDescription = "Profil", tint = androidx.compose.ui.graphics.Color.White)
+                Box(modifier = Modifier.size(44.dp), contentAlignment = Alignment.Center) {
+                    Icon(Icons.Filled.Person, contentDescription = "Profil", tint = HertzGlass.contentOnGlass())
+                }
             }
         }
-        Box(
-            modifier = Modifier
-                .weight(1f)
-                .padding(horizontal = 8.dp)
-                .clip(HertzShapes.Pill)
-                .background(TelegramFloat.copy(alpha = 0.82f)),
-            contentAlignment = Alignment.Center,
+        GlassSurface(
+            shape = HertzShapes.Pill,
+            modifier = Modifier.weight(1f).padding(horizontal = 8.dp),
         ) {
-            FrostedBackdrop(modifier = Modifier.matchParentSize())
             Text(
                 "Hertz Chat",
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.Bold,
-                color = androidx.compose.ui.graphics.Color.White,
-                modifier = Modifier.padding(vertical = 11.dp),
+                color = HertzGlass.contentOnGlass(),
+                modifier = Modifier.align(Alignment.Center).padding(vertical = 11.dp),
             )
         }
-        FloatingCircleButton(
+        GlassCircleButton(
             icon = Icons.Filled.Settings,
             contentDescription = "Nastavení",
             onClick = onOpenSettings,

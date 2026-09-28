@@ -15,7 +15,6 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
@@ -77,22 +76,15 @@ import cz.kuclab.hertzchat.ui.common.ActionMenu
 import cz.kuclab.hertzchat.ui.common.ActionMenuItem
 import cz.kuclab.hertzchat.ui.common.AttachmentMenu
 import cz.kuclab.hertzchat.ui.common.ChatInputPillIcon
-import cz.kuclab.hertzchat.ui.common.ChatDisplayItem
-import cz.kuclab.hertzchat.ui.common.ChatDoodleBackground
 import cz.kuclab.hertzchat.ui.common.ChatSearchBar
-import cz.kuclab.hertzchat.ui.common.DayChip
-import cz.kuclab.hertzchat.ui.common.FloatingCircleButton
-import cz.kuclab.hertzchat.ui.common.FrostedBackdrop
 import cz.kuclab.hertzchat.ui.common.HoldToRecordButton
+import cz.kuclab.hertzchat.ui.common.GlassAmbientBackground
+import cz.kuclab.hertzchat.ui.common.GlassCircleButton
+import cz.kuclab.hertzchat.ui.common.GlassDialogTheme
+import cz.kuclab.hertzchat.ui.common.GlassSurface
+import cz.kuclab.hertzchat.ui.common.HertzGlass
 import cz.kuclab.hertzchat.ui.common.MarkdownText
-import cz.kuclab.hertzchat.ui.common.MediaTimeChip
-import cz.kuclab.hertzchat.ui.common.MessageMetaRow
-import cz.kuclab.hertzchat.ui.common.TelegramFloat
-import cz.kuclab.hertzchat.ui.common.TelegramMine
-import cz.kuclab.hertzchat.ui.common.TelegramReadTicks
-import cz.kuclab.hertzchat.ui.common.TelegramTheirs
 import cz.kuclab.hertzchat.ui.common.ThreadInputBar
-import cz.kuclab.hertzchat.ui.common.buildChatDisplayItems
 import cz.kuclab.hertzchat.ui.common.highlightQuery
 import cz.kuclab.hertzchat.ui.theme.HertzShapes
 import java.io.File
@@ -172,11 +164,11 @@ fun GroupChatScreen(groupId: String, onBack: () -> Unit, onLeft: () -> Unit, onO
         matchPos = 0
     }
 
-    val displayItems = remember(messages) { buildChatDisplayItems(messages) }
+    val displayItems = remember(messages) { messages.asReversed() }
 
     LaunchedEffect(matchIds, matchPos) {
         val id = matchIds.getOrNull(matchPos) ?: return@LaunchedEffect
-        val displayIndex = displayItems.indexOfFirst { it is ChatDisplayItem.Msg && it.message.messageId == id }
+        val displayIndex = displayItems.indexOfFirst { it.messageId == id }
         if (displayIndex != -1) listState.animateScrollToItem(displayIndex)
     }
 
@@ -220,8 +212,8 @@ fun GroupChatScreen(groupId: String, onBack: () -> Unit, onLeft: () -> Unit, onO
             if (showScrollDown && !searchOpen) {
                 SmallFloatingActionButton(
                     onClick = { scope.launch { listState.animateScrollToItem(0) } },
-                    containerColor = TelegramFloat.copy(alpha = 0.9f),
-                    contentColor = androidx.compose.ui.graphics.Color.White,
+                    containerColor = MaterialTheme.colorScheme.primary,
+                    contentColor = MaterialTheme.colorScheme.onPrimary,
                 ) {
                     Icon(Icons.Filled.KeyboardArrowDown, contentDescription = "Sjet dolů")
                 }
@@ -323,33 +315,25 @@ fun GroupChatScreen(groupId: String, onBack: () -> Unit, onLeft: () -> Unit, onO
         }
         Box(modifier = Modifier.fillMaxSize().padding(padding)) {
             Box(modifier = Modifier.fillMaxSize()) {
-                ChatDoodleBackground()
+                GlassAmbientBackground()
                 LazyColumn(
                     state = listState,
                     reverseLayout = true,
                     modifier = Modifier.fillMaxSize(),
-                    contentPadding = PaddingValues(start = 12.dp, end = 12.dp, top = 100.dp, bottom = 12.dp),
+                    contentPadding = PaddingValues(start = 12.dp, end = 12.dp, top = 92.dp, bottom = 12.dp),
                     verticalArrangement = Arrangement.spacedBy(4.dp),
                 ) {
-                items(displayItems, key = { item -> if (item is ChatDisplayItem.Msg) item.message.messageId else (item as ChatDisplayItem.Day).key }) { item ->
-                    when (item) {
-                        is ChatDisplayItem.Day -> Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
-                            DayChip(label = item.label)
-                        }
-                        is ChatDisplayItem.Msg -> {
-                            val message = item.message
-                            GroupMessageBubble(
-                                message,
-                                senderNickname = message.senderContactId?.let { nicknamesById[it] },
-                                senderAvatarPath = message.senderContactId?.let { avatarsById[it] },
-                                searchQuery = if (searchOpen) searchQuery else "",
-                                isCurrentMatch = searchOpen && matchIds.getOrNull(matchPos) == message.messageId,
-                                threadMedia = threadMedia,
-                                onDownload = viewModel::downloadMessage,
-                                onOpenFile = { onOpenFile(it.messageId) },
-                            )
-                        }
-                    }
+                items(displayItems, key = { it.messageId }) { message ->
+                    GroupMessageBubble(
+                        message,
+                        senderNickname = message.senderContactId?.let { nicknamesById[it] },
+                        senderAvatarPath = message.senderContactId?.let { avatarsById[it] },
+                        searchQuery = if (searchOpen) searchQuery else "",
+                        isCurrentMatch = searchOpen && matchIds.getOrNull(matchPos) == message.messageId,
+                        threadMedia = threadMedia,
+                        onDownload = viewModel::downloadMessage,
+                        onOpenFile = { onOpenFile(it.messageId) },
+                    )
                 }
             }
             }
@@ -362,7 +346,7 @@ fun GroupChatScreen(groupId: String, onBack: () -> Unit, onLeft: () -> Unit, onO
                     onPrev = { if (matchIds.isNotEmpty()) matchPos = (matchPos - 1 + matchIds.size) % matchIds.size },
                     onNext = { if (matchIds.isNotEmpty()) matchPos = (matchPos + 1) % matchIds.size },
                     onClose = { searchOpen = false; searchQuery = "" },
-                    modifier = Modifier.align(Alignment.TopCenter).statusBarsPadding().padding(top = 8.dp),
+                    modifier = Modifier.align(Alignment.TopCenter).padding(top = 4.dp),
                 )
             } else {
                 FloatingGroupBar(
@@ -382,6 +366,7 @@ fun GroupChatScreen(groupId: String, onBack: () -> Unit, onLeft: () -> Unit, onO
     }
 
     if (membersDialogOpen) {
+        GlassDialogTheme {
         AlertDialog(
             onDismissRequest = { membersDialogOpen = false },
             title = { Text("Členové skupiny") },
@@ -425,10 +410,12 @@ fun GroupChatScreen(groupId: String, onBack: () -> Unit, onLeft: () -> Unit, onO
             },
             confirmButton = { TextButton(onClick = { membersDialogOpen = false }) { Text("Zavřít") } },
         )
+        }
     }
 
     if (addMembersOpen) {
         var selected by remember { mutableStateOf(setOf<String>()) }
+        GlassDialogTheme {
         AlertDialog(
             onDismissRequest = { addMembersOpen = false },
             title = { Text("Přidat člena") },
@@ -465,6 +452,7 @@ fun GroupChatScreen(groupId: String, onBack: () -> Unit, onLeft: () -> Unit, onO
             },
             dismissButton = { TextButton(onClick = { addMembersOpen = false }) { Text("Zrušit") } },
         )
+        }
     }
 
     editingImageUri?.let { uri ->
@@ -480,6 +468,7 @@ fun GroupChatScreen(groupId: String, onBack: () -> Unit, onLeft: () -> Unit, onO
     }
 
     if (confirmClear) {
+        GlassDialogTheme {
         AlertDialog(
             onDismissRequest = { confirmClear = false },
             title = { Text("Vyčistit konverzaci?") },
@@ -489,9 +478,11 @@ fun GroupChatScreen(groupId: String, onBack: () -> Unit, onLeft: () -> Unit, onO
             },
             dismissButton = { TextButton(onClick = { confirmClear = false }) { Text("Zrušit") } },
         )
+        }
     }
 
     if (confirmLeave) {
+        GlassDialogTheme {
         AlertDialog(
             onDismissRequest = { confirmLeave = false },
             title = { Text("Opustit skupinu?") },
@@ -501,6 +492,7 @@ fun GroupChatScreen(groupId: String, onBack: () -> Unit, onLeft: () -> Unit, onO
             },
             dismissButton = { TextButton(onClick = { confirmLeave = false }) { Text("Zrušit") } },
         )
+        }
     }
 }
 
@@ -517,24 +509,22 @@ private fun FloatingGroupBar(
     onLeave: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    // No statusBarsPadding: the Scaffold content padding already offsets for the
+    // status bar, and adding it again is what used to push the bar too low.
     Row(
-        modifier = modifier.fillMaxWidth().statusBarsPadding().padding(horizontal = 12.dp, vertical = 8.dp),
+        modifier = modifier.fillMaxWidth().padding(horizontal = 12.dp).padding(top = 4.dp, bottom = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        FloatingCircleButton(
+        GlassCircleButton(
             icon = Icons.AutoMirrored.Filled.ArrowBack,
             contentDescription = "Zpět",
             onClick = onBack,
         )
-        Box(
-            modifier = Modifier
-                .weight(1f)
-                .padding(horizontal = 8.dp)
-                .clip(HertzShapes.Pill)
-                .background(TelegramFloat.copy(alpha = 0.82f))
-                .clickable(onClick = onMembers),
+        GlassSurface(
+            shape = HertzShapes.Pill,
+            onClick = onMembers,
+            modifier = Modifier.weight(1f).padding(horizontal = 8.dp),
         ) {
-            FrostedBackdrop(modifier = Modifier.matchParentSize())
             Row(
                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 7.dp),
                 verticalAlignment = Alignment.CenterVertically,
@@ -544,19 +534,19 @@ private fun FloatingGroupBar(
                         groupName.ifBlank { "Skupina" },
                         style = MaterialTheme.typography.titleSmall,
                         fontWeight = FontWeight.SemiBold,
-                        color = androidx.compose.ui.graphics.Color.White,
+                        color = HertzGlass.contentOnGlass(),
                         maxLines = 1,
                     )
                     Text(
                         "$memberCount členů",
                         style = MaterialTheme.typography.labelSmall,
-                        color = androidx.compose.ui.graphics.Color.White.copy(alpha = 0.7f),
+                        color = HertzGlass.contentOnGlass().copy(alpha = 0.7f),
                     )
                 }
             }
         }
         Box {
-            FloatingCircleButton(
+            GlassCircleButton(
                 icon = Icons.Filled.MoreVert,
                 contentDescription = "Možnosti",
                 onClick = { onOverflowChange(true) },
@@ -600,14 +590,15 @@ private fun GroupMessageBubble(
     onDownload: (MessageEntity) -> Unit = {},
     onOpenFile: (MessageEntity) -> Unit = {},
 ) {
-    val bubbleColor = when {
+    val bubbleFill = when {
         isCurrentMatch -> MaterialTheme.colorScheme.primaryContainer
-        message.fromMe -> TelegramMine.copy(alpha = 0.93f)
-        else -> TelegramTheirs.copy(alpha = 0.9f)
+        message.fromMe -> HertzGlass.bubbleMine()
+        else -> HertzGlass.bubbleTheirs()
     }
     val textColor = when {
         isCurrentMatch -> MaterialTheme.colorScheme.onPrimaryContainer
-        else -> androidx.compose.ui.graphics.Color.White
+        message.fromMe -> androidx.compose.ui.graphics.Color.White
+        else -> HertzGlass.contentOnGlass()
     }
     val alignment = if (message.fromMe) Alignment.CenterEnd else Alignment.CenterStart
 
@@ -642,66 +633,31 @@ private fun GroupMessageBubble(
                             it,
                             style = MaterialTheme.typography.labelSmall,
                             fontWeight = FontWeight.SemiBold,
-                            color = TelegramReadTicks,
+                            color = MaterialTheme.colorScheme.primary,
                             modifier = Modifier.padding(start = 4.dp, bottom = 2.dp),
                         )
                     }
                     val bubbleShape = if (message.fromMe) HertzShapes.BubbleMine else HertzShapes.BubbleTheirs
                     val gallery = threadMedia.ifEmpty { listOf(message) }
                     val galleryIndex = threadMedia.indexOfFirst { it.messageId == message.messageId }.coerceAtLeast(0)
+                    // Pure content bubbles: no clock, no ticks, no day chips - the
+                    // message itself is the whole UI. Glass edges carry the shape.
                     when (message.type) {
-                        MessageType.IMAGE -> Box {
-                            ImageBubble(message = message, threadMedia = gallery, mediaIndex = galleryIndex, onDownload = onDownload)
-                            MediaTimeChip(message = message, modifier = Modifier.align(Alignment.BottomStart))
+                        MessageType.IMAGE -> ImageBubble(message = message, threadMedia = gallery, mediaIndex = galleryIndex, onDownload = onDownload)
+                        MessageType.VIDEO -> VideoBubble(message = message, threadMedia = gallery, mediaIndex = galleryIndex, onDownload = onDownload)
+                        MessageType.VOICE -> GlassSurface(shape = bubbleShape, fill = bubbleFill, shadowElevation = 0.dp) {
+                            VoiceBubble(message, onSurface = textColor, accent = textColor, onDownload = onDownload)
                         }
-                        MessageType.VIDEO -> Box {
-                            VideoBubble(message = message, threadMedia = gallery, mediaIndex = galleryIndex, onDownload = onDownload)
-                            MediaTimeChip(message = message, modifier = Modifier.align(Alignment.BottomStart))
+                        MessageType.FILE -> GlassSurface(shape = bubbleShape, fill = bubbleFill, shadowElevation = 0.dp) {
+                            FileBubble(message, onSurface = textColor, onOpenFile = onOpenFile, onDownload = onDownload)
                         }
-                        MessageType.VOICE -> Box(
-                            modifier = Modifier.clip(bubbleShape).background(bubbleColor),
-                        ) {
-                            Column(horizontalAlignment = Alignment.End) {
-                                VoiceBubble(message, onSurface = textColor, accent = textColor, onDownload = onDownload)
-                                MessageMetaRow(
-                                    timestamp = message.timestamp,
-                                    fromMe = message.fromMe,
-                                    deliveryState = message.deliveryState.takeIf { message.fromMe },
-                                    modifier = Modifier.padding(end = 12.dp, bottom = 8.dp),
-                                )
-                            }
-                        }
-                        MessageType.FILE -> Box(
-                            modifier = Modifier.clip(bubbleShape).background(bubbleColor),
-                        ) {
-                            Column(horizontalAlignment = Alignment.End) {
-                                FileBubble(message, onSurface = textColor, onOpenFile = onOpenFile, onDownload = onDownload)
-                                MessageMetaRow(
-                                    timestamp = message.timestamp,
-                                    fromMe = message.fromMe,
-                                    deliveryState = message.deliveryState.takeIf { message.fromMe },
-                                    modifier = Modifier.padding(end = 12.dp, bottom = 8.dp),
-                                )
-                            }
-                        }
-                        else -> Column(
-                            modifier = Modifier
-                                .clip(bubbleShape)
-                                .background(bubbleColor)
-                                .padding(horizontal = 12.dp, vertical = 8.dp),
-                            horizontalAlignment = Alignment.End,
-                        ) {
+                        else -> GlassSurface(shape = bubbleShape, fill = bubbleFill, shadowElevation = 0.dp) {
+                            val pad = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)
                             if (searchQuery.isBlank()) {
-                                MarkdownText(message.text.orEmpty(), color = textColor)
+                                MarkdownText(message.text.orEmpty(), color = textColor, modifier = pad)
                             } else {
-                                Text(highlightQuery(message.text.orEmpty(), searchQuery), color = textColor)
+                                Text(highlightQuery(message.text.orEmpty(), searchQuery), color = textColor, modifier = pad)
                             }
-                            MessageMetaRow(
-                                timestamp = message.timestamp,
-                                fromMe = message.fromMe,
-                                deliveryState = message.deliveryState.takeIf { message.fromMe },
-                                modifier = Modifier.padding(top = 2.dp),
-                            )
                         }
                     }
                 }
