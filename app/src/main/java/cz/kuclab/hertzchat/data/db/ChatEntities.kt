@@ -176,9 +176,14 @@ interface MessageDao {
     @Query("SELECT * FROM messages WHERE fromMe = 1 AND deliveryState IN ('PENDING', 'SENT') ORDER BY timestamp ASC")
     suspend fun findUnsent(): List<MessageEntity>
 
-    /** Recent incoming messages across all threads - the chat list diffs these against [ThreadReadState] to compute unread dots. Capped, so a huge history can't stall the list. */
-    @Query("SELECT * FROM messages WHERE fromMe = 0 ORDER BY timestamp DESC LIMIT 500")
-    fun observeRecentIncoming(): Flow<List<MessageEntity>>
+    /**
+     * Recent messages across all threads, incoming and outgoing alike. The chat list
+     * derives both the per-row preview and the unread dots from this one flow - it must
+     * re-emit on our own sends too, or the preview freezes the moment we write first.
+     * Capped, so a huge history can't stall the list.
+     */
+    @Query("SELECT * FROM messages ORDER BY timestamp DESC LIMIT 500")
+    fun observeRecent(): Flow<List<MessageEntity>>
 
     /** Case-insensitive substring search within one thread, for in-chat find. */
     @Query("SELECT * FROM messages WHERE contactId = :threadId AND text LIKE '%' || :query || '%' ESCAPE '\\' ORDER BY timestamp ASC")

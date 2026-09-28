@@ -67,19 +67,24 @@ class ChatListViewModel @Inject constructor(
     val items = combine(
         contactDao.observeContacts(),
         groupDao.observeGroups(),
-        messageDao.observeRecentIncoming(),
+        messageDao.observeRecent(),
         readStateDao.observeAll(),
-    ) { contacts, groups, recentIncoming, readStates ->
+    ) { contacts, groups, recent, readStates ->
         val seenByThread = readStates.associate { it.threadId to it.lastSeenAt }
-        val unreadByThread = recentIncoming
-            .filter { (seenByThread[it.contactId] ?: 0L) < it.timestamp }
+        val unreadByThread = recent
+            .filter { !it.fromMe && (seenByThread[it.contactId] ?: 0L) < it.timestamp }
             .groupingBy { it.contactId }
             .eachCount()
+        // Newest message per thread, straight from the observed recent list - no
+        // per-row queries, and outgoing sends refresh the preview the same way
+        // incoming ones do.
+        val lastByThread = recent.groupBy { it.contactId }
+            .mapValues { (_, messages) -> messages.maxByOrNull { it.timestamp } }
 
         val myContactId = identityKeyManager.contactId()
         val selfAvatarPath = mediaStorage.selfAvatarFile().takeIf { it.exists() }?.absolutePath
         val contactItems = contacts.map { contact ->
-            val last = messageDao.lastMessage(contact.contactId)
+            val last = lastByThread[contact.contactId]
             val isSelf = contact.contactId == myContactId
             ChatListItem(
                 contactId = contact.contactId,
@@ -89,7 +94,7 @@ class ChatListViewModel @Inject constructor(
                 avatarPath = if (isSelf) selfAvatarPath else contact.avatarPath,
                 pinned = contact.pinned,
                 pinOrder = contact.pinOrder,
-                lastMessagePreview = last?.text,
+                lastMessagePreview = last?.let { previewFor(it) },
                 lastMessageAt = last?.timestamp,
                 isSelf = isSelf,
                 unreadCount = unreadByThread[contact.contactId] ?: 0,
@@ -97,14 +102,14 @@ class ChatListViewModel @Inject constructor(
         }
 
         val groupItems = groups.map { group ->
-            val last = messageDao.lastMessage(group.groupId)
+            val last = lastByThread[group.groupId]
             ChatListItem(
                 contactId = group.groupId,
                 nickname = group.name,
                 avatarPath = null,
                 pinned = group.pinned,
                 pinOrder = group.pinOrder,
-                lastMessagePreview = last?.text,
+                lastMessagePreview = last?.let { previewFor(it) },
                 lastMessageAt = last?.timestamp,
                 kind = ChatListItemKind.GROUP,
                 unreadCount = unreadByThread[group.groupId] ?: 0,
@@ -155,6 +160,21 @@ class ChatListViewModel @Inject constructor(
     fun block(contactId: String) {
         viewModelScope.launch { contactDao.setBlocked(contactId, true) }
     }
+}
+
+/**
+ * One-line preview of a thread's newest message: the text itself, or a label for
+ * media (which carries no text) - prefixed with who it came from.
+ */
+internal fun previewFor(message: cz.kuclab.hertzchat.data.db.MessageEntity): String {
+    val body = when (message.type) {
+        cz.kuclab.hertzchat.data.db.MessageType.TEXT -> message.text.orEmpty().lines().firstOrNull().orEmpty()
+        cz.kuclab.hertzchat.data.db.MessageType.IMAGE -> "Fotka"
+        cz.kuclab.hertzchat.data.db.MessageType.VIDEO -> "Video"
+        cz.kuclab.hertzchat.data.db.MessageType.VOICE -> "Hlasová zpráva"
+        cz.kuclab.hertzchat.data.db.MessageType.FILE -> message.mediaFileName ?: "Soubor"
+    }
+    return if (message.fromMe) "Ty: $body" else body
 }
 
 /**

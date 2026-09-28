@@ -14,8 +14,6 @@ import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material.icons.filled.Pause
-import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -87,7 +85,9 @@ fun HoldToRecordButton(
                 )
             },
     ) {
-        Icon(HertzIcons.Mic, contentDescription = "Podrž pro nahrání hlasovky", tint = iconTint)
+        // Same 22dp as every other circle glyph - the 24dp default sat visibly
+        // heavier than its attach/send siblings.
+        Icon(HertzIcons.Mic, contentDescription = "Podrž pro nahrání hlasovky", tint = iconTint, modifier = Modifier.size(22.dp))
     }
 }
 
@@ -188,7 +188,7 @@ fun VoicePreviewContent(
         }
         IconButton(onClick = ::toggle, modifier = Modifier.size(38.dp)) {
             Icon(
-                if (isPlaying) Icons.Filled.Pause else Icons.Filled.PlayArrow,
+                if (isPlaying) HertzIcons.Pause else HertzIcons.Play,
                 contentDescription = if (isPlaying) "Pozastavit" else "Přehrát",
                 tint = MaterialTheme.colorScheme.primary,
             )

@@ -16,13 +16,10 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.InsertDriveFile
-import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.Download
-import androidx.compose.material.icons.filled.Pause
-import androidx.compose.material.icons.filled.PlayArrow
-import androidx.compose.material.icons.filled.PlayCircle
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -54,8 +51,13 @@ import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.ui.PlayerView
 import coil.compose.AsyncImage
 import cz.kuclab.hertzchat.data.db.MessageEntity
+import cz.kuclab.hertzchat.ui.common.GlassCircleButton
+import cz.kuclab.hertzchat.ui.common.GlassSurface
+import cz.kuclab.hertzchat.ui.common.HertzGlass
 import cz.kuclab.hertzchat.ui.common.Strands
+import cz.kuclab.hertzchat.ui.theme.HertzIcons
 import cz.kuclab.hertzchat.ui.theme.HertzShapes
+import dev.chrisbanes.haze.haze
 import java.io.File
 import kotlin.math.max
 import kotlin.math.min
@@ -113,7 +115,14 @@ fun VideoBubble(
             )
             Box(modifier = Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.25f)))
         }
-        Icon(Icons.Filled.PlayCircle, contentDescription = "Přehrát video", tint = Color.White, modifier = Modifier.size(56.dp))
+        // The bare stroke glyph would drown in a bright thumbnail - a dimmed
+        // disc behind it keeps the play button readable on any frame.
+        Box(
+            modifier = Modifier.size(64.dp).background(Color.Black.copy(alpha = 0.55f), CircleShape),
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(HertzIcons.Play, contentDescription = "Přehrát video", tint = Color.White, modifier = Modifier.size(32.dp))
+        }
         message.mediaDurationMs?.let { duration ->
             Text(
                 formatVoiceDuration(duration),
@@ -140,7 +149,7 @@ private fun DownloadBadge(onClick: () -> Unit, modifier: Modifier = Modifier) {
         onClick = onClick,
         modifier = modifier.padding(4.dp).size(36.dp).background(Color.Black.copy(alpha = 0.55f), HertzShapes.Pill),
     ) {
-        Icon(Icons.Filled.Download, contentDescription = "Stáhnout", tint = Color.White, modifier = Modifier.size(20.dp))
+        Icon(HertzIcons.Download, contentDescription = "Stáhnout", tint = Color.White, modifier = Modifier.size(20.dp))
     }
 }
 
@@ -184,13 +193,15 @@ fun VoiceBubble(message: MessageEntity, onSurface: Color, accent: Color, onDownl
                 },
         ) {
             Icon(
-                if (isPlaying) Icons.Filled.Pause else Icons.Filled.PlayArrow,
+                if (isPlaying) HertzIcons.Pause else HertzIcons.Play,
                 contentDescription = if (isPlaying) "Pozastavit" else "Přehrát",
                 tint = accent,
                 modifier = Modifier.size(28.dp),
             )
         }
-        Column(modifier = Modifier.padding(start = 10.dp).weight(1f)) {
+        // Mirrored gaps on both sides of the strands - the old start-only inset
+        // pushed the whole wave visibly off-centre inside the bubble.
+        Column(modifier = Modifier.padding(horizontal = 8.dp).weight(1f)) {
             Strands(
                 level = level,
                 color = accent,
@@ -204,7 +215,7 @@ fun VoiceBubble(message: MessageEntity, onSurface: Color, accent: Color, onDownl
             )
         }
         IconButton(onClick = { onDownload(message) }, modifier = Modifier.size(32.dp)) {
-            Icon(Icons.Filled.Download, contentDescription = "Stáhnout hlasovku", tint = accent, modifier = Modifier.size(20.dp))
+            Icon(HertzIcons.Download, contentDescription = "Stáhnout hlasovku", tint = accent, modifier = Modifier.size(20.dp))
         }
     }
 }
@@ -284,37 +295,55 @@ private fun MediaViewerDialog(
 ) {
     Dialog(onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false)) {
         val pagerState = rememberPagerState(initialPage = startIndex.coerceIn(media.indices), pageCount = { media.size })
+        // Own Haze state: both the source and the frosted bar live inside this
+        // dialog window, so the blur works exactly like on a normal screen.
+        val hazeState = remember { dev.chrisbanes.haze.HazeState() }
         Box(modifier = Modifier.fillMaxSize().background(Color.Black)) {
-            HorizontalPager(state = pagerState, modifier = Modifier.fillMaxSize()) { page ->
-                val item = media[page]
-                when (item.type) {
-                    cz.kuclab.hertzchat.data.db.MessageType.VIDEO -> ViewerVideoPage(
-                        path = item.mediaPath,
-                        active = pagerState.currentPage == page,
-                    )
-                    else -> ViewerImagePage(path = item.mediaPath)
+            Box(modifier = Modifier.fillMaxSize().haze(hazeState, HertzGlass.hazeStyle())) {
+                HorizontalPager(state = pagerState, modifier = Modifier.fillMaxSize()) { page ->
+                    val item = media[page]
+                    when (item.type) {
+                        cz.kuclab.hertzchat.data.db.MessageType.VIDEO -> ViewerVideoPage(
+                            path = item.mediaPath,
+                            active = pagerState.currentPage == page,
+                        )
+                        else -> ViewerImagePage(path = item.mediaPath)
+                    }
                 }
             }
+            // The same floating frosted bar as the file viewer - back circle,
+            // title pill, download circle - over the fullscreen media.
             Row(
-                modifier = Modifier.align(Alignment.TopCenter).fillMaxWidth().padding(8.dp),
+                modifier = Modifier.align(Alignment.TopCenter).fillMaxWidth().padding(horizontal = 12.dp).padding(top = 4.dp, bottom = 8.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                IconButton(onClick = onDismiss) {
-                    Icon(Icons.Filled.Close, contentDescription = "Zavřít", tint = Color.White)
-                }
-                if (media.size > 1) {
+                GlassCircleButton(
+                    icon = Icons.AutoMirrored.Filled.ArrowBack,
+                    contentDescription = "Zavřít",
+                    onClick = onDismiss,
+                    hazeState = hazeState,
+                )
+                GlassSurface(
+                    shape = HertzShapes.Pill,
+                    hazeState = hazeState,
+                    modifier = Modifier.weight(1f).padding(horizontal = 8.dp),
+                ) {
                     Text(
-                        "${pagerState.currentPage + 1} / ${media.size}",
+                        if (media.size > 1) "${pagerState.currentPage + 1} / ${media.size}" else "Náhled",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        // Always white: this bar floats over photos/video, never
+                        // over the theme background the glass tint assumes.
                         color = Color.White,
-                        fontWeight = FontWeight.SemiBold,
-                        modifier = Modifier.weight(1f).padding(start = 8.dp),
+                        modifier = Modifier.align(Alignment.Center).padding(vertical = 11.dp, horizontal = 16.dp),
                     )
-                } else {
-                    androidx.compose.foundation.layout.Spacer(modifier = Modifier.weight(1f))
                 }
-                IconButton(onClick = { media.getOrNull(pagerState.currentPage)?.let(onDownload) }) {
-                    Icon(Icons.Filled.Download, contentDescription = "Stáhnout", tint = Color.White)
-                }
+                GlassCircleButton(
+                    icon = HertzIcons.Download,
+                    contentDescription = "Stáhnout",
+                    onClick = { media.getOrNull(pagerState.currentPage)?.let(onDownload) },
+                    hazeState = hazeState,
+                )
             }
         }
     }
@@ -444,7 +473,7 @@ fun FileBubble(
             tint = onSurface,
             modifier = Modifier.size(28.dp),
         )
-        Column(modifier = Modifier.padding(start = 10.dp).weight(1f)) {
+        Column(modifier = Modifier.padding(horizontal = 8.dp).weight(1f)) {
             Text(name, color = onSurface, maxLines = 1)
             file?.takeIf { it.exists() }?.let {
                 Text(
@@ -455,7 +484,7 @@ fun FileBubble(
             }
         }
         IconButton(onClick = { onDownload(message) }, modifier = Modifier.size(32.dp)) {
-            Icon(Icons.Filled.Download, contentDescription = "Stáhnout soubor", tint = onSurface, modifier = Modifier.size(20.dp))
+            Icon(HertzIcons.Download, contentDescription = "Stáhnout soubor", tint = onSurface, modifier = Modifier.size(20.dp))
         }
     }
 }

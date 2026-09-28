@@ -59,6 +59,7 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import cz.kuclab.hertzchat.ui.common.GlassBar
 import cz.kuclab.hertzchat.ui.common.GlassCircleButton
+import cz.kuclab.hertzchat.ui.theme.HertzIcons
 import cz.kuclab.hertzchat.ui.common.HertzGlass
 import dev.chrisbanes.haze.HazeState
 import dev.chrisbanes.haze.haze
@@ -143,7 +144,7 @@ fun FileViewerScreen(onBack: () -> Unit, viewModel: FileViewerViewModel = hiltVi
                 actions = {
                     if (file != null) {
                         GlassCircleButton(
-                            icon = Icons.Filled.Download,
+                            icon = HertzIcons.Download,
                             contentDescription = "Stáhnout",
                             onClick = viewModel::download,
                             hazeState = hazeState,
@@ -344,7 +345,7 @@ private fun UnsupportedContent(name: String, reason: String, onOpenExternal: (()
         )
         if (onDownload != null) {
             Button(onClick = onDownload, modifier = Modifier.fillMaxWidth()) {
-                Icon(Icons.Filled.Download, contentDescription = null, modifier = Modifier.size(18.dp))
+                Icon(HertzIcons.Download, contentDescription = null, modifier = Modifier.size(18.dp))
                 Text("  Stáhnout")
             }
         }

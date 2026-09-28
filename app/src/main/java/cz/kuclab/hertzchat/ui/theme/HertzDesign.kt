@@ -18,9 +18,13 @@ object HertzShapes {
     /** Dialogs and bottom sheets. */
     val Dialog = RoundedCornerShape(28.dp)
 
-    /** Message bubbles - pure pills; side is carried by alignment and tint, not a sharp corner. */
-    val BubbleMine = RoundedCornerShape(percent = 50)
-    val BubbleTheirs = RoundedCornerShape(percent = 50)
+    /**
+     * Message bubbles - a fixed 22dp radius, a touch crisper than the old pill. Deliberately
+     * *not* percent-based: a 50% pill turns paragraph bubbles into round beans whose curve
+     * eats into the text corners. Side is carried by alignment and tint, not shape.
+     */
+    val BubbleMine = RoundedCornerShape(22.dp)
+    val BubbleTheirs = RoundedCornerShape(22.dp)
 
     /** Fully round: input pill, chips, FABs, icon buttons, avatars. */
     val Pill = RoundedCornerShape(percent = 50)

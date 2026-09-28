@@ -40,10 +40,10 @@ import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import coil.compose.AsyncImage
-import cz.kuclab.hertzchat.ui.chat.PhotoEditorDialog
 import cz.kuclab.hertzchat.ui.chat.PhotoSource
 import cz.kuclab.hertzchat.ui.common.AppCard
 import cz.kuclab.hertzchat.ui.common.GlassBar
+import cz.kuclab.hertzchat.ui.common.glassEdge
 
 @Composable
 fun ProfileScreen(onBack: () -> Unit, onOpenQrExport: () -> Unit, viewModel: ProfileViewModel = hiltViewModel()) {
@@ -63,36 +63,40 @@ fun ProfileScreen(onBack: () -> Unit, onOpenQrExport: () -> Unit, viewModel: Pro
             verticalArrangement = Arrangement.spacedBy(20.dp),
         ) {
             Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
-                Box(
-                    modifier = Modifier
-                        .size(112.dp)
-                        .clip(CircleShape)
-                        .background(MaterialTheme.colorScheme.primaryContainer)
-                        .clickable { pickImage.launch("image/*") },
-                    contentAlignment = Alignment.Center,
-                ) {
-                    val avatarFile = remember(avatarVersion) { viewModel.avatarFile() }
-                    if (avatarFile != null) {
-                        AsyncImage(
-                            model = avatarFile,
-                            contentDescription = "Profilová fotka",
-                            contentScale = ContentScale.Crop,
-                            modifier = Modifier.fillMaxSize(),
-                        )
-                    } else {
-                        Icon(
-                            Icons.Filled.Person,
-                            contentDescription = null,
-                            modifier = Modifier.size(56.dp),
-                            tint = MaterialTheme.colorScheme.onPrimaryContainer,
-                        )
+                // The change badge is a *sibling* of the clipped photo, not a child:
+                // inside the circle it got eaten by the clip and rendered cut off.
+                Box(modifier = Modifier.size(112.dp).clickable { pickImage.launch("image/*") }) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .clip(CircleShape)
+                            .background(MaterialTheme.colorScheme.primaryContainer),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        val avatarFile = remember(avatarVersion) { viewModel.avatarFile() }
+                        if (avatarFile != null) {
+                            AsyncImage(
+                                model = avatarFile,
+                                contentDescription = "Profilová fotka",
+                                contentScale = ContentScale.Crop,
+                                modifier = Modifier.fillMaxSize(),
+                            )
+                        } else {
+                            Icon(
+                                Icons.Filled.Person,
+                                contentDescription = null,
+                                modifier = Modifier.size(56.dp),
+                                tint = MaterialTheme.colorScheme.onPrimaryContainer,
+                            )
+                        }
                     }
                     Box(
                         modifier = Modifier
                             .align(Alignment.BottomEnd)
                             .size(32.dp)
                             .clip(CircleShape)
-                            .background(MaterialTheme.colorScheme.primary),
+                            .background(MaterialTheme.colorScheme.primary)
+                            .glassEdge(CircleShape),
                         contentAlignment = Alignment.Center,
                     ) {
                         Icon(
@@ -142,7 +146,7 @@ fun ProfileScreen(onBack: () -> Unit, onOpenQrExport: () -> Unit, viewModel: Pro
     }
 
     editingUri?.let { uri ->
-        PhotoEditorDialog(
+        AvatarCropDialog(
             source = PhotoSource.UriSource(uri),
             onCancel = { editingUri = null },
             onConfirm = { bytes ->

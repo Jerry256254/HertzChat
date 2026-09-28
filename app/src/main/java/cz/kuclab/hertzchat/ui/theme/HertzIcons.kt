@@ -82,6 +82,128 @@ object HertzIcons {
         }.build()
     }
 
+    /** Tabler `play` (2dp outline) - voice bubbles, previews, video overlay. */
+    val Play: ImageVector by lazy {
+        ImageVector.Builder("HertzPlay", 24.dp, 24.dp, 24f, 24f).apply {
+            addPath(
+                pathData = PathParser().parsePathString(
+                    "M5 5v14a2 2 0 0 0 2.75 1.84L20 13.74a2 2 0 0 0 0-3.5L7.75 3.14A2 2 0 0 0 5 4.89",
+                ).toNodes(),
+                fill = null,
+                stroke = SolidColor(Color.Black),
+                strokeLineWidth = 2f,
+                strokeLineCap = StrokeCap.Round,
+                strokeLineJoin = StrokeJoin.Round,
+            )
+        }.build()
+    }
+
+    /**
+     * Tabler `pause` (2dp outline) - the playing state everywhere [Play] appears.
+     * Upstream draws two `<rect rx=2>`; rects spelled out as rounded paths here.
+     */
+    val Pause: ImageVector by lazy {
+        ImageVector.Builder("HertzPause", 24.dp, 24.dp, 24f, 24f).apply {
+            listOf(
+                "M6 4h2a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2z",
+                "M16 4h2a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-2a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2z",
+            ).forEach { data ->
+                addPath(
+                    pathData = PathParser().parsePathString(data).toNodes(),
+                    fill = null,
+                    stroke = SolidColor(Color.Black),
+                    strokeLineWidth = 2f,
+                    strokeLineCap = StrokeCap.Round,
+                    strokeLineJoin = StrokeJoin.Round,
+                )
+            }
+        }.build()
+    }
+
+    /** Tabler `download` (2dp outline) - every save-to-device button on media. */
+    val Download: ImageVector by lazy {
+        ImageVector.Builder("HertzDownload", 24.dp, 24.dp, 24f, 24f).apply {
+            addPath(
+                pathData = PathParser().parsePathString(
+                    "M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2M7 11l5 5l5-5m-5-7v12",
+                ).toNodes(),
+                fill = null,
+                stroke = SolidColor(Color.Black),
+                strokeLineWidth = 2f,
+                strokeLineCap = StrokeCap.Round,
+                strokeLineJoin = StrokeJoin.Round,
+            )
+        }.build()
+    }
+
+    /** Tabler `phone` (2dp outline) - start a voice call. */
+    val Call: ImageVector by lazy {
+        ImageVector.Builder("HertzCall", 24.dp, 24.dp, 24f, 24f).apply {
+            addPath(
+                pathData = PathParser().parsePathString(
+                    "M5 4h4l2 5l-2.5 1.5a11 11 0 0 0 5 5L15 13l5 2v4a2 2 0 0 1-2 2A16 16 0 0 1 3 6a2 2 0 0 1 2-2",
+                ).toNodes(),
+                fill = null,
+                stroke = SolidColor(Color.Black),
+                strokeLineWidth = 2f,
+                strokeLineCap = StrokeCap.Round,
+                strokeLineJoin = StrokeJoin.Round,
+            )
+        }.build()
+    }
+
+    /** Tabler `phone-off` (2dp outline) - hang up / decline a call. */
+    val CallEnd: ImageVector by lazy {
+        ImageVector.Builder("HertzCallEnd", 24.dp, 24.dp, 24f, 24f).apply {
+            addPath(
+                pathData = PathParser().parsePathString(
+                    "M3 21L21 3M5.831 14.161A15.95 15.95 0 0 1 3 6a2 2 0 0 1 2-2h4l2 5l-2.5 1.5q.162.33.345.645m1.751 2.277A11 11 0 0 0 13.5 15.5L15 13l5 2v4a2 2 0 0 1-2 2a15.96 15.96 0 0 1-10.344-4.657",
+                ).toNodes(),
+                fill = null,
+                stroke = SolidColor(Color.Black),
+                strokeLineWidth = 2f,
+                strokeLineCap = StrokeCap.Round,
+                strokeLineJoin = StrokeJoin.Round,
+            )
+        }.build()
+    }
+
+    /** Tabler `microphone-off` (2dp outline) - the muted state on a call. */
+    val MicOff: ImageVector by lazy {
+        ImageVector.Builder("HertzMicOff", 24.dp, 24.dp, 24f, 24f).apply {
+            listOf(
+                "m3 3l18 18",
+                "M9 5a3 3 0 0 1 6 0v5a3 3 0 0 1-.13.874m-2 2A3 3 0 0 1 9 10.002v-1",
+                "M5 10a7 7 0 0 0 10.846 5.85m2-2A6.97 6.97 0 0 0 18.998 10M8 21h8m-4-4v4",
+            ).forEach { data ->
+                addPath(
+                    pathData = PathParser().parsePathString(data).toNodes(),
+                    fill = null,
+                    stroke = SolidColor(Color.Black),
+                    strokeLineWidth = 2f,
+                    strokeLineCap = StrokeCap.Round,
+                    strokeLineJoin = StrokeJoin.Round,
+                )
+            }
+        }.build()
+    }
+
+    /** Tabler `volume` (2dp outline) - speaker on a call. */
+    val Speaker: ImageVector by lazy {
+        ImageVector.Builder("HertzSpeaker", 24.dp, 24.dp, 24f, 24f).apply {
+            addPath(
+                pathData = PathParser().parsePathString(
+                    "M15 8a5 5 0 0 1 0 8m2.7-11a9 9 0 0 1 0 14M6 15H4a1 1 0 0 1-1-1v-4a1 1 0 0 1 1-1h2l3.5-4.5A.8.8 0 0 1 11 5v14a.8.8 0 0 1-1.5.5z",
+                ).toNodes(),
+                fill = null,
+                stroke = SolidColor(Color.Black),
+                strokeLineWidth = 2f,
+                strokeLineCap = StrokeCap.Round,
+                strokeLineJoin = StrokeJoin.Round,
+            )
+        }.build()
+    }
+
     /** Lucide `settings` (2dp outline) - the settings button. */
     val Settings: ImageVector by lazy {
         ImageVector.Builder("HertzSettings", 24.dp, 24.dp, 24f, 24f).apply {

@@ -84,7 +84,7 @@ import cz.kuclab.hertzchat.ui.common.GlassDialogTheme
 import cz.kuclab.hertzchat.ui.common.GlassSurface
 import cz.kuclab.hertzchat.ui.common.HertzGlass
 import cz.kuclab.hertzchat.ui.common.WindowBlurBehind
-import cz.kuclab.hertzchat.ui.common.MarkdownText
+import cz.kuclab.hertzchat.ui.common.CollapsibleMessageText
 import cz.kuclab.hertzchat.ui.common.ThreadInputBar
 import cz.kuclab.hertzchat.ui.common.highlightQuery
 import cz.kuclab.hertzchat.ui.theme.HertzIcons
@@ -98,7 +98,7 @@ import kotlin.math.sqrt
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun ChatScreen(contactId: String, onBack: () -> Unit, onOpenFile: (String) -> Unit, viewModel: ChatViewModel = hiltViewModel()) {
+fun ChatScreen(contactId: String, onBack: () -> Unit, onOpenFile: (String) -> Unit, onOpenCall: () -> Unit, viewModel: ChatViewModel = hiltViewModel()) {
     val state by viewModel.uiState.collectAsState()
     val draft by viewModel.draft.collectAsState()
     val nickname by viewModel.contactNickname.collectAsState()
@@ -263,6 +263,7 @@ fun ChatScreen(contactId: String, onBack: () -> Unit, onOpenFile: (String) -> Un
                     nickname = if (viewModel.isSelf) "$nickname (Ty)" else nickname,
                     avatarPath = avatarPath,
                     onBack = onBack,
+                    onCall = if (viewModel.isSelf) null else onOpenCall,
                     onOpenDetails = { detailsOpen = true },
                     overflowOpen = overflowOpen,
                     onOverflowChange = { overflowOpen = it },
@@ -396,6 +397,7 @@ private fun FloatingChatBar(
     nickname: String,
     avatarPath: String?,
     onBack: () -> Unit,
+    onCall: (() -> Unit)?,
     onOpenDetails: () -> Unit,
     overflowOpen: Boolean,
     onOverflowChange: (Boolean) -> Unit,
@@ -459,6 +461,15 @@ private fun FloatingChatBar(
                 )
             }
         }
+        if (onCall != null) {
+            GlassCircleButton(
+                icon = HertzIcons.Call,
+                contentDescription = "Zavolat",
+                onClick = onCall,
+                hazeState = hazeState,
+                modifier = Modifier.padding(end = 8.dp),
+            )
+        }
         Box {
             GlassCircleButton(
                 icon = Icons.Filled.MoreVert,
@@ -519,9 +530,9 @@ private fun MessageBubble(
                     fill = bubbleFill,
                     shadowElevation = 0.dp,
                 ) {
-                    val pad = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)
+                    val pad = Modifier.padding(horizontal = 14.dp, vertical = 9.dp)
                     if (searchQuery.isBlank()) {
-                        MarkdownText(message.text.orEmpty(), color = textColor, modifier = pad)
+                        CollapsibleMessageText(message.text.orEmpty(), color = textColor, modifier = pad)
                     } else {
                         Text(highlightQuery(message.text.orEmpty(), searchQuery), color = textColor, modifier = pad)
                     }

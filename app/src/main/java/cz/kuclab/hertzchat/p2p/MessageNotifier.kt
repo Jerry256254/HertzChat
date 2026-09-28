@@ -45,6 +45,7 @@ class MessageNotifier @Inject constructor(
                 when (event) {
                     is ChatServiceEvent.MessageReceived -> notifyMessage(event.threadId, event.message)
                     is ChatServiceEvent.FriendRequestReceived -> notifyFriendRequest(event.request.nickname)
+                    is ChatServiceEvent.CallSignaling -> notifyCall(event.contactId, event.payload)
                 }
             }
         }
@@ -77,6 +78,18 @@ class MessageNotifier @Inject constructor(
 
     private fun notifyFriendRequest(nickname: String) {
         show(("friend_request_$nickname").hashCode(), "Nová žádost o přátelství", "$nickname tě chce přidat")
+    }
+
+    /**
+     * A ringing call while the app is in the background - tapping it opens the app,
+     * where navigation picks the ringing call up automatically. In the foreground
+     * the call screen appears on its own and a notification would just double it.
+     */
+    private suspend fun notifyCall(contactId: String, payload: cz.kuclab.hertzchat.data.model.ChatPayload) {
+        if (payload.kind != cz.kuclab.hertzchat.data.model.PayloadKind.CALL_OFFER) return
+        if (activeChatTracker.appInForeground.value) return
+        val nickname = contactDao.find(contactId)?.nickname ?: "Neznámý"
+        show(("call_$contactId").hashCode(), "Příchozí hovor", "$nickname ti volá")
     }
 
     private fun show(id: Int, title: String, text: String) {

@@ -21,11 +21,11 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.RotateLeft
 import androidx.compose.material.icons.automirrored.filled.RotateRight
 import androidx.compose.material.icons.filled.Brush
 import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Crop
 import androidx.compose.material.icons.filled.GridOn
 import androidx.compose.material.icons.filled.Undo
@@ -35,7 +35,6 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
@@ -62,6 +61,9 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import cz.kuclab.hertzchat.media.ImageEditor
+import cz.kuclab.hertzchat.ui.common.GlassCircleButton
+import cz.kuclab.hertzchat.ui.common.GlassSurface
+import cz.kuclab.hertzchat.ui.theme.HertzShapes
 
 /** Where the photo came from - gallery/attachment (Uri) or the in-app camera (bytes). */
 sealed interface PhotoSource {
@@ -172,18 +174,35 @@ fun PhotoEditorDialog(source: PhotoSource, jpegQuality: Int = 95, onCancel: () -
                 .background(Color.Black)
                 .padding(12.dp),
         ) {
+            // The app's floating glass bar, not a plain icon row - same chrome
+            // as every viewer, over the black editing surface.
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                IconButton(onClick = onCancel) {
-                    Icon(Icons.Filled.Close, contentDescription = "Zrušit", tint = Color.White)
+                GlassCircleButton(
+                    icon = Icons.AutoMirrored.Filled.ArrowBack,
+                    contentDescription = "Zrušit",
+                    onClick = onCancel,
+                )
+                GlassSurface(
+                    shape = HertzShapes.Pill,
+                    modifier = Modifier.weight(1f).padding(horizontal = 8.dp),
+                ) {
+                    Text(
+                        "Upravit fotku",
+                        color = Color.White,
+                        fontWeight = FontWeight.SemiBold,
+                        style = MaterialTheme.typography.titleMedium,
+                        modifier = Modifier.align(Alignment.Center).padding(vertical = 11.dp, horizontal = 16.dp),
+                    )
                 }
-                Text("Upravit fotku", color = Color.White, fontWeight = FontWeight.SemiBold)
-                IconButton(onClick = { onConfirm(ImageEditor.toJpegBytes(commitBitmap(), jpegQuality)) }) {
-                    Icon(Icons.Filled.Check, contentDescription = "Přidat", tint = Color.White)
-                }
+                GlassCircleButton(
+                    icon = Icons.Filled.Check,
+                    contentDescription = "Přidat",
+                    onClick = { onConfirm(ImageEditor.toJpegBytes(commitBitmap(), jpegQuality)) },
+                    accent = true,
+                )
             }
 
             var liveStroke by remember { mutableStateOf<EditorStroke?>(null) }
@@ -279,21 +298,19 @@ fun PhotoEditorDialog(source: PhotoSource, jpegQuality: Int = 95, onCancel: () -
                 }
             }
 
-            Row(
-                modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
-                horizontalArrangement = Arrangement.SpaceEvenly,
-            ) {
-                ToolButton(Icons.Filled.Crop, "Ořez", tool == EditorTool.CROP) { tool = EditorTool.CROP }
-                ToolButton(Icons.Filled.Brush, "Kreslení", tool == EditorTool.DRAW) { tool = EditorTool.DRAW }
-                ToolButton(Icons.Filled.GridOn, "Cenzura", tool == EditorTool.CENSOR) { tool = EditorTool.CENSOR }
-            }
-
-            Row(modifier = Modifier.fillMaxWidth().padding(top = 8.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                TextButton(onClick = onCancel, modifier = Modifier.weight(1f)) { Text("Zrušit", color = Color.White) }
-                androidx.compose.material3.Button(
-                    onClick = { onConfirm(ImageEditor.toJpegBytes(commitBitmap(), jpegQuality)) },
-                    modifier = Modifier.weight(1f),
-                ) { Text("Přidat") }
+            // One frosted tool pill instead of loose icons - and no duplicate
+            // bottom buttons, the top bar already confirms and cancels.
+            Box(modifier = Modifier.fillMaxWidth().padding(top = 8.dp), contentAlignment = Alignment.Center) {
+                GlassSurface(shape = HertzShapes.Pill) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        ToolButton(Icons.Filled.Crop, "Ořez", tool == EditorTool.CROP) { tool = EditorTool.CROP }
+                        ToolButton(Icons.Filled.Brush, "Kreslení", tool == EditorTool.DRAW) { tool = EditorTool.DRAW }
+                        ToolButton(Icons.Filled.GridOn, "Cenzura", tool == EditorTool.CENSOR) { tool = EditorTool.CENSOR }
+                    }
+                }
             }
         }
     }

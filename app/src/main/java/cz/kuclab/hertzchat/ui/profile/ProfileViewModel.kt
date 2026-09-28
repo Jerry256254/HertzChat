@@ -1,7 +1,6 @@
 package cz.kuclab.hertzchat.ui.profile
 
 import androidx.lifecycle.ViewModel
-import androidx.lifecycle.viewModelScope
 import cz.kuclab.hertzchat.crypto.IdentityKeyManager
 import cz.kuclab.hertzchat.data.repository.P2pChatService
 import cz.kuclab.hertzchat.media.MediaStorage
@@ -10,7 +9,6 @@ import java.io.File
 import javax.inject.Inject
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.launch
 
 @HiltViewModel
 class ProfileViewModel @Inject constructor(
@@ -45,10 +43,9 @@ class ProfileViewModel @Inject constructor(
     fun saveNickname() {
         val value = _nickname.value.trim()
         if (value.isEmpty() || value == _committedNickname.value) return
-        identityKeyManager.nickname = value
+        p2pChatService.updateMyNickname(value)
         _nickname.value = value
         _committedNickname.value = value
-        viewModelScope.launch { p2pChatService.broadcastProfile() }
     }
 
     fun onAvatarPicked(jpegBytes: ByteArray) {

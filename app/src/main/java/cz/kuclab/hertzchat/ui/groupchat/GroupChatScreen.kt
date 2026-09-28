@@ -81,7 +81,7 @@ import cz.kuclab.hertzchat.ui.common.GlassDialogTheme
 import cz.kuclab.hertzchat.ui.common.GlassSurface
 import cz.kuclab.hertzchat.ui.common.HertzGlass
 import cz.kuclab.hertzchat.ui.common.WindowBlurBehind
-import cz.kuclab.hertzchat.ui.common.MarkdownText
+import cz.kuclab.hertzchat.ui.common.CollapsibleMessageText
 import cz.kuclab.hertzchat.ui.common.ThreadInputBar
 import cz.kuclab.hertzchat.ui.common.highlightQuery
 import cz.kuclab.hertzchat.ui.theme.HertzIcons
@@ -666,9 +666,9 @@ private fun GroupMessageBubble(
                             FileBubble(message, onSurface = textColor, onOpenFile = onOpenFile, onDownload = onDownload)
                         }
                         else -> GlassSurface(shape = bubbleShape, fill = bubbleFill, shadowElevation = 0.dp) {
-                            val pad = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)
+                            val pad = Modifier.padding(horizontal = 14.dp, vertical = 9.dp)
                             if (searchQuery.isBlank()) {
-                                MarkdownText(message.text.orEmpty(), color = textColor, modifier = pad)
+                                CollapsibleMessageText(message.text.orEmpty(), color = textColor, modifier = pad)
                             } else {
                                 Text(highlightQuery(message.text.orEmpty(), searchQuery), color = textColor, modifier = pad)
                             }

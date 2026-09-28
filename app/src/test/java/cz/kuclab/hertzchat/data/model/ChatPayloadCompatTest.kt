@@ -54,4 +54,28 @@ class ChatPayloadCompatTest {
         assertNull(decoded.profileNickname)
         assertTrue(decoded.groupId == null)
     }
+
+    @Test
+    fun `call signaling and audio round-trip`() {
+        val offer = ChatPayload("c1", 1L, PayloadKind.CALL_OFFER, callId = "call-1")
+        val audio = ChatPayload("c2", 1L, PayloadKind.CALL_AUDIO, callId = "call-1", audioBase64 = "QUJD", audioSeq = 7L)
+        val decodedOffer = json.decodeFromString(ChatPayload.serializer(), json.encodeToString(ChatPayload.serializer(), offer))
+        val decodedAudio = json.decodeFromString(ChatPayload.serializer(), json.encodeToString(ChatPayload.serializer(), audio))
+        assertEquals(PayloadKind.CALL_OFFER, decodedOffer.kind)
+        assertEquals("call-1", decodedOffer.callId)
+        assertEquals(7L, decodedAudio.audioSeq)
+        assertEquals("QUJD", decodedAudio.audioBase64)
+    }
+
+    @Test
+    fun `per-payload profile stamp round-trips and defaults to null for old peers`() {
+        val stamped = ChatPayload("m7", 1L, PayloadKind.TEXT, text = "x", senderNickname = "Jerry", senderAvatarHash = "ab12")
+        val decoded = json.decodeFromString(ChatPayload.serializer(), json.encodeToString(ChatPayload.serializer(), stamped))
+        assertEquals("Jerry", decoded.senderNickname)
+        assertEquals("ab12", decoded.senderAvatarHash)
+        val oldPeer = json.decodeFromString(ChatPayload.serializer(), """{"messageId":"m8","sentAt":1,"kind":"TEXT","text":"x"}""")
+        assertNull(oldPeer.senderNickname)
+        assertNull(oldPeer.senderAvatarHash)
+        assertNull(oldPeer.callId)
+    }
 }

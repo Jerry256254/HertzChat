@@ -12,8 +12,10 @@ object Routes {
     const val QR_IMPORT = "migration/import"
     const val ASSISTANT_CHAT = "assistant_chat"
     const val FILE_VIEWER = "file_viewer/{messageId}"
+    const val CALL = "call/{contactId}"
 
     fun chat(contactId: String) = "chat/$contactId"
     fun groupChat(groupId: String) = "group_chat/$groupId"
     fun fileViewer(messageId: String) = "file_viewer/$messageId"
+    fun call(contactId: String) = "call/$contactId"
 }

@@ -46,6 +46,22 @@ data class ChatPayload(
     val ackForMessageId: String? = null,
     /** Only set for [PayloadKind.PROFILE_UPDATE] - the sender's current nickname; the avatar (if any) follows separately through the AVATAR media flow. */
     val profileNickname: String? = null,
+    /**
+     * Stamped on *every* outgoing payload (see P2pChatService): the sender's current
+     * nickname plus a hash of their current avatar. The receiver applies the nickname
+     * directly and pulls the avatar only when the hash differs - so profiles sync
+     * through ordinary traffic and an offline peer catches up on the next message
+     * instead of missing a one-shot broadcast forever.
+     */
+    val senderNickname: String? = null,
+    /** SHA-256 hex of the sender's downscaled avatar, or null when they have none. */
+    val senderAvatarHash: String? = null,
+    /** Set for every CALL_* kind - the call this signaling or audio packet belongs to. */
+    val callId: String? = null,
+    /** Only set for [PayloadKind.CALL_AUDIO] - base64 of one 20ms 8kHz mono PCM frame. */
+    val audioBase64: String? = null,
+    /** Only set for [PayloadKind.CALL_AUDIO] - sender-side sequence, so the player can drop late packets. */
+    val audioSeq: Long? = null,
 )
 
 // Note: older peers may still send `fromAssistant`, `allowsMistralAccess` or a
@@ -53,4 +69,4 @@ data class ChatPayload(
 // (unknown fields via ignoreUnknownKeys, unknown kinds via the runCatching around decode).
 
 @Serializable
-enum class PayloadKind { TEXT, IMAGE, VIDEO, VOICE, FILE, AVATAR, DELIVERED_ACK, READ_ACK, TYPING, GROUP_INVITE, GROUP_ROSTER_UPDATE, PROFILE_UPDATE, PROFILE_REQUEST }
+enum class PayloadKind { TEXT, IMAGE, VIDEO, VOICE, FILE, AVATAR, DELIVERED_ACK, READ_ACK, TYPING, GROUP_INVITE, GROUP_ROSTER_UPDATE, PROFILE_UPDATE, PROFILE_REQUEST, CALL_OFFER, CALL_ANSWER, CALL_REJECT, CALL_HANGUP, CALL_AUDIO }

@@ -1,6 +1,7 @@
 package cz.kuclab.hertzchat.ui.navigation
 
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.navigation.NavType
@@ -9,6 +10,7 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import androidx.hilt.navigation.compose.hiltViewModel
+import cz.kuclab.hertzchat.ui.call.CallScreen
 import cz.kuclab.hertzchat.ui.chat.ChatScreen
 import cz.kuclab.hertzchat.ui.chatlist.ChatListScreen
 import cz.kuclab.hertzchat.ui.contacts.ContactsScreen
@@ -27,6 +29,16 @@ fun HertzNavHost(viewModel: RootViewModel = hiltViewModel()) {
     val destination = startDestination ?: return
 
     val navController = rememberNavController()
+    // A ringing call surfaces its screen from anywhere - chat list, a thread,
+    // even a cold start through the notification tap.
+    val incoming by viewModel.incomingCall.collectAsState()
+    LaunchedEffect(incoming) {
+        incoming?.let {
+            if (navController.currentBackStackEntry?.destination?.route != Routes.CALL) {
+                navController.navigate(Routes.call(it.contactId))
+            }
+        }
+    }
     NavHost(navController = navController, startDestination = destination) {
         composable(Routes.ONBOARDING) {
             OnboardingScreen(
@@ -57,6 +69,17 @@ fun HertzNavHost(viewModel: RootViewModel = hiltViewModel()) {
                 contactId = contactId,
                 onBack = { navController.popBackStack() },
                 onOpenFile = { messageId -> navController.navigate(Routes.fileViewer(messageId)) },
+                onOpenCall = { navController.navigate(Routes.call(contactId)) },
+            )
+        }
+        composable(
+            route = Routes.CALL,
+            arguments = listOf(navArgument("contactId") { type = NavType.StringType }),
+        ) { backStackEntry ->
+            val contactId = backStackEntry.arguments?.getString("contactId").orEmpty()
+            CallScreen(
+                contactId = contactId,
+                onDone = { navController.popBackStack() },
             )
         }
         composable(

@@ -80,6 +80,8 @@ data class IncomingFriendRequest(val contactId: String, val nickname: String, va
 sealed interface ChatServiceEvent {
     data class FriendRequestReceived(val request: IncomingFriendRequest) : ChatServiceEvent
     data class MessageReceived(val threadId: String, val message: MessageEntity) : ChatServiceEvent
+    /** One decrypted call packet (signaling or audio) - consumed by CallManager, never stored. */
+    data class CallSignaling(val contactId: String, val payload: ChatPayload) : ChatServiceEvent
 }
 
 /**
@@ -112,6 +114,10 @@ class P2pChatService @Inject constructor(
     /** One dial at a time per contact - parallel dials evict each other's connections mid-write (see [sendFrameTo]). */
     private val dialMutexes = java.util.concurrent.ConcurrentHashMap<String, Mutex>()
     private fun dialMutexFor(contactId: String): Mutex = dialMutexes.getOrPut(contactId) { Mutex() }
+    /** Avatar hashes already pull-requested per contact - stops every incoming message re-requesting the same photo while its transfer is still in flight. */
+    private val requestedAvatarHashes = java.util.concurrent.ConcurrentHashMap<String, String>()
+    @Volatile private var cachedAvatarHash: String? = null
+    @Volatile private var cachedAvatarHashValid = false
 
     val i2pState: StateFlow<I2pState> get() = i2pTransport.state
     val bootstrapPercent: StateFlow<Int> get() = i2pTransport.bootstrapPercent
@@ -180,7 +186,13 @@ class P2pChatService @Inject constructor(
             // StateFlow already drops consecutive repeats, so this only fires
             // on genuine transitions into CONNECTED.
             i2pTransport.state.collect { state ->
-                if (state == I2pState.CONNECTED) runCatching { retryPendingNow() }
+                if (state == I2pState.CONNECTED) {
+                    runCatching { retryPendingNow() }
+                    // Just joined the network - push who we are to whoever is
+                    // already online, so a changed name/photo propagates on
+                    // connect instead of waiting for the next message.
+                    broadcastProfile()
+                }
             }
         }
         scope.launch {
@@ -566,9 +578,16 @@ class P2pChatService @Inject constructor(
      * encrypted can't be sent either way, so "not delivered" is the correct outcome,
      * not a crash.
      */
+    /** Sends one call-signaling or audio packet - through the same E2E session as chat, so calls are encrypted exactly like messages. */
+    suspend fun sendCallPayload(contactId: String, payload: ChatPayload): Boolean = trySendPayload(contactId, payload)
+
     private suspend fun trySendPayload(contactId: String, payload: ChatPayload): Boolean = runCatching {
         val contact = contactDao.find(contactId) ?: return false
-        val envelope = cipherFor(contactId).encrypt(json.encodeToString(payload).encodeToByteArray())
+        // Every payload carries who we currently are - the receiver syncs our
+        // nickname/avatar off ordinary traffic, so an offline peer catches up
+        // on the next message instead of missing a one-shot broadcast forever.
+        val stamped = payload.copy(senderNickname = identityKeyManager.nickname, senderAvatarHash = myAvatarHash())
+        val envelope = cipherFor(contactId).encrypt(json.encodeToString(stamped).encodeToByteArray())
         val frameType = if (envelope.isPreKeyMessage) FRAME_PREKEY else FRAME_MESSAGE
         sendFrameTo(contactId, contact.i2pDestination, frame(frameType, envelope.ciphertext))
     }.getOrDefault(false)
@@ -928,7 +947,62 @@ class P2pChatService @Inject constructor(
         // belongs off the main thread, same as everything else in here.
         scope.launch {
             mediaStorage.selfAvatarFile().writeBytes(ImageEditor.downscaleAvatar(jpegBytes))
+            cachedAvatarHashValid = false
             broadcastProfile()
+        }
+    }
+
+    /** Commits a new own nickname locally, fixes the self row (which the self chat and list read), and pushes it to every contact. */
+    fun updateMyNickname(value: String) {
+        val trimmed = value.trim()
+        if (trimmed.isEmpty() || trimmed == identityKeyManager.nickname) return
+        identityKeyManager.nickname = trimmed
+        scope.launch {
+            val myId = identityKeyManager.contactId()
+            contactDao.find(myId)?.let { contactDao.update(it.copy(nickname = trimmed)) }
+        }
+        broadcastProfile()
+    }
+
+    /** Hash of our current avatar for the per-payload profile stamp - cached, the file only changes through [updateMyAvatar]. Null when we have no photo. */
+    private fun myAvatarHash(): String? {
+        if (cachedAvatarHashValid) return cachedAvatarHash
+        val file = mediaStorage.selfAvatarFile().takeIf { it.exists() }
+        cachedAvatarHash = file?.let { runCatching { sha256Hex(it.readBytes()) }.getOrNull() }
+        cachedAvatarHashValid = true
+        return cachedAvatarHash
+    }
+
+    private fun sha256Hex(bytes: ByteArray): String =
+        java.security.MessageDigest.getInstance("SHA-256").digest(bytes).joinToString("") { "%02x".format(it) }
+
+    /**
+     * Applies the sender profile stamped on an incoming payload: the nickname lands
+     * directly, and a mismatched avatar hash pulls the full photo. Skipped for call
+     * audio (50 packets a second would re-hash for nothing - the call signaling
+     * around it already carries the same stamp) and for our own loopback.
+     */
+    private fun applySenderProfile(contactId: String, payload: ChatPayload) {
+        if (payload.kind == PayloadKind.CALL_AUDIO) return
+        if (payload.senderNickname == null && payload.senderAvatarHash == null) return
+        if (contactId == identityKeyManager.contactId()) return
+        scope.launch {
+            val contact = contactDao.find(contactId) ?: return@launch
+            val nickname = payload.senderNickname?.trim().orEmpty()
+            if (nickname.isNotEmpty() && nickname != contact.nickname) {
+                contactDao.update(contact.copy(nickname = nickname))
+            }
+            val remoteHash = payload.senderAvatarHash
+            val localHash = contact.avatarPath?.let { File(it) }?.takeIf { it.exists() }
+                ?.let { runCatching { sha256Hex(it.readBytes()) }.getOrNull() }
+            if (remoteHash == localHash) return@launch
+            if (remoteHash == null) {
+                contact.avatarPath?.let { runCatching { File(it).delete() } }
+                contactDao.find(contactId)?.let { contactDao.update(it.copy(avatarPath = null)) }
+            } else if (requestedAvatarHashes[contactId] != remoteHash) {
+                requestedAvatarHashes[contactId] = remoteHash
+                requestProfile(contactId)
+            }
         }
     }
 
@@ -1056,6 +1130,9 @@ class P2pChatService @Inject constructor(
             incomingTransfers.remove(transferId)
 
             if (transfer.kind == PayloadKind.AVATAR) {
+                // The photo we pulled has landed - the hash guard lifts, so a
+                // *newer* photo later pulls again instead of being swallowed.
+                requestedAvatarHashes.remove(transfer.contactId)
                 scope.launch {
                     contactDao.find(transfer.contactId)?.let {
                         val previous = it.avatarPath?.let { path -> java.io.File(path) }
@@ -1287,8 +1364,11 @@ class P2pChatService @Inject constructor(
                             fromContactId = claimed
                             registerConnection(claimed, connection)
                             // They just proved reachable - flush anything waiting
-                            // for them instead of sitting until the retry tick.
+                            // for them instead of sitting until the retry tick, and
+                            // push our profile: they may have missed every broadcast
+                            // we sent while they were offline.
                             scope.launch { runCatching { flushFor(claimed) } }
+                            sendProfileTo(claimed)
                         }
                         FRAME_MEDIA_CHUNK -> onMediaChunkReceived(bytes)
                         FRAME_FRIEND_REQUEST -> handleFriendRequestFrame(bytes)
@@ -1333,7 +1413,11 @@ class P2pChatService @Inject constructor(
         val plaintext = runCatching { cipherFor(contactId).decrypt(envelope) }.getOrNull() ?: return
         val payload = runCatching { json.decodeFromString(ChatPayload.serializer(), plaintext.decodeToString()) }.getOrNull() ?: return
 
+        applySenderProfile(contactId, payload)
+
         when (payload.kind) {
+            PayloadKind.CALL_OFFER, PayloadKind.CALL_ANSWER, PayloadKind.CALL_REJECT, PayloadKind.CALL_HANGUP, PayloadKind.CALL_AUDIO ->
+                _events.tryEmit(ChatServiceEvent.CallSignaling(contactId, payload))
             PayloadKind.IMAGE, PayloadKind.VIDEO, PayloadKind.VOICE, PayloadKind.FILE, PayloadKind.AVATAR -> beginIncomingTransfer(contactId, payload)
             PayloadKind.GROUP_INVITE -> scope.launch { handleGroupInvite(contactId, payload) }
             PayloadKind.GROUP_ROSTER_UPDATE -> scope.launch { handleGroupRosterUpdate(contactId, payload) }
