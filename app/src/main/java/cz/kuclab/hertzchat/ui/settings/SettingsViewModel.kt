@@ -12,6 +12,7 @@ import cz.kuclab.hertzchat.locale.LocalePrefs
 import cz.kuclab.hertzchat.media.MediaStorage
 import cz.kuclab.hertzchat.p2p.P2pForegroundService
 import cz.kuclab.hertzchat.update.UpdateChecker
+import cz.kuclab.hertzchat.update.UpdateInstaller
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import javax.inject.Inject
@@ -25,7 +26,11 @@ sealed interface UpdateCheckState {
     data object Idle : UpdateCheckState
     data object Checking : UpdateCheckState
     data object UpToDate : UpdateCheckState
-    data class Available(val version: String, val url: String) : UpdateCheckState
+    data class Available(val version: String, val url: String, val apkUrl: String?) : UpdateCheckState
+    /** APK is streaming in; [progress] is 0..1, negative while the size is unknown. */
+    data class Downloading(val version: String, val progress: Float) : UpdateCheckState
+    /** The one-time "install unknown apps" toggle is still off - nothing was downloaded yet. */
+    data class InstallBlocked(val version: String, val apkUrl: String) : UpdateCheckState
     data class Error(val message: String) : UpdateCheckState
 }
 
@@ -83,7 +88,7 @@ class SettingsViewModel @Inject constructor(
             updateChecker.checkLatestVersion().fold(
                 onSuccess = { info ->
                     _updateCheckState.value = if (isNewerVersion(info.latestVersion, currentVersion)) {
-                        UpdateCheckState.Available(info.latestVersion, info.releaseUrl)
+                        UpdateCheckState.Available(info.latestVersion, info.releaseUrl, info.apkUrl)
                     } else {
                         UpdateCheckState.UpToDate
                     }
@@ -94,6 +99,30 @@ class SettingsViewModel @Inject constructor(
             )
         }
     }
+
+    fun downloadAndInstall(apkUrl: String, version: String) {
+        if (!UpdateInstaller.canInstall(context)) {
+            _updateCheckState.value = UpdateCheckState.InstallBlocked(version, apkUrl)
+            return
+        }
+        _updateCheckState.value = UpdateCheckState.Downloading(version, 0f)
+        viewModelScope.launch {
+            val dest = java.io.File(java.io.File(context.cacheDir, "updates").apply { mkdirs() }, "hertzchat-$version.apk")
+            UpdateInstaller.downloadApk(apkUrl, dest) { progress ->
+                _updateCheckState.value = UpdateCheckState.Downloading(version, progress)
+            }.fold(
+                onSuccess = { file ->
+                    UpdateInstaller.installApk(context, file)
+                    _updateCheckState.value = UpdateCheckState.Idle
+                },
+                onFailure = { e ->
+                    _updateCheckState.value = UpdateCheckState.Error("Stažení selhalo: ${e.message ?: "neznámá chyba"}")
+                },
+            )
+        }
+    }
+
+    fun openInstallSettings() = UpdateInstaller.openUnknownSourcesSettings(context)
 
     private fun isNewerVersion(remote: String, local: String): Boolean {
         val remoteParts = remote.split(".").map { it.toIntOrNull() ?: 0 }

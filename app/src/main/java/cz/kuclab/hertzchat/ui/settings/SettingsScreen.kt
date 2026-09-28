@@ -30,6 +30,7 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
@@ -141,6 +142,8 @@ fun SettingsScreen(viewModel: SettingsViewModel = hiltViewModel()) {
                         onOpenRelease = { url ->
                             context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
                         },
+                        onDownload = viewModel::downloadAndInstall,
+                        onOpenInstallSettings = viewModel::openInstallSettings,
                     )
                 }
             }
@@ -286,6 +289,8 @@ private fun UpdateCheckRow(
     state: UpdateCheckState,
     onCheck: () -> Unit,
     onOpenRelease: (String) -> Unit,
+    onDownload: (apkUrl: String, version: String) -> Unit,
+    onOpenInstallSettings: () -> Unit,
 ) {
     Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(vertical = 12.dp)) {
         Icon(Icons.Filled.SystemUpdate, contentDescription = null, modifier = Modifier.padding(end = 12.dp))
@@ -309,8 +314,46 @@ private fun UpdateCheckRow(
                 Icon(Icons.Filled.NewReleases, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(18.dp))
                 Text("  " + stringResource(R.string.settings_update_available, state.version), color = MaterialTheme.colorScheme.primary)
             }
-            Button(onClick = { onOpenRelease(state.url) }, modifier = Modifier.padding(top = 8.dp)) {
-                Text(stringResource(R.string.settings_open_release))
+            if (state.apkUrl != null) {
+                Button(onClick = { onDownload(state.apkUrl, state.version) }, modifier = Modifier.padding(top = 8.dp)) {
+                    Text(stringResource(R.string.settings_download_install))
+                }
+                TextButton(onClick = { onOpenRelease(state.url) }) {
+                    Text(stringResource(R.string.settings_open_release))
+                }
+            } else {
+                Button(onClick = { onOpenRelease(state.url) }, modifier = Modifier.padding(top = 8.dp)) {
+                    Text(stringResource(R.string.settings_open_release))
+                }
+            }
+        }
+        is UpdateCheckState.Downloading -> Column(modifier = Modifier.padding(bottom = 12.dp)) {
+            val indeterminate = state.progress < 0f
+            if (indeterminate) {
+                LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+            } else {
+                LinearProgressIndicator(progress = state.progress, modifier = Modifier.fillMaxWidth())
+            }
+            Text(
+                stringResource(R.string.settings_downloading, (state.progress.coerceAtLeast(0f) * 100).toInt()),
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(top = 4.dp),
+            )
+        }
+        is UpdateCheckState.InstallBlocked -> Column(modifier = Modifier.padding(bottom = 12.dp)) {
+            Text(
+                stringResource(R.string.settings_install_blocked),
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(top = 8.dp)) {
+                Button(onClick = onOpenInstallSettings) {
+                    Text(stringResource(R.string.settings_open_install_settings))
+                }
+                OutlinedButton(onClick = { onDownload(state.apkUrl, state.version) }) {
+                    Text(stringResource(R.string.settings_download_install))
+                }
             }
         }
         is UpdateCheckState.Error -> Text(

@@ -52,6 +52,10 @@
     <string name="settings_up_to_date">Máš nejnovější verzi</string>
     <string name="settings_update_available">K dispozici je verze %1$s</string>
     <string name="settings_open_release">Otevřít stránku ke stažení</string>
+    <string name="settings_download_install">Stáhnout a nainstalovat</string>
+    <string name="settings_downloading">Stahuji… %1$d%%</string>
+    <string name="settings_install_blocked">Povol instalaci aplikací z Hertz Chatu a zkus to znovu</string>
+    <string name="settings_open_install_settings">Otevřít nastavení</string>
     <string name="settings_section_about">O aplikaci</string>
     <string name="settings_about_description">Open source, žádný server, end-to-end šifrované přes Signal Protokol, přenos přes síť I2P.</string>
 </resources>

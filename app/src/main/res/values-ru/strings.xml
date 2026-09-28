@@ -50,6 +50,10 @@
     <string name="settings_up_to_date">У тебя последняя версия</string>
     <string name="settings_update_available">Доступна версия %1$s</string>
     <string name="settings_open_release">Открыть страницу загрузки</string>
+    <string name="settings_download_install">Скачать и установить</string>
+    <string name="settings_downloading">Скачивание… %1$d%%</string>
+    <string name="settings_install_blocked">Разрешите установку приложений из Hertz Chat и попробуйте снова</string>
+    <string name="settings_open_install_settings">Открыть настройки</string>
     <string name="settings_section_about">О приложении</string>
     <string name="settings_about_description">Открытый исходный код, без сервера, сквозное шифрование через протокол Signal, передача через сеть I2P.</string>
 </resources>

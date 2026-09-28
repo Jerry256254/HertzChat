@@ -28,12 +28,13 @@ import java.io.File
 /**
  * The shared message composer for 1:1 and group threads: one floating glass
  * island (same frosted material as the top bar) with messages scrolling
- * behind it. The row is fully symmetric - a 48dp circle on each end (attach
- * left, send/mic right, both exactly centered) with the text in the middle.
- * Only the center swaps between the text field, the recording indicator and
- * the voice preview; the action slot is the same composition in every mode, so
- * a press-and-hold recording survives the center swapping underneath the
- * finger instead of being disposed mid-press.
+ * behind it. The row is fully symmetric - a 40dp circle on each end (attach
+ * left, send/mic right, both exactly centered) with the text in the middle -
+ * and the whole island stands exactly as tall as the top bar (48dp pill plus
+ * the 8dp margin). Only the center swaps between the text field, the
+ * recording indicator and the voice preview; the action slot is the same
+ * composition in every mode, so a press-and-hold recording survives the
+ * center swapping underneath the finger instead of being disposed mid-press.
  */
 @Composable
 fun ThreadInputBar(
@@ -55,6 +56,13 @@ fun ThreadInputBar(
 ) {
     val canSend = pendingVoice != null || draft.isNotBlank() || attachments.isNotEmpty()
     val textMode = pendingVoice == null && !isRecording
+    // A lone line is a pill; a paragraph becomes a rounded sheet instead of a
+    // stretched broken sausage - the radius stays fixed while the island grows.
+    val islandShape = if (textMode && isSheetIsland(draft)) {
+        androidx.compose.foundation.shape.RoundedCornerShape(28.dp)
+    } else {
+        HertzShapes.Pill
+    }
     Column(modifier = modifier.fillMaxWidth().imePadding().navigationBarsPadding()) {
         PendingAttachmentsTray(
             attachments = attachments,
@@ -62,12 +70,12 @@ fun ThreadInputBar(
             modifier = Modifier.padding(bottom = if (attachments.isEmpty()) 0.dp else 8.dp),
         )
         GlassSurface(
-            shape = HertzShapes.Pill,
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp).padding(bottom = 12.dp),
+            shape = islandShape,
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp).padding(bottom = 8.dp),
             hazeState = hazeState,
         ) {
             Row(
-                modifier = Modifier.heightIn(min = 60.dp).padding(horizontal = 6.dp, vertical = 4.dp),
+                modifier = Modifier.heightIn(min = 48.dp).padding(horizontal = 4.dp, vertical = 4.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 if (leading != null) {
@@ -75,7 +83,8 @@ fun ThreadInputBar(
                 } else {
                     Box(modifier = Modifier.size(10.dp))
                 }
-                Box(modifier = Modifier.weight(1f), contentAlignment = Alignment.CenterStart) {
+                // Breathing room so the first glyphs never touch the attach circle.
+                Box(modifier = Modifier.weight(1f).padding(start = 10.dp), contentAlignment = Alignment.CenterStart) {
                     // The field stays composed (and focused) in every mode - it is
                     // only hidden, never removed - so recording with the keyboard
                     // open doesn't drop the keyboard or jump the layout mid-press.
@@ -110,9 +119,8 @@ fun ThreadInputBar(
                 }
                 Box(modifier = Modifier.padding(start = 4.dp)) {
                     if (canSend) {
-                        ChatInputAccentButton(
+                        ChatInputSendButton(
                             onClick = onSend,
-                            icon = androidx.compose.material.icons.Icons.AutoMirrored.Filled.Send,
                             contentDescription = "Odeslat",
                         )
                     } else {
@@ -123,3 +131,10 @@ fun ThreadInputBar(
         }
     }
 }
+
+/**
+ * True once the draft outgrows a pill: an explicit line break, or enough
+ * characters to wrap past two lines on a phone. Pure so the threshold stays
+ * pinned by IslandShapeTest.
+ */
+internal fun isSheetIsland(draft: String): Boolean = draft.contains('\n') || draft.length > 60

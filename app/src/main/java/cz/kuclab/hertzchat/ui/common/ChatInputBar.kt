@@ -3,25 +3,24 @@ package cz.kuclab.hertzchat.ui.common
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import cz.kuclab.hertzchat.ui.theme.HertzIcons
 
 /**
- * The circular send button inside the input pill: solid accent (the primary
- * action sits on color, not on glass), white glyph, glass edge. Same 48dp as
- * the mic and attach circles flanking the pill's text.
+ * The circular send button inside the input pill: the same frosted glass as
+ * the mic and attach circles (not a blue dot), with the rocket glyph. Same
+ * 40dp everywhere, so the three circles line up exactly.
  */
 @Composable
-fun ChatInputAccentButton(
+fun ChatInputSendButton(
     onClick: () -> Unit,
-    icon: androidx.compose.ui.graphics.vector.ImageVector,
     contentDescription: String?,
     modifier: Modifier = Modifier,
 ) {
     GlassCircleButton(
-        icon = icon,
+        icon = HertzIcons.Send,
         contentDescription = contentDescription ?: "Odeslat",
         onClick = onClick,
-        size = 48.dp,
-        accent = true,
+        size = 40.dp,
         modifier = modifier,
     )
 }

@@ -9,10 +9,13 @@ import kotlinx.coroutines.withContext
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 
-data class UpdateInfo(val latestVersion: String, val releaseUrl: String)
+data class UpdateInfo(val latestVersion: String, val releaseUrl: String, val apkUrl: String?)
 
 @Serializable
-private data class GithubRelease(val tag_name: String, val html_url: String)
+private data class GithubAsset(val name: String, val browser_download_url: String)
+
+@Serializable
+private data class GithubRelease(val tag_name: String, val html_url: String, val assets: List<GithubAsset> = emptyList())
 
 private const val LATEST_RELEASE_API_URL = "https://api.github.com/repos/Jerry256254/HertzChat/releases/latest"
 
@@ -40,7 +43,11 @@ class UpdateChecker @Inject constructor() {
                 }
                 val body = connection.inputStream.bufferedReader().use { it.readText() }
                 val release = json.decodeFromString(GithubRelease.serializer(), body)
-                UpdateInfo(latestVersion = release.tag_name.removePrefix("v"), releaseUrl = release.html_url)
+                UpdateInfo(
+                    latestVersion = release.tag_name.removePrefix("v"),
+                    releaseUrl = release.html_url,
+                    apkUrl = release.assets.firstOrNull { it.name.endsWith(".apk") }?.browser_download_url,
+                )
             } finally {
                 connection.disconnect()
             }

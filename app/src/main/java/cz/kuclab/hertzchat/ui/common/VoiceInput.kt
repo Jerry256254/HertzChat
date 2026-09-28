@@ -63,7 +63,7 @@ fun HoldToRecordButton(
     Box(
         contentAlignment = Alignment.Center,
         modifier = modifier
-            .size(48.dp)
+            .size(40.dp)
             .shadow(8.dp, CircleShape, clip = false)
             .clip(CircleShape)
             .background(fill)

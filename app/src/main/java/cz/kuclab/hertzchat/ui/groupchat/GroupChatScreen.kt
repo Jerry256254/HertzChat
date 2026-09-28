@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
@@ -22,7 +23,6 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Groups
-import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.PersonAdd
 import androidx.compose.material.icons.filled.PersonRemove
@@ -217,12 +217,11 @@ fun GroupChatScreen(groupId: String, onBack: () -> Unit, onLeft: () -> Unit, onO
         floatingActionButton = {
             if (showScrollDown && !searchOpen && pending.isEmpty()) {
                 GlassCircleButton(
-                    icon = Icons.Filled.KeyboardArrowDown,
+                    icon = HertzIcons.ScrollDown,
                     contentDescription = "Sjet dolů",
                     onClick = { scope.launch { listState.animateScrollToItem(0) } },
                     size = 48.dp,
-                    accent = true,
-                    modifier = Modifier.padding(bottom = 96.dp),
+                    modifier = Modifier.padding(bottom = 68.dp),
                 )
             }
         },
@@ -231,7 +230,7 @@ fun GroupChatScreen(groupId: String, onBack: () -> Unit, onLeft: () -> Unit, onO
             messages.filter { it.type == MessageType.IMAGE || it.type == MessageType.VIDEO }
         }
         val mentionRows = if (mentionQuery != null && !isRecording && pendingVoice == null) viewModel.mentionSuggestions().size else 0
-        val islandBottomPad = 104.dp + (if (pending.isEmpty()) 0.dp else 84.dp) + (minOf(mentionRows, 6) * 46).dp
+        val islandBottomPad = 72.dp + (if (pending.isEmpty()) 0.dp else 84.dp) + (minOf(mentionRows, 6) * 46).dp
         Box(modifier = Modifier.fillMaxSize().padding(padding)) {
             // Flat backdrop plus the thread; the floating bars above blur this
             // content behind themselves, so it scrolls underneath the frost.
@@ -240,7 +239,10 @@ fun GroupChatScreen(groupId: String, onBack: () -> Unit, onLeft: () -> Unit, onO
                 LazyColumn(
                     state = listState,
                     reverseLayout = true,
-                    modifier = Modifier.fillMaxSize(),
+                    // Same as 1:1 - the thread's bottom edge rides above the
+                    // keyboard with the island, so the newest messages stay
+                    // reachable while typing.
+                    modifier = Modifier.fillMaxSize().imePadding(),
                     contentPadding = PaddingValues(start = 12.dp, end = 12.dp, top = 92.dp, bottom = islandBottomPad),
                     verticalArrangement = Arrangement.spacedBy(4.dp),
                 ) {
@@ -322,7 +324,7 @@ fun GroupChatScreen(groupId: String, onBack: () -> Unit, onLeft: () -> Unit, onO
                                 icon = HertzIcons.Attach,
                                 contentDescription = "Přiložit",
                                 onClick = { attachMenuOpen = true },
-                                size = 48.dp,
+                                size = 40.dp,
                             )
                             AttachmentMenu(
                                 expanded = attachMenuOpen,
@@ -619,7 +621,12 @@ private fun GroupMessageBubble(
     val alignment = if (message.fromMe) Alignment.CenterEnd else Alignment.CenterStart
 
     Column(modifier = Modifier.fillMaxWidth(), horizontalAlignment = if (message.fromMe) Alignment.End else Alignment.Start) {
-        Box(modifier = Modifier.fillMaxWidth(), contentAlignment = alignment) {
+        // Bubbles hug their text but never take more than 80% of the row - the
+        // empty fifth on the other side is what tells mine from theirs.
+        Box(
+            modifier = Modifier.fillMaxWidth(0.8f).align(if (message.fromMe) Alignment.End else Alignment.Start),
+            contentAlignment = alignment,
+        ) {
             Row(verticalAlignment = Alignment.Bottom) {
                 if (!message.fromMe) {
                     Box(

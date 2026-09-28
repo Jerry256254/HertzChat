@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
@@ -27,7 +28,6 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Block
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.ErrorOutline
-import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
@@ -215,12 +215,11 @@ fun ChatScreen(contactId: String, onBack: () -> Unit, onOpenFile: (String) -> Un
         floatingActionButton = {
             if (showScrollDown && !searchOpen && pending.isEmpty()) {
                 GlassCircleButton(
-                    icon = Icons.Filled.KeyboardArrowDown,
+                    icon = HertzIcons.ScrollDown,
                     contentDescription = "Sjet dolů",
                     onClick = { scope.launch { listState.animateScrollToItem(0) } },
                     size = 48.dp,
-                    accent = true,
-                    modifier = Modifier.padding(bottom = 96.dp),
+                    modifier = Modifier.padding(bottom = 68.dp),
                 )
             }
         },
@@ -239,8 +238,11 @@ fun ChatScreen(contactId: String, onBack: () -> Unit, onOpenFile: (String) -> Un
                 LazyColumn(
                     state = listState,
                     reverseLayout = true,
-                    modifier = Modifier.fillMaxSize(),
-                    contentPadding = PaddingValues(start = 12.dp, end = 12.dp, top = 92.dp, bottom = if (pending.isEmpty()) 104.dp else 188.dp),
+                    // The island rides above the keyboard, so the thread's bottom
+                    // edge rides with it - otherwise the newest messages sink
+                    // behind the keyboard and can't be scrolled back into view.
+                    modifier = Modifier.fillMaxSize().imePadding(),
+                    contentPadding = PaddingValues(start = 12.dp, end = 12.dp, top = 92.dp, bottom = if (pending.isEmpty()) 72.dp else 156.dp),
                     verticalArrangement = Arrangement.spacedBy(4.dp),
                 ) {
                 items(displayItems, key = { it.messageId }) { message ->
@@ -293,7 +295,7 @@ fun ChatScreen(contactId: String, onBack: () -> Unit, onOpenFile: (String) -> Un
                             icon = HertzIcons.Attach,
                             contentDescription = "Přiložit",
                             onClick = { attachMenuOpen = true },
-                            size = 48.dp,
+                            size = 40.dp,
                         )
                         AttachmentMenu(
                             expanded = attachMenuOpen,
@@ -512,7 +514,12 @@ private fun MessageBubble(
     val bubbleShape = if (alignedRight) HertzShapes.BubbleMine else HertzShapes.BubbleTheirs
 
     androidx.compose.foundation.layout.Column(modifier = Modifier.fillMaxWidth(), horizontalAlignment = if (alignedRight) Alignment.End else Alignment.Start) {
-        Box(modifier = Modifier.fillMaxWidth(), contentAlignment = alignment) {
+        // Bubbles hug their text but never take more than 80% of the row - the
+        // empty fifth on the other side is what tells mine from theirs.
+        Box(
+            modifier = Modifier.fillMaxWidth(0.8f).align(if (alignedRight) Alignment.End else Alignment.Start),
+            contentAlignment = alignment,
+        ) {
             // Pure content bubbles: no clock, no ticks, no day chips - the message
             // itself is the whole UI. Glass edges carry the shape instead.
             when (message.type) {

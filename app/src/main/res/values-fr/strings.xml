@@ -50,6 +50,10 @@
     <string name="settings_up_to_date">Tu as la dernière version</string>
     <string name="settings_update_available">La version %1$s est disponible</string>
     <string name="settings_open_release">Ouvrir la page de téléchargement</string>
+    <string name="settings_download_install">Télécharger et installer</string>
+    <string name="settings_downloading">Téléchargement… %1$d%%</string>
+    <string name="settings_install_blocked">Autorise l’installation d’apps depuis Hertz Chat puis réessaie</string>
+    <string name="settings_open_install_settings">Ouvrir les réglages</string>
     <string name="settings_section_about">À propos</string>
     <string name="settings_about_description">Open source, aucun serveur, chiffré de bout en bout via le protocole Signal, transport via le réseau I2P.</string>
 </resources>
