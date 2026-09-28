@@ -38,8 +38,9 @@ import cz.kuclab.hertzchat.ui.theme.HertzGreen
 /**
  * The shared popup-menu container: anchored to the calling control (Material3
  * positions it next to the trigger and flips it on-screen when there is no
- * room), with the app's opaque glass-toned fill and radius. One component, so
- * all menus share the exact same surface - by construction, not by review.
+ * room), with the app's translucent menu fill over a blurred backdrop and the
+ * shared radius. One component, so all menus share the exact same surface -
+ * by construction, not by review.
  *
  * A menu's container is drawn by a `Surface` inside `DropdownMenu` whose shape
  * comes from `shapes.extraSmall` and whose color is `surfaceContainer` - this
@@ -54,7 +55,7 @@ fun GlassPopupMenu(
     content: @Composable ColumnScope.() -> Unit,
 ) {
     MaterialTheme(
-        colorScheme = MaterialTheme.colorScheme.copy(surfaceContainer = HertzGlass.menuSolid()),
+        colorScheme = MaterialTheme.colorScheme.copy(surfaceContainer = HertzGlass.menuFill()),
         shapes = MaterialTheme.shapes.copy(extraSmall = RoundedCornerShape(24.dp)),
         typography = MaterialTheme.typography,
     ) {
@@ -63,8 +64,11 @@ fun GlassPopupMenu(
             onDismissRequest = onDismissRequest,
             offset = offset,
             modifier = modifier,
-            content = content,
-        )
+        ) {
+            // Inside the popup window, so this blurs the screen behind the menu.
+            WindowBlurBehind()
+            content()
+        }
     }
 }
 

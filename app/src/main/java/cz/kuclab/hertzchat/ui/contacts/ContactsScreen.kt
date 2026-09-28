@@ -79,6 +79,7 @@ import androidx.core.content.ContextCompat
 import androidx.hilt.navigation.compose.hiltViewModel
 import cz.kuclab.hertzchat.ui.common.AppCard
 import cz.kuclab.hertzchat.ui.common.GlassDialogTheme
+import cz.kuclab.hertzchat.ui.common.WindowBlurBehind
 import cz.kuclab.hertzchat.ui.migration.QrCodeScannerAnalyzer
 import cz.kuclab.hertzchat.ui.theme.HertzMatte
 import cz.kuclab.hertzchat.ui.theme.HertzShapes
@@ -521,7 +522,7 @@ private fun CreateGroupDialog(
     GlassDialogTheme {
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Vytvořit skupinu") },
+        title = { WindowBlurBehind(); Text("Vytvořit skupinu") },
         text = {
             Column {
                 OutlinedTextField(

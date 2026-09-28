@@ -33,6 +33,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import cz.kuclab.hertzchat.R
 import cz.kuclab.hertzchat.ui.common.AppCard
 import cz.kuclab.hertzchat.ui.common.GlassDialogTheme
+import cz.kuclab.hertzchat.ui.common.WindowBlurBehind
 import cz.kuclab.hertzchat.ui.common.LanguagePickerRow
 
 @Composable
@@ -123,6 +124,7 @@ fun OnboardingScreen(
                 onDismissRequest = { showLegalText = null },
                 confirmButton = { TextButton(onClick = { showLegalText = null }) { Text(stringResource(R.string.common_close)) } },
                 text = {
+                    WindowBlurBehind()
                     Text(
                         text,
                         modifier = Modifier

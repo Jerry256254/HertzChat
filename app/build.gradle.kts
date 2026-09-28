@@ -15,8 +15,8 @@ android {
         applicationId = "cz.kuclab.hertzchat"
         minSdk = 26
         targetSdk = 34
-        versionCode = 39
-        versionName = "0.32.0"
+        versionCode = 40
+        versionName = "0.33.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
@@ -172,6 +172,11 @@ dependencies {
     implementation("androidx.camera:camera-camera2:1.3.4")
     implementation("androidx.camera:camera-lifecycle:1.3.4")
     implementation("androidx.camera:camera-view:1.3.4")
+
+    // Frosted-glass blur behind the floating bars (Haze). Pinned to 0.7.3:
+    // it is built against Compose UI 1.6.x, exactly matching this app's BOM
+    // (newer Haze needs Compose 1.7+ and would crash at runtime here).
+    implementation("dev.chrisbanes.haze:haze:0.7.3")
 
     // Media: image loading/playback
     implementation("io.coil-kt:coil-compose:2.6.0")

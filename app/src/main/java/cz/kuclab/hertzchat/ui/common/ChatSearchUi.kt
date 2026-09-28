@@ -35,10 +35,12 @@ fun ChatSearchBar(
     onNext: () -> Unit,
     onClose: () -> Unit,
     modifier: Modifier = Modifier,
+    hazeState: dev.chrisbanes.haze.HazeState? = null,
 ) {
     GlassSurface(
         modifier = modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 6.dp),
         shape = HertzShapes.Pill,
+        hazeState = hazeState,
     ) {
         Row(
             modifier = Modifier.fillMaxWidth().padding(horizontal = 6.dp, vertical = 4.dp),

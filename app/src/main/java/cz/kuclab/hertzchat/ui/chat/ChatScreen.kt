@@ -84,11 +84,13 @@ import cz.kuclab.hertzchat.ui.common.GlassCircleButton
 import cz.kuclab.hertzchat.ui.common.GlassDialogTheme
 import cz.kuclab.hertzchat.ui.common.GlassSurface
 import cz.kuclab.hertzchat.ui.common.HertzGlass
-import cz.kuclab.hertzchat.ui.common.TopBarScrim
+import cz.kuclab.hertzchat.ui.common.WindowBlurBehind
 import cz.kuclab.hertzchat.ui.common.MarkdownText
 import cz.kuclab.hertzchat.ui.common.ThreadInputBar
 import cz.kuclab.hertzchat.ui.common.highlightQuery
 import cz.kuclab.hertzchat.ui.theme.HertzShapes
+import dev.chrisbanes.haze.HazeState
+import dev.chrisbanes.haze.haze
 import java.io.File
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -120,6 +122,7 @@ fun ChatScreen(contactId: String, onBack: () -> Unit, onOpenFile: (String) -> Un
     val voiceRecorder = remember { VoiceRecorder(context) }
 
     val listState = rememberLazyListState()
+    val hazeState = remember { HazeState() }
     val showScrollDown by remember { derivedStateOf { listState.firstVisibleItemIndex > 2 } }
     val snackbar = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
@@ -283,9 +286,9 @@ fun ChatScreen(contactId: String, onBack: () -> Unit, onOpenFile: (String) -> Un
             state.messages.filter { it.type == MessageType.IMAGE || it.type == MessageType.VIDEO }
         }
         Box(modifier = Modifier.fillMaxSize().padding(padding)) {
-            // Ambient glass backdrop; the floating chrome above is translucent,
-            // so content scrolls underneath it.
-            Box(modifier = Modifier.fillMaxSize()) {
+            // Flat backdrop plus the thread; the floating bars above blur this
+            // content behind themselves, so it scrolls underneath the frost.
+            Box(modifier = Modifier.fillMaxSize().haze(hazeState, HertzGlass.hazeStyle())) {
                 GlassAmbientBackground()
                 // Reversed so the thread opens at the newest message and sticks there -
                 // index 0 is always the bottom, which is also what the scroll-down
@@ -309,7 +312,6 @@ fun ChatScreen(contactId: String, onBack: () -> Unit, onOpenFile: (String) -> Un
                 }
             }
             }
-            TopBarScrim(modifier = Modifier.align(Alignment.TopCenter))
             if (searchOpen) {
                 ChatSearchBar(
                     query = searchQuery,
@@ -320,6 +322,7 @@ fun ChatScreen(contactId: String, onBack: () -> Unit, onOpenFile: (String) -> Un
                     onNext = { if (matchIds.isNotEmpty()) matchPos = (matchPos + 1) % matchIds.size },
                     onClose = { searchOpen = false; searchQuery = "" },
                     modifier = Modifier.align(Alignment.TopCenter).padding(top = 4.dp),
+                    hazeState = hazeState,
                 )
             } else {
                 FloatingChatBar(
@@ -332,6 +335,7 @@ fun ChatScreen(contactId: String, onBack: () -> Unit, onOpenFile: (String) -> Un
                     onSearch = { searchOpen = true },
                     onClear = { confirmClear = true },
                     modifier = Modifier.align(Alignment.TopCenter),
+                    hazeState = hazeState,
                 )
             }
         }
@@ -354,7 +358,7 @@ fun ChatScreen(contactId: String, onBack: () -> Unit, onOpenFile: (String) -> Un
         GlassDialogTheme {
             AlertDialog(
                 onDismissRequest = { confirmClear = false },
-                title = { Text("Vyčistit konverzaci?") },
+                title = { WindowBlurBehind(); Text("Vyčistit konverzaci?") },
                 text = { Text("Smaže se celá historie zpráv v tomto chatu na tomto zařízení. Kontakt zůstane - jen jeho zprávy zmizí.") },
                 confirmButton = {
                     TextButton(onClick = { confirmClear = false; viewModel.clearChat() }) { Text("Vyčistit") }
@@ -394,6 +398,7 @@ private fun FloatingChatBar(
     onSearch: () -> Unit,
     onClear: () -> Unit,
     modifier: Modifier = Modifier,
+    hazeState: HazeState,
 ) {
     // No statusBarsPadding: the Scaffold content padding already offsets for the
     // status bar, and adding it again is what used to push the bar too low.
@@ -405,11 +410,13 @@ private fun FloatingChatBar(
             icon = Icons.AutoMirrored.Filled.ArrowBack,
             contentDescription = "Zpět",
             onClick = onBack,
+            hazeState = hazeState,
         )
         GlassSurface(
             shape = HertzShapes.Pill,
             onClick = onOpenDetails,
             modifier = Modifier.weight(1f).padding(horizontal = 8.dp),
+            hazeState = hazeState,
         ) {
             Row(
                 modifier = Modifier.padding(horizontal = 6.dp, vertical = 5.dp),
@@ -453,6 +460,7 @@ private fun FloatingChatBar(
                 icon = Icons.Filled.MoreVert,
                 contentDescription = "Možnosti konverzace",
                 onClick = { onOverflowChange(true) },
+                hazeState = hazeState,
             )
             ActionMenu(expanded = overflowOpen, onDismissRequest = { onOverflowChange(false) }) {
                 ActionMenuItem(
@@ -555,6 +563,7 @@ private fun ContactDetailsSheet(
 ) {
     val clipboard = LocalClipboardManager.current
     ModalBottomSheet(onDismissRequest = onDismiss) {
+        WindowBlurBehind()
         Column(
             modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 8.dp),
             horizontalAlignment = Alignment.CenterHorizontally,

@@ -83,11 +83,13 @@ import cz.kuclab.hertzchat.ui.common.GlassCircleButton
 import cz.kuclab.hertzchat.ui.common.GlassDialogTheme
 import cz.kuclab.hertzchat.ui.common.GlassSurface
 import cz.kuclab.hertzchat.ui.common.HertzGlass
-import cz.kuclab.hertzchat.ui.common.TopBarScrim
+import cz.kuclab.hertzchat.ui.common.WindowBlurBehind
 import cz.kuclab.hertzchat.ui.common.MarkdownText
 import cz.kuclab.hertzchat.ui.common.ThreadInputBar
 import cz.kuclab.hertzchat.ui.common.highlightQuery
 import cz.kuclab.hertzchat.ui.theme.HertzShapes
+import dev.chrisbanes.haze.HazeState
+import dev.chrisbanes.haze.haze
 import java.io.File
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -123,6 +125,7 @@ fun GroupChatScreen(groupId: String, onBack: () -> Unit, onLeft: () -> Unit, onO
     val context = LocalContext.current
     val voiceRecorder = remember { VoiceRecorder(context) }
     val listState = rememberLazyListState()
+    val hazeState = remember { HazeState() }
     val showScrollDown by remember { derivedStateOf { listState.firstVisibleItemIndex > 2 } }
     val snackbar = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
@@ -315,7 +318,9 @@ fun GroupChatScreen(groupId: String, onBack: () -> Unit, onLeft: () -> Unit, onO
             messages.filter { it.type == MessageType.IMAGE || it.type == MessageType.VIDEO }
         }
         Box(modifier = Modifier.fillMaxSize().padding(padding)) {
-            Box(modifier = Modifier.fillMaxSize()) {
+            // Flat backdrop plus the thread; the floating bars above blur this
+            // content behind themselves, so it scrolls underneath the frost.
+            Box(modifier = Modifier.fillMaxSize().haze(hazeState, HertzGlass.hazeStyle())) {
                 GlassAmbientBackground()
                 LazyColumn(
                     state = listState,
@@ -338,7 +343,6 @@ fun GroupChatScreen(groupId: String, onBack: () -> Unit, onLeft: () -> Unit, onO
                 }
             }
             }
-            TopBarScrim(modifier = Modifier.align(Alignment.TopCenter))
             if (searchOpen) {
                 ChatSearchBar(
                     query = searchQuery,
@@ -349,7 +353,7 @@ fun GroupChatScreen(groupId: String, onBack: () -> Unit, onLeft: () -> Unit, onO
                     onNext = { if (matchIds.isNotEmpty()) matchPos = (matchPos + 1) % matchIds.size },
                     onClose = { searchOpen = false; searchQuery = "" },
                     modifier = Modifier.align(Alignment.TopCenter).padding(top = 4.dp),
-
+                    hazeState = hazeState,
                 )
             } else {
                 FloatingGroupBar(
@@ -363,6 +367,7 @@ fun GroupChatScreen(groupId: String, onBack: () -> Unit, onLeft: () -> Unit, onO
                     onClear = { confirmClear = true },
                     onLeave = { confirmLeave = true },
                     modifier = Modifier.align(Alignment.TopCenter),
+                    hazeState = hazeState,
                 )
             }
         }
@@ -372,7 +377,7 @@ fun GroupChatScreen(groupId: String, onBack: () -> Unit, onLeft: () -> Unit, onO
         GlassDialogTheme {
         AlertDialog(
             onDismissRequest = { membersDialogOpen = false },
-            title = { Text("Členové skupiny") },
+            title = { WindowBlurBehind(); Text("Členové skupiny") },
             text = {
                 Column {
                     membersUi.forEach { member ->
@@ -421,7 +426,7 @@ fun GroupChatScreen(groupId: String, onBack: () -> Unit, onLeft: () -> Unit, onO
         GlassDialogTheme {
         AlertDialog(
             onDismissRequest = { addMembersOpen = false },
-            title = { Text("Přidat člena") },
+            title = { WindowBlurBehind(); Text("Přidat člena") },
             text = {
                 if (addableContacts.isEmpty()) {
                     Text("Všechny tvoje kontakty jsou už ve skupině.", color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -474,7 +479,7 @@ fun GroupChatScreen(groupId: String, onBack: () -> Unit, onLeft: () -> Unit, onO
         GlassDialogTheme {
         AlertDialog(
             onDismissRequest = { confirmClear = false },
-            title = { Text("Vyčistit konverzaci?") },
+            title = { WindowBlurBehind(); Text("Vyčistit konverzaci?") },
             text = { Text("Smaže se celá historie zpráv v této skupině na tomto zařízení. Členství ve skupině zůstane.") },
             confirmButton = {
                 TextButton(onClick = { confirmClear = false; viewModel.clearChat() }) { Text("Vyčistit") }
@@ -488,7 +493,7 @@ fun GroupChatScreen(groupId: String, onBack: () -> Unit, onLeft: () -> Unit, onO
         GlassDialogTheme {
         AlertDialog(
             onDismissRequest = { confirmLeave = false },
-            title = { Text("Opustit skupinu?") },
+            title = { WindowBlurBehind(); Text("Opustit skupinu?") },
             text = { Text("Místní historie zpráv této skupiny se smaže. Ostatní členové o tom nebudou automaticky informováni.") },
             confirmButton = {
                 TextButton(onClick = { confirmLeave = false; viewModel.leaveGroup(); onLeft() }) { Text("Opustit") }
@@ -511,6 +516,7 @@ private fun FloatingGroupBar(
     onClear: () -> Unit,
     onLeave: () -> Unit,
     modifier: Modifier = Modifier,
+    hazeState: HazeState,
 ) {
     // No statusBarsPadding: the Scaffold content padding already offsets for the
     // status bar, and adding it again is what used to push the bar too low.
@@ -522,11 +528,13 @@ private fun FloatingGroupBar(
             icon = Icons.AutoMirrored.Filled.ArrowBack,
             contentDescription = "Zpět",
             onClick = onBack,
+            hazeState = hazeState,
         )
         GlassSurface(
             shape = HertzShapes.Pill,
             onClick = onMembers,
             modifier = Modifier.weight(1f).padding(horizontal = 8.dp),
+            hazeState = hazeState,
         ) {
             Row(
                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 7.dp),
@@ -553,6 +561,7 @@ private fun FloatingGroupBar(
                 icon = Icons.Filled.MoreVert,
                 contentDescription = "Možnosti",
                 onClick = { onOverflowChange(true) },
+                hazeState = hazeState,
             )
             ActionMenu(expanded = overflowOpen, onDismissRequest = { onOverflowChange(false) }) {
                 ActionMenuItem(

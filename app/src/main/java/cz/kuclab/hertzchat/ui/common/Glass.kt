@@ -1,5 +1,9 @@
 package cz.kuclab.hertzchat.ui.common
 
+import android.content.Context
+import android.os.Build
+import android.view.WindowManager
+import androidx.annotation.RequiresApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -7,37 +11,43 @@ import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.SideEffect
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.composed
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.draw.shadow
-import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
-import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import cz.kuclab.hertzchat.ui.theme.HertzShapes
+import dev.chrisbanes.haze.HazeState
+import dev.chrisbanes.haze.HazeStyle
+import dev.chrisbanes.haze.hazeChild
 
 /**
- * The app's glassmorphism language: every floating surface (bars, bubbles, rows,
- * input, dialogs) is the same material - a translucent fill, a hairline bright
- * edge, and a short light streak across the top where the light catches it. One
- * material everywhere is what makes the design read as one piece. (Anchored
- * popup menus stay opaque on purpose - translucent menus let the rows behind
- * collide with the item text.)
+ * The app's glass language: every floating surface (bars, bubbles, rows,
+ * input, menus, dialogs) is the same material - a translucent fill over
+ * blurred content behind it, plus a hairline edge. No gradients, no light
+ * streaks: the blur itself is the decoration.
+ *
+ * Two blur mechanisms, because Android gives no single one:
+ * - in-layout chrome (the floating top bars over scrolling lists) blurs via
+ *   Haze: the screen puts [dev.chrisbanes.haze.haze] on its scrolling content
+ *   and passes the [HazeState] down to the bars, which register with
+ *   [hazeChild]. Real blur on Android 12L+, a matching tint scrim below.
+ * - popup menus, dialogs and bottom sheets live in their own windows, where
+ *   Haze can't reach, so they blur with the platform blur-behind instead
+ *   (see [WindowBlurBehind], Android 12+) over a translucent fill.
  */
 object HertzGlass {
     /** Default translucent fill for bars, rows and bubbles-theirs. */
@@ -48,17 +58,38 @@ object HertzGlass {
     @Composable
     fun fillStrong(): Color = if (isSystemInDarkTheme()) Color.White.copy(alpha = 0.18f) else Color.White.copy(alpha = 0.78f)
 
-    /** Opaque container for anchored popup menus - translucent menus let the rows behind collide with the item text. */
+    /**
+     * Translucent container for anchored popup menus. The blur behind comes
+     * from [WindowBlurBehind], which only exists on Android 12+ - below that
+     * the menu stays near-opaque so the rows behind never collide with the
+     * item text.
+     */
     @Composable
-    fun menuSolid(): Color = if (isSystemInDarkTheme()) Color(0xFF202028) else Color(0xFFEFF1F5)
+    fun menuFill(): Color {
+        val dark = isSystemInDarkTheme()
+        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            if (dark) Color(0xFF202028).copy(alpha = 0.72f) else Color(0xFFEFF1F5).copy(alpha = 0.72f)
+        } else {
+            if (dark) Color(0xFF202028).copy(alpha = 0.96f) else Color(0xFFEFF1F5).copy(alpha = 0.97f)
+        }
+    }
 
     /** Hairline edge around every glass surface. */
     @Composable
     fun stroke(): Color = if (isSystemInDarkTheme()) Color.White.copy(alpha = 0.20f) else Color.Black.copy(alpha = 0.10f)
 
-    /** The bright streak across a surface's top edge. */
+    /**
+     * The frosted tint Haze paints over blurred content in the glass areas.
+     * It doubles as the whole fill on older Androids (where Haze draws this
+     * tint as a scrim instead of blurring), so it must stay readable on its
+     * own - the same tone as [fill], a touch stronger for text contrast.
+     */
     @Composable
-    fun streak(): Color = if (isSystemInDarkTheme()) Color.White.copy(alpha = 0.38f) else Color.White.copy(alpha = 0.95f)
+    fun hazeTint(): Color = if (isSystemInDarkTheme()) Color.White.copy(alpha = 0.16f) else Color.White.copy(alpha = 0.62f)
+
+    /** The one Haze style every blurred bar in the app shares. */
+    @Composable
+    fun hazeStyle(): HazeStyle = HazeStyle(tint = hazeTint(), blurRadius = 28.dp, noiseFactor = 0.08f)
 
     /** Own-message bubbles: accent-tinted glass, readable in both themes. */
     @Composable
@@ -74,37 +105,23 @@ object HertzGlass {
 }
 
 /**
- * The hairline edge plus the top light streak. Drawn as modifiers so any
- * container (Box, Surface, button) becomes glass with the same two lines.
+ * The hairline edge around a glass surface. Drawn as a modifier so any
+ * container (Box, Surface, button) becomes glass with the same line.
  */
 fun Modifier.glassEdge(shape: Shape): Modifier = composed {
-    val stroke = HertzGlass.stroke()
-    val streak = HertzGlass.streak()
-    val density = LocalDensity.current
-    border(1.dp, stroke, shape)
-        .drawBehind {
-            // A centered streak, not a full top line: reads as light catching
-            // curved glass rather than a flat rule. Width-relative so pills,
-            // circles and cards all get the same treatment with no tuning.
-            val y = with(density) { 2.dp.toPx() }
-            val fromX = size.width * 0.28f
-            val toX = size.width * 0.72f
-            if (toX - fromX > with(density) { 8.dp.toPx() }) {
-                drawLine(
-                    color = streak,
-                    start = Offset(fromX, y),
-                    end = Offset(toX, y),
-                    strokeWidth = with(density) { 1.5.dp.toPx() },
-                    cap = StrokeCap.Round,
-                )
-            }
-        }
+    border(1.dp, HertzGlass.stroke(), shape)
 }
 
 /**
- * One glass panel: tinted shadow, translucent fill, hairline edge, top streak.
- * Pass [shadowElevation] = 0.dp inside scrolling lists - per-item shadows cost
- * an offscreen pass each, the edge and streak alone carry the glass there.
+ * One glass panel: tinted shadow, translucent fill, hairline edge. Pass a
+ * [hazeState] for chrome that floats over scrolling content (the top bars) -
+ * the fill then goes transparent and Haze paints blurred, tinted content
+ * behind the panel instead; the shadow, edge and content stay untouched.
+ * Everything that sits on the flat background (bubbles, rows, cards, the
+ * input pill) keeps its plain translucent fill - there is nothing behind it
+ * worth blurring. Pass [shadowElevation] = 0.dp inside scrolling lists -
+ * per-item shadows cost an offscreen pass each, the edge alone carries the
+ * glass there.
  */
 @Composable
 fun GlassSurface(
@@ -113,6 +130,7 @@ fun GlassSurface(
     fill: Color = HertzGlass.fill(),
     shadowElevation: Dp = 12.dp,
     onClick: (() -> Unit)? = null,
+    hazeState: HazeState? = null,
     content: @Composable BoxScope.() -> Unit,
 ) {
     val clickableMod = if (onClick != null) {
@@ -120,11 +138,13 @@ fun GlassSurface(
     } else {
         Modifier
     }
+    val hazeMod = if (hazeState != null) Modifier.hazeChild(hazeState, shape) else Modifier
     Box(
         modifier = modifier
+            .then(hazeMod)
             .shadow(shadowElevation, shape, clip = false, ambientColor = Color.Black.copy(alpha = 0.30f), spotColor = Color.Black.copy(alpha = 0.45f))
             .clip(shape)
-            .background(fill)
+            .background(if (hazeState != null) Color.Transparent else fill)
             .then(clickableMod)
             .glassEdge(shape),
         content = content,
@@ -142,11 +162,15 @@ fun GlassCircleButton(
     accent: Boolean = false,
     /** Solid red fill for destructive/recording states. */
     danger: Boolean = false,
+    /** Blur behind this button - same deal as [GlassSurface]; ignored for solid accent/danger fills. */
+    hazeState: HazeState? = null,
     modifier: Modifier = Modifier,
 ) {
+    val blurred = hazeState != null && !accent && !danger
     val fill = when {
         danger -> MaterialTheme.colorScheme.error
         accent -> MaterialTheme.colorScheme.primary
+        blurred -> Color.Transparent
         else -> HertzGlass.fill()
     }
     val iconTint = when {
@@ -154,10 +178,12 @@ fun GlassCircleButton(
         accent -> MaterialTheme.colorScheme.onPrimary
         else -> HertzGlass.contentOnGlass()
     }
+    val hazeMod = if (blurred) Modifier.hazeChild(hazeState!!, CircleShape) else Modifier
     // Press feedback is the bounded ripple only - icons and buttons are never
     // scaled or otherwise deformed.
     Box(
         modifier = modifier
+            .then(hazeMod)
             .size(size)
             .shadow(8.dp, CircleShape, clip = false, ambientColor = Color.Black.copy(alpha = 0.30f), spotColor = Color.Black.copy(alpha = 0.40f))
             .clip(CircleShape)
@@ -171,55 +197,55 @@ fun GlassCircleButton(
 }
 
 /**
- * The backdrop the glass floats over: the theme background with three soft
- * ambient color glows. Procedural, so it can never misalign or tile visibly -
- * and dark enough that every glass edge reads. Always fills its parent: a
- * zero-size canvas would silently render nothing at all.
+ * The backdrop the glass floats over: the flat theme background. Deliberately
+ * no gradients or color glows - the frosted blur of the floating chrome is
+ * the only depth cue, and it needs a calm surface to read against. Always
+ * fills its parent: a zero-size canvas would silently render nothing at all.
  */
 @Composable
 fun GlassAmbientBackground(modifier: Modifier = Modifier) {
-    val base = MaterialTheme.colorScheme.background
-    val dark = isSystemInDarkTheme()
-    val teal = Color(0xFF2DD4BF).copy(alpha = if (dark) 0.20f else 0.14f)
-    val indigo = Color(0xFF5B7CFF).copy(alpha = if (dark) 0.24f else 0.16f)
-    val violet = Color(0xFFA78BFA).copy(alpha = if (dark) 0.12f else 0.08f)
-    androidx.compose.foundation.Canvas(modifier = modifier.fillMaxSize().background(base)) {
-        fun glow(color: Color, cx: Float, cy: Float, radius: Float) {
-            drawCircle(
-                brush = Brush.radialGradient(listOf(color, Color.Transparent), center = Offset(cx, cy), radius = radius),
-                radius = radius,
-                center = Offset(cx, cy),
-            )
-        }
-        val r = size.minDimension * 1.1f
-        glow(teal, size.width * 0.12f, size.height * 0.08f, r)
-        glow(indigo, size.width * 0.92f, size.height * 0.96f, r)
-        glow(violet, size.width * 0.88f, size.height * 0.22f, r * 0.7f)
-    }
+    Box(modifier = modifier.fillMaxSize().background(MaterialTheme.colorScheme.background))
 }
 
 /**
- * A gradient veil drawn behind the floating top bars: scrolling messages fade
- * out underneath the chrome instead of colliding with it through the glass.
- * Drawn (not clickable) between the scrolling content and the bars.
+ * Blurs whatever sits behind this window - the frosted backdrop for popup
+ * menus, dialogs and bottom sheets, which live in their own windows where
+ * Haze can't reach. Must be called from *inside* the popup/dialog/sheet
+ * content (so [LocalView] belongs to that window); anywhere else it would
+ * find the activity window instead. Android 12+ only - below that it renders
+ * nothing and the translucent fills carry the look on their own.
  */
 @Composable
-fun TopBarScrim(modifier: Modifier = Modifier, height: Dp = 150.dp) {
-    val bg = MaterialTheme.colorScheme.background
-    Box(
-        modifier = modifier
-            .fillMaxWidth()
-            .height(height)
-            .background(
-                Brush.verticalGradient(
-                    listOf(
-                        bg.copy(alpha = 0.92f),
-                        bg.copy(alpha = 0.55f),
-                        Color.Transparent,
-                    ),
-                ),
-            ),
-    )
+fun WindowBlurBehind(radius: Dp = 32.dp) {
+    if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) return
+    val view = LocalView.current
+    val density = LocalDensity.current
+    SideEffect {
+        runCatching {
+            applyWindowBlurBehind(view, with(density) { radius.roundToPx() })
+        }
+    }
+}
+
+@RequiresApi(Build.VERSION_CODES.S)
+private fun applyWindowBlurBehind(view: android.view.View, radiusPx: Int) {
+    // The ComposeView inside a popup/dialog/sheet is nested a few Views deep;
+    // the window's own view is the first ancestor whose layout params are
+    // WindowManager params (PopupLayout for popups, DecorView for dialogs).
+    var parent = view.parent
+    while (parent != null) {
+        val params = (parent as? android.view.View)?.layoutParams
+        if (params is WindowManager.LayoutParams) {
+            if (params.blurBehindRadius != radiusPx) {
+                params.blurBehindRadius = radiusPx
+                params.flags = params.flags or WindowManager.LayoutParams.FLAG_BLUR_BEHIND
+                (view.context.getSystemService(Context.WINDOW_SERVICE) as WindowManager)
+                    .updateViewLayout(parent as android.view.View, params)
+            }
+            return
+        }
+        parent = parent.parent
+    }
 }
 
 /** Glass-tinted container for the modal confirmation dialogs, so they sit in the same material family as the menus. */

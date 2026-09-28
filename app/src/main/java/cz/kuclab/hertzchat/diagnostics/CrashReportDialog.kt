@@ -22,6 +22,7 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import cz.kuclab.hertzchat.ui.common.GlassDialogTheme
+import cz.kuclab.hertzchat.ui.common.WindowBlurBehind
 
 /**
  * Shows the previous run's crash, if there was one, as soon as the app comes back up.
@@ -40,7 +41,7 @@ fun CrashReportDialog() {
     GlassDialogTheme {
     AlertDialog(
         onDismissRequest = { },
-        title = { Text("Aplikace minule spadla") },
+        title = { WindowBlurBehind(); Text("Aplikace minule spadla") },
         text = {
             Column(modifier = Modifier.heightIn(max = 420.dp).verticalScroll(rememberScrollState())) {
                 Text(

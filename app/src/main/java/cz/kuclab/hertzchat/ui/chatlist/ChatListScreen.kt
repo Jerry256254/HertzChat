@@ -64,11 +64,12 @@ import cz.kuclab.hertzchat.ui.common.GlassAmbientBackground
 import cz.kuclab.hertzchat.ui.common.GlassCircleButton
 import cz.kuclab.hertzchat.ui.common.GlassSurface
 import cz.kuclab.hertzchat.ui.common.HertzGlass
-import cz.kuclab.hertzchat.ui.common.TopBarScrim
 import cz.kuclab.hertzchat.ui.common.ActionMenuItem
 import cz.kuclab.hertzchat.ui.common.AppCard
 import cz.kuclab.hertzchat.ui.theme.HertzMatte
 import cz.kuclab.hertzchat.ui.theme.HertzShapes
+import dev.chrisbanes.haze.HazeState
+import dev.chrisbanes.haze.haze
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -88,6 +89,7 @@ fun ChatListScreen(
     val i2pError by viewModel.i2pError.collectAsState()
     val requests by viewModel.incomingRequests.collectAsState()
     val myAvatarPath by viewModel.myAvatarPath.collectAsState()
+    val hazeState = remember { HazeState() }
 
     Scaffold(
         floatingActionButton = {
@@ -114,7 +116,9 @@ fun ChatListScreen(
         },
     ) { padding ->
         Box(modifier = Modifier.fillMaxSize().padding(padding)) {
-            Box(modifier = Modifier.fillMaxSize()) {
+            // Flat backdrop plus the list; the floating bar above blurs this
+            // content behind itself, so rows scroll underneath the frost.
+            Box(modifier = Modifier.fillMaxSize().haze(hazeState, HertzGlass.hazeStyle())) {
             GlassAmbientBackground()
             if (items.isEmpty() && requests.isEmpty() && i2pState == I2pState.CONNECTED) {
                 Column(
@@ -210,12 +214,12 @@ fun ChatListScreen(
             }
             }
             }
-            TopBarScrim(modifier = Modifier.align(Alignment.TopCenter))
             FloatingHomeBar(
                 myAvatarPath = myAvatarPath,
                 onOpenProfile = onOpenProfile,
                 onOpenSettings = onOpenSettings,
                 modifier = Modifier.align(Alignment.TopCenter),
+                hazeState = hazeState,
             )
         }
     }
@@ -227,6 +231,7 @@ private fun FloatingHomeBar(
     onOpenProfile: () -> Unit,
     onOpenSettings: () -> Unit,
     modifier: Modifier = Modifier,
+    hazeState: HazeState,
 ) {
     // No statusBarsPadding: the Scaffold content padding already offsets for the
     // status bar, and adding it again is what used to push the bar too low.
@@ -239,6 +244,7 @@ private fun FloatingHomeBar(
             shadowElevation = 8.dp,
             onClick = onOpenProfile,
             modifier = Modifier.size(44.dp),
+            hazeState = hazeState,
         ) {
             if (myAvatarPath != null) {
                 AsyncImage(
@@ -256,6 +262,7 @@ private fun FloatingHomeBar(
         GlassSurface(
             shape = HertzShapes.Pill,
             modifier = Modifier.weight(1f).padding(horizontal = 8.dp),
+            hazeState = hazeState,
         ) {
             Text(
                 "Hertz Chat",
@@ -269,6 +276,7 @@ private fun FloatingHomeBar(
             icon = Icons.Filled.Settings,
             contentDescription = "Nastavení",
             onClick = onOpenSettings,
+            hazeState = hazeState,
         )
     }
 }
