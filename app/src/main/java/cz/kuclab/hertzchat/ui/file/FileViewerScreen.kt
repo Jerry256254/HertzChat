@@ -19,14 +19,12 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.InsertDriveFile
 import androidx.compose.material.icons.filled.ChevronLeft
 import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.OpenInNew
 import androidx.compose.material3.Button
-import androidx.compose.material3.CenterAlignedTopAppBar
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -59,7 +57,11 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
-import cz.kuclab.hertzchat.ui.theme.HertzMatte
+import cz.kuclab.hertzchat.ui.common.GlassBar
+import cz.kuclab.hertzchat.ui.common.GlassCircleButton
+import cz.kuclab.hertzchat.ui.common.HertzGlass
+import dev.chrisbanes.haze.HazeState
+import dev.chrisbanes.haze.haze
 import java.io.File
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -97,22 +99,13 @@ fun FileViewerScreen(onBack: () -> Unit, viewModel: FileViewerViewModel = hiltVi
     val name = message?.mediaFileName ?: file?.name ?: "Soubor"
     val mime = message?.mediaMimeType
 
+    val hazeState = remember { HazeState() }
     Scaffold(
         snackbarHost = { SnackbarHost(snackbar) },
-        topBar = {
-            CenterAlignedTopAppBar(
-                colors = HertzMatte.topBarColors(),
-                title = { Text(name, maxLines = 1) },
-                navigationIcon = { IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Zpět") } },
-                actions = {
-                    IconButton(onClick = viewModel::download, enabled = file != null) {
-                        Icon(Icons.Filled.Download, contentDescription = "Stáhnout")
-                    }
-                },
-            )
-        },
     ) { padding ->
         Box(modifier = Modifier.fillMaxSize().padding(padding)) {
+            Box(modifier = Modifier.fillMaxSize().haze(hazeState, HertzGlass.hazeStyle())) {
+            Box(modifier = Modifier.fillMaxSize().padding(top = 76.dp)) {
             when {
                 message == null -> Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                     CircularProgressIndicator()
@@ -141,6 +134,24 @@ fun FileViewerScreen(onBack: () -> Unit, viewModel: FileViewerViewModel = hiltVi
                     onDownload = viewModel::download,
                 )
             }
+            }
+            }
+            GlassBar(
+                title = name,
+                hazeState = hazeState,
+                onBack = onBack,
+                actions = {
+                    if (file != null) {
+                        GlassCircleButton(
+                            icon = Icons.Filled.Download,
+                            contentDescription = "Stáhnout",
+                            onClick = viewModel::download,
+                            hazeState = hazeState,
+                        )
+                    }
+                },
+                modifier = Modifier.align(Alignment.TopCenter),
+            )
         }
     }
 }

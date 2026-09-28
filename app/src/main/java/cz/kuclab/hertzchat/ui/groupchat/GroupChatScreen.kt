@@ -21,15 +21,11 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.automirrored.filled.ExitToApp
-import androidx.compose.material.icons.filled.AttachFile
-import androidx.compose.material.icons.filled.DeleteSweep
 import androidx.compose.material.icons.filled.Groups
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.PersonAdd
 import androidx.compose.material.icons.filled.PersonRemove
-import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -37,7 +33,6 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.SmallFloatingActionButton
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
@@ -47,6 +42,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -62,6 +58,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.core.content.ContextCompat
 import androidx.hilt.navigation.compose.hiltViewModel
 import coil.compose.AsyncImage
+import cz.kuclab.hertzchat.data.db.DeliveryState
 import cz.kuclab.hertzchat.data.db.MessageEntity
 import cz.kuclab.hertzchat.data.db.MessageType
 import cz.kuclab.hertzchat.data.model.PayloadKind
@@ -72,10 +69,10 @@ import cz.kuclab.hertzchat.ui.chat.PhotoEditorDialog
 import cz.kuclab.hertzchat.ui.chat.PhotoSource
 import cz.kuclab.hertzchat.ui.chat.VideoBubble
 import cz.kuclab.hertzchat.ui.chat.VoiceBubble
-import cz.kuclab.hertzchat.ui.common.ActionMenu
-import cz.kuclab.hertzchat.ui.common.ActionMenuItem
+import cz.kuclab.hertzchat.ui.common.GlassMenu
+import cz.kuclab.hertzchat.ui.common.GlassMenuItem
+import cz.kuclab.hertzchat.ui.common.AtomSpinner
 import cz.kuclab.hertzchat.ui.common.AttachmentMenu
-import cz.kuclab.hertzchat.ui.common.ChatInputPillIcon
 import cz.kuclab.hertzchat.ui.common.ChatSearchBar
 import cz.kuclab.hertzchat.ui.common.HoldToRecordButton
 import cz.kuclab.hertzchat.ui.common.GlassAmbientBackground
@@ -87,12 +84,14 @@ import cz.kuclab.hertzchat.ui.common.WindowBlurBehind
 import cz.kuclab.hertzchat.ui.common.MarkdownText
 import cz.kuclab.hertzchat.ui.common.ThreadInputBar
 import cz.kuclab.hertzchat.ui.common.highlightQuery
+import cz.kuclab.hertzchat.ui.theme.HertzIcons
 import cz.kuclab.hertzchat.ui.theme.HertzShapes
 import dev.chrisbanes.haze.HazeState
 import dev.chrisbanes.haze.haze
 import java.io.File
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlin.math.sqrt
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -120,6 +119,7 @@ fun GroupChatScreen(groupId: String, onBack: () -> Unit, onLeft: () -> Unit, onO
     var isRecording by remember { mutableStateOf(false) }
     var recordStartedAt by remember { mutableLongStateOf(0L) }
     var recordElapsed by remember { mutableLongStateOf(0L) }
+    var recordLevel by remember { mutableFloatStateOf(0f) }
     var pendingVoice by remember { mutableStateOf<Pair<File, Long>?>(null) }
 
     val context = LocalContext.current
@@ -135,6 +135,7 @@ fun GroupChatScreen(groupId: String, onBack: () -> Unit, onLeft: () -> Unit, onO
     val endRecording = {
         if (isRecording) {
             isRecording = false
+            recordLevel = 0f
             val clip = voiceRecorder.stop()
             if (clip != null && clip.second > 400) {
                 pendingVoice = clip
@@ -146,10 +147,11 @@ fun GroupChatScreen(groupId: String, onBack: () -> Unit, onLeft: () -> Unit, onO
     LaunchedEffect(isRecording) {
         while (isRecording) {
             recordElapsed = System.currentTimeMillis() - recordStartedAt
+            recordLevel = sqrt((voiceRecorder.maxAmplitude() / 32767f).coerceIn(0f, 1f))
             if (recordElapsed > 120_000) {
                 endRecording()
             } else {
-                delay(250)
+                delay(100)
             }
         }
     }
@@ -213,103 +215,14 @@ fun GroupChatScreen(groupId: String, onBack: () -> Unit, onLeft: () -> Unit, onO
     Scaffold(
         snackbarHost = { SnackbarHost(snackbar) },
         floatingActionButton = {
-            if (showScrollDown && !searchOpen) {
-                SmallFloatingActionButton(
+            if (showScrollDown && !searchOpen && pending.isEmpty()) {
+                GlassCircleButton(
+                    icon = Icons.Filled.KeyboardArrowDown,
+                    contentDescription = "Sjet dolů",
                     onClick = { scope.launch { listState.animateScrollToItem(0) } },
-                    containerColor = MaterialTheme.colorScheme.primary,
-                    contentColor = MaterialTheme.colorScheme.onPrimary,
-                ) {
-                    Icon(Icons.Filled.KeyboardArrowDown, contentDescription = "Sjet dolů")
-                }
-            }
-        },
-        bottomBar = {
-            Column {
-                if (mentionQuery != null && !isRecording && pendingVoice == null) {
-                    val suggestions = viewModel.mentionSuggestions()
-                    if (suggestions.isNotEmpty()) {
-                        androidx.compose.material3.Surface(
-                            shape = HertzShapes.Card,
-                            tonalElevation = 4.dp,
-                            modifier = Modifier
-                                .padding(horizontal = 12.dp)
-                                .fillMaxWidth(),
-                        ) {
-                            Column {
-                                suggestions.forEach { suggestion ->
-                                    Text(
-                                        "@" + suggestion.label,
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .clickable { viewModel.selectMention(suggestion) }
-                                            .padding(horizontal = 16.dp, vertical = 12.dp),
-                                    )
-                                }
-                            }
-                        }
-                    }
-                }
-                ThreadInputBar(
-                    draft = draft,
-                    onDraftChange = viewModel::onDraftChange,
-                    placeholder = "Zpráva, nebo @jméno",
-                    leading = {
-                        Box {
-                            ChatInputPillIcon(
-                                onClick = { attachMenuOpen = true },
-                                icon = Icons.Filled.AttachFile,
-                                contentDescription = "Přiložit",
-                            )
-                            AttachmentMenu(
-                                expanded = attachMenuOpen,
-                                onDismissRequest = { attachMenuOpen = false },
-                                onPickImage = { pickImage.launch("image/*") },
-                                onPickVideo = { pickVideo.launch("video/*") },
-                                onPickFile = { pickFile.launch("*/*") },
-                                onTakePhoto = {
-                                    val uri = cz.kuclab.hertzchat.media.newCameraPhotoUri(context)
-                                    cameraOutputUri = uri
-                                    takePhoto.launch(uri)
-                                },
-                            )
-                        }
-                    },
-                    attachments = pending,
-                    onRemoveAttachment = viewModel::removePending,
-                    isRecording = isRecording,
-                    recordElapsedMs = recordElapsed,
-                    pendingVoice = pendingVoice,
-                    onDeleteVoice = {
-                        pendingVoice?.first?.delete()
-                        pendingVoice = null
-                    },
-                    onSend = {
-                        pendingVoice?.let { (file, duration) ->
-                            viewModel.sendVoice(file, duration)
-                            pendingVoice = null
-                        } ?: viewModel.send()
-                    },
-                    micButton = {
-                        HoldToRecordButton(
-                            onPressStart = {
-                                val granted = ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED
-                                if (!granted) {
-                                    micPermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
-                                    return@HoldToRecordButton false
-                                }
-                                val started = runCatching { voiceRecorder.start() }.isSuccess
-                                if (started) {
-                                    recordStartedAt = System.currentTimeMillis()
-                                    recordElapsed = 0
-                                    isRecording = true
-                                } else {
-                                    scope.launch { snackbar.showSnackbar("Nahrávání se nezdařilo.") }
-                                }
-                                started
-                            },
-                            onPressEnd = { endRecording() },
-                        )
-                    },
+                    size = 48.dp,
+                    accent = true,
+                    modifier = Modifier.padding(bottom = 96.dp),
                 )
             }
         },
@@ -317,6 +230,8 @@ fun GroupChatScreen(groupId: String, onBack: () -> Unit, onLeft: () -> Unit, onO
         val threadMedia = remember(messages) {
             messages.filter { it.type == MessageType.IMAGE || it.type == MessageType.VIDEO }
         }
+        val mentionRows = if (mentionQuery != null && !isRecording && pendingVoice == null) viewModel.mentionSuggestions().size else 0
+        val islandBottomPad = 104.dp + (if (pending.isEmpty()) 0.dp else 84.dp) + (minOf(mentionRows, 6) * 46).dp
         Box(modifier = Modifier.fillMaxSize().padding(padding)) {
             // Flat backdrop plus the thread; the floating bars above blur this
             // content behind themselves, so it scrolls underneath the frost.
@@ -326,7 +241,7 @@ fun GroupChatScreen(groupId: String, onBack: () -> Unit, onLeft: () -> Unit, onO
                     state = listState,
                     reverseLayout = true,
                     modifier = Modifier.fillMaxSize(),
-                    contentPadding = PaddingValues(start = 12.dp, end = 12.dp, top = 92.dp, bottom = 12.dp),
+                    contentPadding = PaddingValues(start = 12.dp, end = 12.dp, top = 92.dp, bottom = islandBottomPad),
                     verticalArrangement = Arrangement.spacedBy(4.dp),
                 ) {
                 items(displayItems, key = { it.messageId }) { message ->
@@ -367,6 +282,99 @@ fun GroupChatScreen(groupId: String, onBack: () -> Unit, onLeft: () -> Unit, onO
                     onClear = { confirmClear = true },
                     onLeave = { confirmLeave = true },
                     modifier = Modifier.align(Alignment.TopCenter),
+                    hazeState = hazeState,
+                )
+            }
+            // The composer floats over the thread like the top bar does - same
+            // frosted island, messages scroll behind it.
+            Column(modifier = Modifier.align(Alignment.BottomCenter)) {
+                if (mentionQuery != null && !isRecording && pendingVoice == null) {
+                    val suggestions = viewModel.mentionSuggestions()
+                    if (suggestions.isNotEmpty()) {
+                        GlassSurface(
+                            shape = HertzShapes.Card,
+                            shadowElevation = 8.dp,
+                            hazeState = hazeState,
+                            modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp).padding(bottom = 8.dp),
+                        ) {
+                            Column(modifier = Modifier.padding(vertical = 4.dp)) {
+                                suggestions.forEach { suggestion ->
+                                    Text(
+                                        "@" + suggestion.label,
+                                        color = HertzGlass.contentOnGlass(),
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .clickable { viewModel.selectMention(suggestion) }
+                                            .padding(horizontal = 16.dp, vertical = 12.dp),
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+                ThreadInputBar(
+                    draft = draft,
+                    onDraftChange = viewModel::onDraftChange,
+                    placeholder = "Zpráva, nebo @jméno",
+                    leading = {
+                        Box {
+                            GlassCircleButton(
+                                icon = HertzIcons.Attach,
+                                contentDescription = "Přiložit",
+                                onClick = { attachMenuOpen = true },
+                                size = 48.dp,
+                            )
+                            AttachmentMenu(
+                                expanded = attachMenuOpen,
+                                onDismissRequest = { attachMenuOpen = false },
+                                onPickImage = { pickImage.launch("image/*") },
+                                onPickVideo = { pickVideo.launch("video/*") },
+                                onPickFile = { pickFile.launch("*/*") },
+                                onTakePhoto = {
+                                    val uri = cz.kuclab.hertzchat.media.newCameraPhotoUri(context)
+                                    cameraOutputUri = uri
+                                    takePhoto.launch(uri)
+                                },
+                            )
+                        }
+                    },
+                    attachments = pending,
+                    onRemoveAttachment = viewModel::removePending,
+                    isRecording = isRecording,
+                    recordElapsedMs = recordElapsed,
+                    recordLevel = recordLevel,
+                    pendingVoice = pendingVoice,
+                    onDeleteVoice = {
+                        pendingVoice?.first?.delete()
+                        pendingVoice = null
+                    },
+                    onSend = {
+                        pendingVoice?.let { (file, duration) ->
+                            viewModel.sendVoice(file, duration)
+                            pendingVoice = null
+                        } ?: viewModel.send()
+                    },
+                    micButton = {
+                        HoldToRecordButton(
+                            onPressStart = {
+                                val granted = ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED
+                                if (!granted) {
+                                    micPermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
+                                    return@HoldToRecordButton false
+                                }
+                                val started = runCatching { voiceRecorder.start() }.isSuccess
+                                if (started) {
+                                    recordStartedAt = System.currentTimeMillis()
+                                    recordElapsed = 0
+                                    isRecording = true
+                                } else {
+                                    scope.launch { snackbar.showSnackbar("Nahrávání se nezdařilo.") }
+                                }
+                                started
+                            },
+                            onPressEnd = { endRecording() },
+                        )
+                    },
                     hazeState = hazeState,
                 )
             }
@@ -563,26 +571,22 @@ private fun FloatingGroupBar(
                 onClick = { onOverflowChange(true) },
                 hazeState = hazeState,
             )
-            ActionMenu(expanded = overflowOpen, onDismissRequest = { onOverflowChange(false) }) {
-                ActionMenuItem(
+            GlassMenu(expanded = overflowOpen, onDismissRequest = { onOverflowChange(false) }) {
+                GlassMenuItem(
                     text = "Členové skupiny",
-                    icon = Icons.Filled.Groups,
                     onClick = { onOverflowChange(false); onMembers() },
                 )
-                ActionMenuItem(
+                GlassMenuItem(
                     text = "Hledat v konverzaci",
-                    icon = Icons.Filled.Search,
                     onClick = { onOverflowChange(false); onSearch() },
                 )
-                ActionMenuItem(
+                GlassMenuItem(
                     text = "Vyčistit konverzaci",
-                    icon = Icons.Filled.DeleteSweep,
                     destructive = true,
                     onClick = { onOverflowChange(false); onClear() },
                 )
-                ActionMenuItem(
+                GlassMenuItem(
                     text = "Opustit skupinu",
-                    icon = Icons.AutoMirrored.Filled.ExitToApp,
                     destructive = true,
                     onClick = { onOverflowChange(false); onLeave() },
                 )
@@ -674,6 +678,13 @@ private fun GroupMessageBubble(
                     }
                 }
             }
+        }
+        if (message.fromMe && (message.deliveryState == DeliveryState.PENDING || message.deliveryState == DeliveryState.SENT)) {
+            AtomSpinner(
+                color = HertzGlass.contentOnGlass().copy(alpha = 0.65f),
+                size = 16.dp,
+                modifier = Modifier.padding(top = 3.dp, bottom = 1.dp, end = 10.dp),
+            )
         }
     }
 }

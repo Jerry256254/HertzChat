@@ -19,16 +19,13 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.Button
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
-import androidx.compose.material3.CenterAlignedTopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
@@ -42,7 +39,8 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
-import cz.kuclab.hertzchat.ui.theme.HertzMatte
+import cz.kuclab.hertzchat.ui.common.GlassBar
+import cz.kuclab.hertzchat.ui.common.GlassCircleButton
 
 /** The KucLab Hertz web assistant, embedded as a WebView so it never leaves the app. Trailing slash on purpose - the server 301s the bare path here. */
 const val HERTZ_ASSISTANT_URL = "https://kuclab.org/hertz/"
@@ -156,21 +154,9 @@ fun HertzAssistantScreen(onBack: () -> Unit) {
         if (webView.canGoBack()) webView.goBack() else onBack()
     }
 
-    Scaffold(
-        topBar = {
-            CenterAlignedTopAppBar(
-                colors = HertzMatte.topBarColors(),
-                title = { Text("Hertz AI") },
-                navigationIcon = { IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Zpět") } },
-                actions = {
-                    IconButton(onClick = { loadError = false; loading = true; webView.reload() }) {
-                        Icon(Icons.Filled.Refresh, contentDescription = "Obnovit")
-                    }
-                },
-            )
-        },
-    ) { padding ->
+    Scaffold { padding ->
         Box(modifier = Modifier.fillMaxSize().padding(padding)) {
+        Box(modifier = Modifier.fillMaxSize().padding(top = 68.dp)) {
             AndroidView(factory = { webView }, modifier = Modifier.fillMaxSize())
             if (loading) {
                 LinearProgressIndicator(modifier = Modifier.fillMaxWidth().align(Alignment.TopCenter))
@@ -195,6 +181,20 @@ fun HertzAssistantScreen(onBack: () -> Unit) {
                     }
                 }
             }
+        }
+        GlassBar(
+            title = "Hertz AI",
+            hazeState = null,
+            onBack = onBack,
+            actions = {
+                GlassCircleButton(
+                    icon = Icons.Filled.Refresh,
+                    contentDescription = "Obnovit",
+                    onClick = { loadError = false; loading = true; webView.reload() },
+                )
+            },
+            modifier = Modifier.align(Alignment.TopCenter),
+        )
         }
     }
 }

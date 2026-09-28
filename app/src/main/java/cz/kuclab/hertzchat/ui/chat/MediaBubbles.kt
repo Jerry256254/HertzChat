@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.pager.HorizontalPager
@@ -53,6 +54,7 @@ import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.ui.PlayerView
 import coil.compose.AsyncImage
 import cz.kuclab.hertzchat.data.db.MessageEntity
+import cz.kuclab.hertzchat.ui.common.Strands
 import cz.kuclab.hertzchat.ui.theme.HertzShapes
 import java.io.File
 import kotlin.math.max
@@ -146,6 +148,7 @@ private fun DownloadBadge(onClick: () -> Unit, modifier: Modifier = Modifier) {
 fun VoiceBubble(message: MessageEntity, onSurface: Color, accent: Color, onDownload: (MessageEntity) -> Unit = {}) {
     var isPlaying by remember { mutableStateOf(false) }
     val player = remember { android.media.MediaPlayer() }
+    val level = playbackLevel(player, isPlaying)
 
     DisposableEffect(message.messageId) {
         onDispose { player.release() }
@@ -187,16 +190,83 @@ fun VoiceBubble(message: MessageEntity, onSurface: Color, accent: Color, onDownl
                 modifier = Modifier.size(28.dp),
             )
         }
-        val seconds = ((message.mediaDurationMs ?: 0L) / 1000).toInt()
-        Text(
-            "Hlasová zpráva · ${seconds / 60}:${(seconds % 60).toString().padStart(2, '0')}",
-            color = onSurface,
-            modifier = Modifier.padding(start = 10.dp).weight(1f),
-        )
+        Column(modifier = Modifier.padding(start = 10.dp).weight(1f)) {
+            Strands(
+                level = level,
+                color = accent,
+                modifier = Modifier.fillMaxWidth().height(38.dp),
+            )
+            val seconds = ((message.mediaDurationMs ?: 0L) / 1000).toInt()
+            Text(
+                "${seconds / 60}:${(seconds % 60).toString().padStart(2, '0')}",
+                style = MaterialTheme.typography.labelSmall,
+                color = onSurface.copy(alpha = 0.7f),
+            )
+        }
         IconButton(onClick = { onDownload(message) }, modifier = Modifier.size(32.dp)) {
             Icon(Icons.Filled.Download, contentDescription = "Stáhnout hlasovku", tint = accent, modifier = Modifier.size(20.dp))
         }
     }
+}
+
+/**
+ * Live playback level 0..1 tapped from the player's own audio session - the
+ * strands above dance to the actual samples, never to a random generator.
+ * Needs the mic permission (already requested for recording); without it
+ * there is no signal and the strands rest at a calm drift.
+ */
+@Composable
+private fun playbackLevel(player: android.media.MediaPlayer, playing: Boolean): Float {
+    var level by remember { mutableFloatStateOf(0f) }
+    val vizHolder = remember { arrayOf<android.media.audiofx.Visualizer?>(null) }
+
+    suspend fun ensureVisualizer() {
+        if (vizHolder[0] != null) return
+        vizHolder[0] = runCatching {
+            val session = player.audioSessionId
+            check(session != 0)
+            android.media.audiofx.Visualizer(session).apply {
+                captureSize = android.media.audiofx.Visualizer.getCaptureSizeRange()[1]
+                setDataCaptureListener(
+                    object : android.media.audiofx.Visualizer.OnDataCaptureListener {
+                        override fun onWaveFormDataCapture(viz: android.media.audiofx.Visualizer?, bytes: ByteArray?, rate: Int) {
+                            if (bytes == null || bytes.isEmpty()) return
+                            var sum = 0.0
+                            for (b in bytes) {
+                                val sample = (b.toInt() and 0xFF) - 128
+                                sum += sample * sample
+                            }
+                            val target = (kotlin.math.sqrt(sum / bytes.size) / 128.0).toFloat().coerceIn(0f, 1f)
+                            // Fast attack, slow release - the waves punch with
+                            // the voice and settle instead of flickering.
+                            level = max(target, level * 0.88f)
+                        }
+
+                        override fun onFftDataCapture(viz: android.media.audiofx.Visualizer?, bytes: ByteArray?, rate: Int) = Unit
+                    },
+                    android.media.audiofx.Visualizer.getMaxCaptureRate() / 2,
+                    true,
+                    false,
+                )
+            }
+        }.getOrNull()
+    }
+
+    androidx.compose.runtime.LaunchedEffect(playing) {
+        if (playing) ensureVisualizer()
+        runCatching { vizHolder[0]?.enabled = playing }
+        if (!playing) level = 0f
+    }
+    DisposableEffect(player) {
+        onDispose {
+            runCatching {
+                vizHolder[0]?.enabled = false
+                vizHolder[0]?.release()
+            }
+            vizHolder[0] = null
+        }
+    }
+    return level
 }
 
 /**

@@ -7,22 +7,17 @@ import androidx.camera.core.Preview
 import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import cz.kuclab.hertzchat.ui.theme.HertzMatte
 import cz.kuclab.hertzchat.ui.theme.HertzShapes
 import androidx.camera.view.PreviewView
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.Button
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
-import androidx.compose.material3.CenterAlignedTopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -40,23 +35,17 @@ import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
 import androidx.hilt.navigation.compose.hiltViewModel
 import cz.kuclab.hertzchat.ui.common.AppCard
+import cz.kuclab.hertzchat.ui.common.GlassBar
 import java.util.concurrent.Executors
 
 @Composable
 fun QrExportScreen(onDone: () -> Unit, viewModel: QrMigrationViewModel = hiltViewModel()) {
     val bitmap = remember { generateQrBitmap(viewModel.exportPayload()) }
 
-    Scaffold(
-        topBar = {
-            CenterAlignedTopAppBar(
-                title = { Text("Přenos identity") },
-                navigationIcon = { IconButton(onClick = onDone) { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Zpět") } },
-                colors = HertzMatte.topBarColors(),
-            )
-        },
-    ) { padding ->
+    Scaffold { padding ->
+        Box(modifier = Modifier.fillMaxSize().padding(padding)) {
         Column(
-            modifier = Modifier.fillMaxSize().padding(padding).padding(24.dp),
+            modifier = Modifier.fillMaxSize().padding(24.dp).padding(top = 68.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(20.dp),
         ) {
@@ -80,6 +69,8 @@ fun QrExportScreen(onDone: () -> Unit, viewModel: QrMigrationViewModel = hiltVie
             )
             Button(onClick = onDone, modifier = Modifier.fillMaxWidth()) { Text("Hotovo") }
         }
+        GlassBar(title = "Přenos identity", hazeState = null, onBack = onDone, modifier = Modifier.align(Alignment.TopCenter))
+        }
     }
 }
 
@@ -99,16 +90,9 @@ fun QrImportScreen(onDone: () -> Unit, viewModel: QrMigrationViewModel = hiltVie
     var imported by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
 
-    Scaffold(
-        topBar = {
-            CenterAlignedTopAppBar(
-                title = { Text("Naskenovat identitu") },
-                navigationIcon = { IconButton(onClick = onDone) { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Zpět") } },
-                colors = HertzMatte.topBarColors(),
-            )
-        },
-    ) { padding ->
-        Column(modifier = Modifier.fillMaxSize().padding(padding)) {
+    Scaffold { padding ->
+        Box(modifier = Modifier.fillMaxSize().padding(padding)) {
+        Column(modifier = Modifier.fillMaxSize().padding(top = 68.dp)) {
             Text(
                 "Namiř na QR kód zobrazený na starém zařízení v Profil → Přenést identitu.",
                 modifier = Modifier.padding(16.dp),
@@ -176,6 +160,8 @@ fun QrImportScreen(onDone: () -> Unit, viewModel: QrMigrationViewModel = hiltVie
                     }
                 }
             }
+        }
+        GlassBar(title = "Naskenovat identitu", hazeState = null, onBack = onDone, modifier = Modifier.align(Alignment.TopCenter))
         }
     }
 }

@@ -4,8 +4,10 @@ import android.media.MediaPlayer
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
@@ -13,7 +15,6 @@ import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material3.Icon
@@ -35,6 +36,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.unit.dp
+import cz.kuclab.hertzchat.ui.theme.HertzIcons
 import java.io.File
 import kotlinx.coroutines.delay
 
@@ -86,30 +88,29 @@ fun HoldToRecordButton(
                 )
             },
     ) {
-        Icon(Icons.Filled.Mic, contentDescription = "Podrž pro nahrání hlasovky", tint = iconTint)
+        Icon(HertzIcons.Mic, contentDescription = "Podrž pro nahrání hlasovky", tint = iconTint)
     }
 }
 
 /**
- * The pill's center while the mic is held: elapsed time plus a hint that
- * releasing stops (not sends). Surface-less - the pill behind it is the surface.
+ * The pill's center while the mic is held: audio strands streaming with the
+ * live mic level, plus elapsed time and a hint that releasing stops (not
+ * sends). Surface-less - the pill behind it is the surface.
  */
 @Composable
-fun VoiceRecordingContent(elapsedMs: Long, modifier: Modifier = Modifier) {
-    Row(
+fun VoiceRecordingContent(elapsedMs: Long, level: Float, modifier: Modifier = Modifier) {
+    Column(
         modifier = modifier.fillMaxWidth().padding(horizontal = 12.dp),
-        verticalAlignment = Alignment.CenterVertically,
     ) {
-        Box(
-            modifier = Modifier
-                .size(12.dp)
-                .clip(CircleShape)
-                .background(MaterialTheme.colorScheme.error),
+        Strands(
+            level = level,
+            color = MaterialTheme.colorScheme.error,
+            modifier = Modifier.fillMaxWidth().height(30.dp),
         )
         Text(
-            "Nahrávám… ${formatVoiceDuration(elapsedMs)} - pusť pro náhled",
-            modifier = Modifier.padding(start = 12.dp),
-            color = HertzGlass.contentOnGlass(),
+            "${formatVoiceDuration(elapsedMs)} · pusť pro náhled",
+            style = MaterialTheme.typography.labelSmall,
+            color = HertzGlass.contentOnGlass().copy(alpha = 0.7f),
         )
     }
 }

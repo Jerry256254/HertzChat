@@ -25,7 +25,6 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
-import androidx.compose.material3.CenterAlignedTopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -44,7 +43,7 @@ import coil.compose.AsyncImage
 import cz.kuclab.hertzchat.ui.chat.PhotoEditorDialog
 import cz.kuclab.hertzchat.ui.chat.PhotoSource
 import cz.kuclab.hertzchat.ui.common.AppCard
-import cz.kuclab.hertzchat.ui.theme.HertzMatte
+import cz.kuclab.hertzchat.ui.common.GlassBar
 
 @Composable
 fun ProfileScreen(onOpenQrExport: () -> Unit, viewModel: ProfileViewModel = hiltViewModel()) {
@@ -57,9 +56,10 @@ fun ProfileScreen(onOpenQrExport: () -> Unit, viewModel: ProfileViewModel = hilt
     var editingUri by remember { mutableStateOf<android.net.Uri?>(null) }
     val pickImage = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri -> editingUri = uri }
 
-    Scaffold(topBar = { CenterAlignedTopAppBar(title = { Text("Profil") }, colors = HertzMatte.topBarColors()) }) { padding ->
+    Scaffold { padding ->
+        Box(modifier = Modifier.fillMaxSize().padding(padding)) {
         Column(
-            modifier = Modifier.fillMaxSize().padding(padding).padding(24.dp),
+            modifier = Modifier.fillMaxSize().padding(24.dp).padding(top = 68.dp),
             verticalArrangement = Arrangement.spacedBy(20.dp),
         ) {
             Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
@@ -136,6 +136,8 @@ fun ProfileScreen(onOpenQrExport: () -> Unit, viewModel: ProfileViewModel = hilt
             OutlinedButton(onClick = onOpenQrExport, modifier = Modifier.fillMaxWidth()) {
                 Text("Přenést identitu na nové zařízení (QR)")
             }
+        }
+        GlassBar(title = "Profil", hazeState = null, modifier = Modifier.align(Alignment.TopCenter))
         }
     }
 

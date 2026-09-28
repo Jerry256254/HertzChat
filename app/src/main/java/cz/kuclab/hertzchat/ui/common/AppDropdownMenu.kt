@@ -16,7 +16,7 @@ fun AppDropdownMenu(
     modifier: Modifier = Modifier,
     content: @Composable ColumnScope.() -> Unit,
 ) {
-    GlassPopupMenu(
+    GlassMenu(
         expanded = expanded,
         onDismissRequest = onDismissRequest,
         modifier = modifier,

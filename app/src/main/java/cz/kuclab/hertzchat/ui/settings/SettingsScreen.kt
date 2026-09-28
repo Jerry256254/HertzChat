@@ -3,6 +3,7 @@ package cz.kuclab.hertzchat.ui.settings
 import android.content.Intent
 import android.net.Uri
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
@@ -27,8 +28,6 @@ import androidx.compose.material.icons.filled.Wifi
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -37,7 +36,6 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.CenterAlignedTopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -54,9 +52,13 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import cz.kuclab.hertzchat.BuildConfig
 import cz.kuclab.hertzchat.R
 import cz.kuclab.hertzchat.ui.common.AppDropdownMenu
-import cz.kuclab.hertzchat.ui.theme.HertzMatte
+import cz.kuclab.hertzchat.ui.common.GlassBar
+import cz.kuclab.hertzchat.ui.common.GlassMenuItem
+import cz.kuclab.hertzchat.ui.common.HertzGlass
 import cz.kuclab.hertzchat.ui.common.AppCard
 import cz.kuclab.hertzchat.ui.common.LanguagePickerRow
+import dev.chrisbanes.haze.HazeState
+import dev.chrisbanes.haze.haze
 
 @Composable
 fun SettingsScreen(viewModel: SettingsViewModel = hiltViewModel()) {
@@ -65,11 +67,13 @@ fun SettingsScreen(viewModel: SettingsViewModel = hiltViewModel()) {
     val updateCheckState by viewModel.updateCheckState.collectAsState()
     val context = LocalContext.current
 
-    Scaffold(topBar = { CenterAlignedTopAppBar(title = { Text(stringResource(R.string.settings_title)) }, colors = HertzMatte.topBarColors()) }) { padding ->
+    val hazeState = remember { HazeState() }
+    Scaffold { padding ->
+        Box(modifier = Modifier.fillMaxSize().padding(padding)) {
         LazyColumn(
-            modifier = Modifier.fillMaxSize().padding(padding).padding(horizontal = 16.dp),
+            modifier = Modifier.fillMaxSize().haze(hazeState, HertzGlass.hazeStyle()).padding(horizontal = 16.dp),
             verticalArrangement = Arrangement.spacedBy(4.dp),
-            contentPadding = androidx.compose.foundation.layout.PaddingValues(bottom = 24.dp),
+            contentPadding = androidx.compose.foundation.layout.PaddingValues(top = 92.dp, bottom = 24.dp),
         ) {
             item { SectionTitle(Icons.Filled.DarkMode, stringResource(R.string.settings_section_appearance)) }
             item {
@@ -161,6 +165,12 @@ fun SettingsScreen(viewModel: SettingsViewModel = hiltViewModel()) {
                     )
                 }
             }
+        }
+        GlassBar(
+            title = stringResource(R.string.settings_title),
+            hazeState = hazeState,
+            modifier = Modifier.align(Alignment.TopCenter),
+        )
         }
     }
 }
@@ -264,7 +274,7 @@ private fun MediaQualityRow(current: String, onChange: (String) -> Unit) {
         }
         AppDropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
             options.forEach { (value, label) ->
-                DropdownMenuItem(text = { Text(label) }, onClick = { onChange(value); expanded = false })
+                GlassMenuItem(text = label, onClick = { onChange(value); expanded = false })
             }
         }
     }

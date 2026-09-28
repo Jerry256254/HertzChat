@@ -54,10 +54,6 @@ object HertzGlass {
     @Composable
     fun fill(): Color = if (isSystemInDarkTheme()) Color.White.copy(alpha = 0.13f) else Color.White.copy(alpha = 0.60f)
 
-    /** Heavier fill for bars floating over scrolling content. */
-    @Composable
-    fun fillStrong(): Color = if (isSystemInDarkTheme()) Color.White.copy(alpha = 0.18f) else Color.White.copy(alpha = 0.78f)
-
     /**
      * Translucent container for anchored popup menus. The blur behind comes
      * from [WindowBlurBehind], which only exists on Android 12+ - below that

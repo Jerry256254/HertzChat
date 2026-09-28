@@ -21,21 +21,15 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.Block
 import androidx.compose.material.icons.filled.ChatBubbleOutline
 import androidx.compose.material.icons.filled.Groups
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.PushPin
-import androidx.compose.material.icons.outlined.PushPin
-import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.SmartToy
-import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material.icons.filled.Wifi
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.ExtendedFloatingActionButton
-import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
@@ -59,14 +53,15 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import coil.compose.AsyncImage
 import cz.kuclab.hertzchat.data.repository.IncomingFriendRequest
 import cz.kuclab.hertzchat.network.p2p.I2pState
-import cz.kuclab.hertzchat.ui.common.ActionMenu
 import cz.kuclab.hertzchat.ui.common.GlassAmbientBackground
 import cz.kuclab.hertzchat.ui.common.GlassCircleButton
+import cz.kuclab.hertzchat.ui.common.GlassMenu
+import cz.kuclab.hertzchat.ui.common.GlassMenuItem
 import cz.kuclab.hertzchat.ui.common.GlassSurface
 import cz.kuclab.hertzchat.ui.common.HertzGlass
-import cz.kuclab.hertzchat.ui.common.ActionMenuItem
 import cz.kuclab.hertzchat.ui.common.AppCard
 import cz.kuclab.hertzchat.ui.theme.HertzMatte
+import cz.kuclab.hertzchat.ui.theme.HertzIcons
 import cz.kuclab.hertzchat.ui.theme.HertzShapes
 import dev.chrisbanes.haze.HazeState
 import dev.chrisbanes.haze.haze
@@ -97,21 +92,32 @@ fun ChatListScreen(
                 horizontalAlignment = Alignment.End,
                 verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
-                FilledTonalButton(
-                    onClick = onOpenAssistant,
+                GlassSurface(
                     shape = HertzShapes.Pill,
-                    contentPadding = PaddingValues(horizontal = 16.dp, vertical = 10.dp),
+                    hazeState = hazeState,
+                    onClick = onOpenAssistant,
                 ) {
-                    Icon(Icons.Filled.SmartToy, contentDescription = null, modifier = Modifier.size(18.dp))
-                    Text("  Hertz Agent", style = MaterialTheme.typography.labelLarge)
+                    Row(
+                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Icon(Icons.Filled.SmartToy, contentDescription = null, tint = HertzGlass.contentOnGlass(), modifier = Modifier.size(18.dp))
+                        Text("  Hertz Agent", style = MaterialTheme.typography.labelLarge, color = HertzGlass.contentOnGlass())
+                    }
                 }
-                ExtendedFloatingActionButton(
+                GlassSurface(
+                    shape = HertzShapes.Pill,
+                    fill = MaterialTheme.colorScheme.primary,
                     onClick = onOpenContacts,
-                    containerColor = MaterialTheme.colorScheme.primary,
-                    contentColor = MaterialTheme.colorScheme.onPrimary,
-                    icon = { Icon(Icons.Filled.Add, contentDescription = null) },
-                    text = { Text("Nový chat") },
-                )
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Icon(Icons.Filled.Add, contentDescription = null, tint = MaterialTheme.colorScheme.onPrimary, modifier = Modifier.size(20.dp))
+                        Text("  Nový chat", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onPrimary)
+                    }
+                }
             }
         },
     ) { padding ->
@@ -201,6 +207,7 @@ fun ChatListScreen(
                 items(items, key = { it.contactId }) { item ->
                     ChatListRow(
                         item = item,
+                        pinnedCount = items.count { it.pinned },
                         onClick = {
                             when (item.kind) {
                                 ChatListItemKind.CONTACT -> onOpenChat(item.contactId)
@@ -208,6 +215,7 @@ fun ChatListScreen(
                             }
                         },
                         onTogglePin = { viewModel.togglePin(item) },
+                        onMovePinned = { up -> viewModel.movePinned(item, up) },
                         onBlock = { viewModel.block(item.contactId) },
                     )
                 }
@@ -273,7 +281,7 @@ private fun FloatingHomeBar(
             )
         }
         GlassCircleButton(
-            icon = Icons.Filled.Settings,
+            icon = HertzIcons.Settings,
             contentDescription = "Nastavení",
             onClick = onOpenSettings,
             hazeState = hazeState,
@@ -380,8 +388,10 @@ private fun FriendRequestRow(
 @Composable
 private fun ChatListRow(
     item: ChatListItem,
+    pinnedCount: Int,
     onClick: () -> Unit,
     onTogglePin: () -> Unit,
+    onMovePinned: (up: Boolean) -> Unit,
     onBlock: () -> Unit,
 ) {
     var menuOpen by remember { mutableStateOf(false) }
@@ -398,16 +408,24 @@ private fun ChatListRow(
                 .padding(horizontal = 16.dp, vertical = 14.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            ActionMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
-                ActionMenuItem(
+            GlassMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
+                GlassMenuItem(
                     text = if (item.pinned) "Odepnout" else "Připnout",
-                    icon = if (item.pinned) Icons.Filled.PushPin else Icons.Outlined.PushPin,
                     onClick = { menuOpen = false; onTogglePin() },
                 )
+                if (item.pinned && pinnedCount > 1) {
+                    GlassMenuItem(
+                        text = "Posunout nahoru",
+                        onClick = { menuOpen = false; onMovePinned(true) },
+                    )
+                    GlassMenuItem(
+                        text = "Posunout dolů",
+                        onClick = { menuOpen = false; onMovePinned(false) },
+                    )
+                }
                 if (!item.isSelf) {
-                    ActionMenuItem(
+                    GlassMenuItem(
                         text = "Blokovat",
-                        icon = Icons.Filled.Block,
                         destructive = true,
                         onClick = { menuOpen = false; onBlock() },
                     )
@@ -449,10 +467,6 @@ private fun ChatListRow(
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                     }
-                    if (item.pinned) {
-                        Spacer(modifier = Modifier.width(4.dp))
-                        Icon(Icons.Filled.PushPin, contentDescription = "Připnuto", modifier = Modifier.size(14.dp))
-                    }
                 }
                 Text(
                     text = item.lastMessagePreview ?: "Zatím žádné zprávy",
@@ -463,20 +477,33 @@ private fun ChatListRow(
                     modifier = Modifier.padding(top = 2.dp),
                 )
             }
-            if (item.unreadCount > 0) {
-                Box(
-                    modifier = Modifier
-                        .size(24.dp)
-                        .clip(CircleShape)
-                        .background(MaterialTheme.colorScheme.primary),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Text(
-                        if (item.unreadCount > 99) "99+" else item.unreadCount.toString(),
-                        style = MaterialTheme.typography.labelSmall,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.onPrimary,
+            Column(
+                horizontalAlignment = Alignment.End,
+                verticalArrangement = Arrangement.spacedBy(6.dp),
+            ) {
+                if (item.pinned) {
+                    Icon(
+                        Icons.Filled.PushPin,
+                        contentDescription = "Připnuto",
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.size(16.dp),
                     )
+                }
+                if (item.unreadCount > 0) {
+                    Box(
+                        modifier = Modifier
+                            .size(24.dp)
+                            .clip(CircleShape)
+                            .background(MaterialTheme.colorScheme.primary),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Text(
+                            if (item.unreadCount > 99) "99+" else item.unreadCount.toString(),
+                            style = MaterialTheme.typography.labelSmall,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onPrimary,
+                        )
+                    }
                 }
             }
         }

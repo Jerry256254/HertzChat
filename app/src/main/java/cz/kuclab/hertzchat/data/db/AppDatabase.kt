@@ -32,7 +32,7 @@ class Converters {
         GroupMemberEntity::class,
         ThreadReadStateEntity::class,
     ],
-    version = 10,
+    version = 11,
     exportSchema = false,
 )
 @TypeConverters(Converters::class)

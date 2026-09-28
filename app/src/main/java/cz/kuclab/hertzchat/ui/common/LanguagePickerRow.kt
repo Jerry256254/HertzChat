@@ -9,8 +9,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Language
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -50,8 +48,8 @@ fun LanguagePickerRow(label: String, currentCode: String, onChange: (String) -> 
             TextButton(onClick = { expanded = true }) { Text(currentLabel) }
             AppDropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
                 SUPPORTED_LANGUAGES.forEach { language ->
-                    DropdownMenuItem(
-                        text = { Text(language.nativeName) },
+                    GlassMenuItem(
+                        text = language.nativeName,
                         onClick = {
                             expanded = false
                             if (language.code != currentCode) {

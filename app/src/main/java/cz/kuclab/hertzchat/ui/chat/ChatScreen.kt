@@ -19,17 +19,16 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.AttachFile
 import androidx.compose.material.icons.filled.Block
 import androidx.compose.material.icons.filled.ContentCopy
-import androidx.compose.material.icons.filled.DeleteSweep
 import androidx.compose.material.icons.filled.ErrorOutline
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.MoreVert
-import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -39,7 +38,6 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.SmallFloatingActionButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
@@ -50,6 +48,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -73,10 +72,10 @@ import cz.kuclab.hertzchat.data.db.MessageEntity
 import cz.kuclab.hertzchat.data.db.MessageType
 import cz.kuclab.hertzchat.data.model.PayloadKind
 import cz.kuclab.hertzchat.media.VoiceRecorder
-import cz.kuclab.hertzchat.ui.common.ActionMenu
-import cz.kuclab.hertzchat.ui.common.ActionMenuItem
+import cz.kuclab.hertzchat.ui.common.GlassMenu
+import cz.kuclab.hertzchat.ui.common.GlassMenuItem
+import cz.kuclab.hertzchat.ui.common.AtomSpinner
 import cz.kuclab.hertzchat.ui.common.AttachmentMenu
-import cz.kuclab.hertzchat.ui.common.ChatInputPillIcon
 import cz.kuclab.hertzchat.ui.common.ChatSearchBar
 import cz.kuclab.hertzchat.ui.common.HoldToRecordButton
 import cz.kuclab.hertzchat.ui.common.GlassAmbientBackground
@@ -88,12 +87,14 @@ import cz.kuclab.hertzchat.ui.common.WindowBlurBehind
 import cz.kuclab.hertzchat.ui.common.MarkdownText
 import cz.kuclab.hertzchat.ui.common.ThreadInputBar
 import cz.kuclab.hertzchat.ui.common.highlightQuery
+import cz.kuclab.hertzchat.ui.theme.HertzIcons
 import cz.kuclab.hertzchat.ui.theme.HertzShapes
 import dev.chrisbanes.haze.HazeState
 import dev.chrisbanes.haze.haze
 import java.io.File
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlin.math.sqrt
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -118,6 +119,7 @@ fun ChatScreen(contactId: String, onBack: () -> Unit, onOpenFile: (String) -> Un
     var isRecording by remember { mutableStateOf(false) }
     var recordStartedAt by remember { mutableLongStateOf(0L) }
     var recordElapsed by remember { mutableLongStateOf(0L) }
+    var recordLevel by remember { mutableFloatStateOf(0f) }
     var pendingVoice by remember { mutableStateOf<Pair<File, Long>?>(null) }
     val voiceRecorder = remember { VoiceRecorder(context) }
 
@@ -132,6 +134,7 @@ fun ChatScreen(contactId: String, onBack: () -> Unit, onOpenFile: (String) -> Un
     val endRecording = {
         if (isRecording) {
             isRecording = false
+            recordLevel = 0f
             val clip = voiceRecorder.stop()
             if (clip != null && clip.second > 400) {
                 pendingVoice = clip
@@ -143,10 +146,13 @@ fun ChatScreen(contactId: String, onBack: () -> Unit, onOpenFile: (String) -> Un
     LaunchedEffect(isRecording) {
         while (isRecording) {
             recordElapsed = System.currentTimeMillis() - recordStartedAt
+            // Perceptual curve - raw mic amplitude spends most of its life near
+            // zero, the square root spreads it into a readable wave.
+            recordLevel = sqrt((voiceRecorder.maxAmplitude() / 32767f).coerceIn(0f, 1f))
             if (recordElapsed > 120_000) {
                 endRecording()
             } else {
-                delay(250)
+                delay(100)
             }
         }
     }
@@ -207,79 +213,16 @@ fun ChatScreen(contactId: String, onBack: () -> Unit, onOpenFile: (String) -> Un
     Scaffold(
         snackbarHost = { SnackbarHost(snackbar) },
         floatingActionButton = {
-            if (showScrollDown && !searchOpen) {
-                SmallFloatingActionButton(
+            if (showScrollDown && !searchOpen && pending.isEmpty()) {
+                GlassCircleButton(
+                    icon = Icons.Filled.KeyboardArrowDown,
+                    contentDescription = "Sjet dolů",
                     onClick = { scope.launch { listState.animateScrollToItem(0) } },
-                    containerColor = MaterialTheme.colorScheme.primary,
-                    contentColor = MaterialTheme.colorScheme.onPrimary,
-                ) {
-                    Icon(Icons.Filled.KeyboardArrowDown, contentDescription = "Sjet dolů")
-                }
+                    size = 48.dp,
+                    accent = true,
+                    modifier = Modifier.padding(bottom = 96.dp),
+                )
             }
-        },
-        bottomBar = {
-            ThreadInputBar(
-                draft = draft,
-                onDraftChange = viewModel::onDraftChange,
-                placeholder = "Zpráva",
-                leading = {
-                    Box {
-                        ChatInputPillIcon(
-                            onClick = { attachMenuOpen = true },
-                            icon = Icons.Filled.AttachFile,
-                            contentDescription = "Přiložit",
-                        )
-                        AttachmentMenu(
-                            expanded = attachMenuOpen,
-                            onDismissRequest = { attachMenuOpen = false },
-                            onPickImage = { pickImage.launch("image/*") },
-                            onPickVideo = { pickVideo.launch("video/*") },
-                            onPickFile = { pickFile.launch("*/*") },
-                            onTakePhoto = {
-                                val uri = cz.kuclab.hertzchat.media.newCameraPhotoUri(context)
-                                cameraOutputUri = uri
-                                takePhoto.launch(uri)
-                            },
-                        )
-                    }
-                },
-                attachments = pending,
-                onRemoveAttachment = viewModel::removePending,
-                isRecording = isRecording,
-                recordElapsedMs = recordElapsed,
-                pendingVoice = pendingVoice,
-                onDeleteVoice = {
-                    pendingVoice?.first?.delete()
-                    pendingVoice = null
-                },
-                onSend = {
-                    pendingVoice?.let { (file, duration) ->
-                        viewModel.sendVoice(file, duration)
-                        pendingVoice = null
-                    } ?: viewModel.send()
-                },
-                micButton = {
-                    HoldToRecordButton(
-                        onPressStart = {
-                            val granted = ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED
-                            if (!granted) {
-                                micPermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
-                                return@HoldToRecordButton false
-                            }
-                            val started = runCatching { voiceRecorder.start() }.isSuccess
-                            if (started) {
-                                recordStartedAt = System.currentTimeMillis()
-                                recordElapsed = 0
-                                isRecording = true
-                            } else {
-                                scope.launch { snackbar.showSnackbar("Nahrávání se nezdařilo.") }
-                            }
-                            started
-                        },
-                        onPressEnd = { endRecording() },
-                    )
-                },
-            )
         },
     ) { padding ->
         val threadMedia = remember(state.messages) {
@@ -297,7 +240,7 @@ fun ChatScreen(contactId: String, onBack: () -> Unit, onOpenFile: (String) -> Un
                     state = listState,
                     reverseLayout = true,
                     modifier = Modifier.fillMaxSize(),
-                    contentPadding = PaddingValues(start = 12.dp, end = 12.dp, top = 92.dp, bottom = 12.dp),
+                    contentPadding = PaddingValues(start = 12.dp, end = 12.dp, top = 92.dp, bottom = if (pending.isEmpty()) 104.dp else 188.dp),
                     verticalArrangement = Arrangement.spacedBy(4.dp),
                 ) {
                 items(displayItems, key = { it.messageId }) { message ->
@@ -338,6 +281,74 @@ fun ChatScreen(contactId: String, onBack: () -> Unit, onOpenFile: (String) -> Un
                     hazeState = hazeState,
                 )
             }
+            // The composer floats over the thread like the top bar does - same
+            // frosted island, messages scroll behind it.
+            ThreadInputBar(
+                draft = draft,
+                onDraftChange = viewModel::onDraftChange,
+                placeholder = "Zpráva",
+                leading = {
+                    Box {
+                        GlassCircleButton(
+                            icon = HertzIcons.Attach,
+                            contentDescription = "Přiložit",
+                            onClick = { attachMenuOpen = true },
+                            size = 48.dp,
+                        )
+                        AttachmentMenu(
+                            expanded = attachMenuOpen,
+                            onDismissRequest = { attachMenuOpen = false },
+                            onPickImage = { pickImage.launch("image/*") },
+                            onPickVideo = { pickVideo.launch("video/*") },
+                            onPickFile = { pickFile.launch("*/*") },
+                            onTakePhoto = {
+                                val uri = cz.kuclab.hertzchat.media.newCameraPhotoUri(context)
+                                cameraOutputUri = uri
+                                takePhoto.launch(uri)
+                            },
+                        )
+                    }
+                },
+                attachments = pending,
+                onRemoveAttachment = viewModel::removePending,
+                isRecording = isRecording,
+                recordElapsedMs = recordElapsed,
+                recordLevel = recordLevel,
+                pendingVoice = pendingVoice,
+                onDeleteVoice = {
+                    pendingVoice?.first?.delete()
+                    pendingVoice = null
+                },
+                onSend = {
+                    pendingVoice?.let { (file, duration) ->
+                        viewModel.sendVoice(file, duration)
+                        pendingVoice = null
+                    } ?: viewModel.send()
+                },
+                micButton = {
+                    HoldToRecordButton(
+                        onPressStart = {
+                            val granted = ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED
+                            if (!granted) {
+                                micPermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
+                                return@HoldToRecordButton false
+                            }
+                            val started = runCatching { voiceRecorder.start() }.isSuccess
+                            if (started) {
+                                recordStartedAt = System.currentTimeMillis()
+                                recordElapsed = 0
+                                isRecording = true
+                            } else {
+                                scope.launch { snackbar.showSnackbar("Nahrávání se nezdařilo.") }
+                            }
+                            started
+                        },
+                        onPressEnd = { endRecording() },
+                    )
+                },
+                hazeState = hazeState,
+                modifier = Modifier.align(Alignment.BottomCenter),
+            )
         }
     }
 
@@ -462,15 +473,13 @@ private fun FloatingChatBar(
                 onClick = { onOverflowChange(true) },
                 hazeState = hazeState,
             )
-            ActionMenu(expanded = overflowOpen, onDismissRequest = { onOverflowChange(false) }) {
-                ActionMenuItem(
+            GlassMenu(expanded = overflowOpen, onDismissRequest = { onOverflowChange(false) }) {
+                GlassMenuItem(
                     text = "Hledat v konverzaci",
-                    icon = Icons.Filled.Search,
                     onClick = { onOverflowChange(false); onSearch() },
                 )
-                ActionMenuItem(
+                GlassMenuItem(
                     text = "Vyčistit konverzaci",
-                    icon = Icons.Filled.DeleteSweep,
                     destructive = true,
                     onClick = { onOverflowChange(false); onClear() },
                 )
@@ -547,6 +556,13 @@ private fun MessageBubble(
                 }
             }
         }
+        if (message.fromMe && (message.deliveryState == DeliveryState.PENDING || message.deliveryState == DeliveryState.SENT)) {
+            AtomSpinner(
+                color = HertzGlass.contentOnGlass().copy(alpha = 0.65f),
+                size = 16.dp,
+                modifier = Modifier.padding(top = 3.dp, bottom = 1.dp, end = 10.dp),
+            )
+        }
     }
 }
 
@@ -562,10 +578,13 @@ private fun ContactDetailsSheet(
     onBlock: () -> Unit,
 ) {
     val clipboard = LocalClipboardManager.current
-    ModalBottomSheet(onDismissRequest = onDismiss) {
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        sheetState = androidx.compose.material3.rememberModalBottomSheetState(skipPartiallyExpanded = true),
+    ) {
         WindowBlurBehind()
         Column(
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 8.dp),
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 8.dp).verticalScroll(rememberScrollState()),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
             Box(

@@ -78,3 +78,15 @@ val MIGRATION_9_10 = object : Migration(9, 10) {
         db.execSQL("CREATE TABLE IF NOT EXISTS thread_read_state (threadId TEXT NOT NULL PRIMARY KEY, lastSeenAt INTEGER NOT NULL)")
     }
 }
+
+/**
+ * Pinned chats can be reordered by hand. Both threads tables gain a position
+ * column; existing pins all default to 0 and keep their previous relative
+ * order through the last-message tiebreak in the list sort.
+ */
+val MIGRATION_10_11 = object : Migration(10, 11) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL("ALTER TABLE contacts ADD COLUMN pinOrder INTEGER NOT NULL DEFAULT 0")
+        db.execSQL("ALTER TABLE groups ADD COLUMN pinOrder INTEGER NOT NULL DEFAULT 0")
+    }
+}

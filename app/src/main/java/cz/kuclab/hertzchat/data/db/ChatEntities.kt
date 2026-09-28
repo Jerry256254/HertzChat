@@ -20,6 +20,8 @@ data class ContactEntity(
     val i2pDestination: String,
     val avatarPath: String? = null,
     val pinned: Boolean = false,
+    /** Position inside the pinned section (lower floats higher); only meaningful while [pinned] is true. */
+    val pinOrder: Int = 0,
     val blocked: Boolean = false,
     val addedAt: Long,
     val lastSeenOnlineAt: Long? = null,
@@ -32,6 +34,8 @@ data class GroupEntity(
     @PrimaryKey val groupId: String,
     val name: String,
     val pinned: Boolean = false,
+    /** Position inside the pinned section (lower floats higher); only meaningful while [pinned] is true. */
+    val pinOrder: Int = 0,
     val createdAt: Long,
     /** Whoever created the group - the only member allowed to add or remove others (enforced by every recipient checking this before applying a roster update, not by any server). */
     val ownerId: String = "",
@@ -92,6 +96,9 @@ interface ContactDao {
     @Query("UPDATE contacts SET pinned = :pinned WHERE contactId = :id")
     suspend fun setPinned(id: String, pinned: Boolean)
 
+    @Query("UPDATE contacts SET pinOrder = :order WHERE contactId = :id")
+    suspend fun setPinOrder(id: String, order: Int)
+
     @Query("UPDATE contacts SET blocked = :blocked WHERE contactId = :id")
     suspend fun setBlocked(id: String, blocked: Boolean)
 
@@ -115,6 +122,9 @@ interface GroupDao {
 
     @Query("UPDATE groups SET pinned = :pinned WHERE groupId = :id")
     suspend fun setPinned(id: String, pinned: Boolean)
+
+    @Query("UPDATE groups SET pinOrder = :order WHERE groupId = :id")
+    suspend fun setPinOrder(id: String, order: Int)
 
     @Query("DELETE FROM groups WHERE groupId = :id")
     suspend fun delete(id: String)

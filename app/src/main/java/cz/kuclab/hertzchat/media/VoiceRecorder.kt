@@ -31,6 +31,9 @@ class VoiceRecorder(private val context: Context) {
         return file
     }
 
+    /** Current input level 0..32767 for the live recording visual - 0 when not recording. */
+    fun maxAmplitude(): Int = runCatching { recorder?.maxAmplitude ?: 0 }.getOrDefault(0)
+
     /** Returns the recorded file and its duration, or null if nothing was recorded. */
     fun stop(): Pair<File, Long>? {
         val mediaRecorder = recorder ?: return null

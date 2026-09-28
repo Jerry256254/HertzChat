@@ -53,7 +53,6 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.CenterAlignedTopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -78,10 +77,13 @@ import androidx.compose.ui.window.DialogProperties
 import androidx.core.content.ContextCompat
 import androidx.hilt.navigation.compose.hiltViewModel
 import cz.kuclab.hertzchat.ui.common.AppCard
+import cz.kuclab.hertzchat.ui.common.GlassBar
 import cz.kuclab.hertzchat.ui.common.GlassDialogTheme
+import cz.kuclab.hertzchat.ui.common.HertzGlass
 import cz.kuclab.hertzchat.ui.common.WindowBlurBehind
+import dev.chrisbanes.haze.HazeState
+import dev.chrisbanes.haze.haze
 import cz.kuclab.hertzchat.ui.migration.QrCodeScannerAnalyzer
-import cz.kuclab.hertzchat.ui.theme.HertzMatte
 import cz.kuclab.hertzchat.ui.theme.HertzShapes
 import cz.kuclab.hertzchat.ui.migration.generateQrBitmap
 import java.util.concurrent.Executors
@@ -116,10 +118,12 @@ fun ContactsScreen(
         }
     }
 
-    Scaffold(topBar = { CenterAlignedTopAppBar(title = { Text("Kontakty") }, colors = HertzMatte.topBarColors()) }) { padding ->
+    val hazeState = remember { HazeState() }
+    Scaffold { padding ->
+        Box(modifier = Modifier.fillMaxSize().padding(padding)) {
         LazyColumn(
-            modifier = Modifier.fillMaxWidth().padding(padding),
-            contentPadding = PaddingValues(16.dp),
+            modifier = Modifier.fillMaxSize().haze(hazeState, HertzGlass.hazeStyle()),
+            contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 92.dp, bottom = 16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             item {
@@ -317,6 +321,8 @@ fun ContactsScreen(
                 }
             }
 
+        }
+        GlassBar(title = "Kontakty", hazeState = hazeState, modifier = Modifier.align(Alignment.TopCenter))
         }
     }
 

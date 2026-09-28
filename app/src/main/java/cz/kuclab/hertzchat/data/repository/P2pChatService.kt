@@ -40,6 +40,9 @@ import javax.inject.Singleton
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -47,7 +50,10 @@ import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeout
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 
@@ -59,7 +65,9 @@ private const val FRAME_MEDIA_CHUNK: Byte = 3
 private const val FRAME_FRIEND_REQUEST: Byte = 4
 private const val FRAME_FRIEND_RESPONSE: Byte = 5
 
-private const val RETRY_INTERVAL_MS = 60_000L
+private const val RETRY_INTERVAL_MS = 15_000L
+/** A send that doesn't leave the device within this long is treated as a dead connection and re-dialled, instead of blocking behind TCP retransmits. */
+private const val SEND_TIMEOUT_MS = 12_000L
 /** How long a SENT message waits for a delivery receipt before it's confirmed optimistically (the peer may run a version that never sends receipts). */
 private const val ACK_GRACE_MS = 10 * 60_000L
 /** Incoming transfers with no progress past this age are discarded (their file handle closed, partial file deleted). */
@@ -97,8 +105,10 @@ class P2pChatService @Inject constructor(
     private val json = Json { ignoreUnknownKeys = true }
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
-    private val connections = mutableMapOf<String, P2pConnection>()
+    private val connections = java.util.concurrent.ConcurrentHashMap<String, P2pConnection>()
     private val ciphers = mutableMapOf<String, MessageCipher>()
+    /** Serializes retry sweeps - the loop, the event-driven flushes and a manual send may all fire at once. */
+    private val retryMutex = Mutex()
 
     val i2pState: StateFlow<I2pState> get() = i2pTransport.state
     val bootstrapPercent: StateFlow<Int> get() = i2pTransport.bootstrapPercent
@@ -160,6 +170,21 @@ class P2pChatService @Inject constructor(
             lanTransport.incomingConnections.collect { socket -> handleIncomingSocket(socket, viaLan = true) }
         }
         scope.launch { retryPendingLoop() }
+        // Event-driven flushes: the moment the network (or a specific peer)
+        // proves reachable, anything waiting goes out immediately instead of
+        // sitting until the next retry tick.
+        scope.launch {
+            // StateFlow already drops consecutive repeats, so this only fires
+            // on genuine transitions into CONNECTED.
+            i2pTransport.state.collect { state ->
+                if (state == I2pState.CONNECTED) runCatching { retryPendingNow() }
+            }
+        }
+        scope.launch {
+            lanTransport.peerCount.collect {
+                runCatching { retryPendingNow() }
+            }
+        }
         scope.launch {
             ensureSelfContact()
             // Backfill our own destination once I2P opens it, so the self entry isn't
@@ -326,7 +351,9 @@ class P2pChatService @Inject constructor(
             // Every member's HertzId (including the creator) so recipients who don't know each other yet can auto-introduce themselves.
             val roster = listOf(me) + members.map { HertzId(it.contactId, it.nickname, Base64.encodeToString(it.identityKeyBytes, Base64.NO_WRAP), it.i2pDestination) }
             val invite = ChatPayload(UUID.randomUUID().toString(), now, PayloadKind.GROUP_INVITE, groupId = groupId, groupName = name, groupMembers = roster, groupOwnerId = myId)
-            members.forEach { trySendPayload(it.contactId, invite) }
+            coroutineScope {
+                members.map { async { trySendPayload(it.contactId, invite) } }.awaitAll()
+            }
         }
     }
 
@@ -363,7 +390,9 @@ class P2pChatService @Inject constructor(
                 UUID.randomUUID().toString(), System.currentTimeMillis(), PayloadKind.GROUP_INVITE,
                 groupId = groupId, groupName = group.name, groupMembers = roster, groupOwnerId = myId,
             )
-            allMembers.forEach { trySendPayload(it.contactId, invite) }
+            coroutineScope {
+                allMembers.map { async { trySendPayload(it.contactId, invite) } }.awaitAll()
+            }
         }
     }
 
@@ -397,7 +426,9 @@ class P2pChatService @Inject constructor(
             UUID.randomUUID().toString(), System.currentTimeMillis(), PayloadKind.GROUP_ROSTER_UPDATE,
             groupId = group.groupId, groupName = group.name, groupOwnerId = myId, groupRoster = roster,
         )
-        members.forEach { trySendPayload(it.contactId, payload) }
+        coroutineScope {
+            members.map { async { trySendPayload(it.contactId, payload) } }.awaitAll()
+        }
     }
 
     private suspend fun handleGroupRosterUpdate(fromContactId: String, payload: ChatPayload) {
@@ -514,7 +545,11 @@ class P2pChatService @Inject constructor(
                 ),
             )
             val payload = ChatPayload(messageId, now, PayloadKind.TEXT, text = text, groupId = groupId)
-            val delivered = members.map { trySendPayload(it.contactId, payload) }.any { it }
+            // Members dial in parallel - sequential dials would multiply one
+            // slow I2P handshake by the member count on every group message.
+            val delivered = coroutineScope {
+                members.map { async { trySendPayload(it.contactId, payload) } }.awaitAll().any { it }
+            }
             messageDao.updateState(messageId, if (delivered) DeliveryState.SENT else DeliveryState.PENDING)
         }
     }
@@ -535,11 +570,24 @@ class P2pChatService @Inject constructor(
         sendFrameTo(contactId, contact.i2pDestination, frame(frameType, envelope.ciphertext))
     }.getOrDefault(false)
 
-    private suspend fun sendFrameTo(contactId: String, i2pDestination: String, bytes: ByteArray): Boolean = runCatching {
-        val connection = connections[contactId]?.takeIf { runCatching { it.send(bytes) }.isSuccess }
-            ?: dialAndRegister(contactId, i2pDestination).also { it.send(bytes) }
-        connection
-    }.isSuccess
+    private suspend fun sendFrameTo(contactId: String, i2pDestination: String, bytes: ByteArray): Boolean {
+        val cached = connections[contactId]
+        if (cached != null) {
+            val ok = runCatching { withTimeout(SEND_TIMEOUT_MS) { cached.send(bytes) } }.isSuccess
+            if (ok) return true
+            // Dead connection: drop it so the re-dial below (and the next send)
+            // doesn't trip over the same corpse again. Closing also unblocks the
+            // timed-out write still stuck in its socket.
+            connections.remove(contactId, cached)
+            runCatching { cached.close() }
+        }
+        // The dial keeps its own (longer) connect timeout - only the write is
+        // bounded, so a slow-but-working I2P dial is never cut short.
+        return runCatching {
+            val fresh = dialAndRegister(contactId, i2pDestination)
+            withTimeout(SEND_TIMEOUT_MS) { fresh.send(bytes) }
+        }.isSuccess
+    }
 
     private suspend fun dialAndRegister(contactId: String, i2pDestination: String): P2pConnection = withContext(Dispatchers.IO) {
         // Same local network wins: it's direct, near-instant, works with no internet at
@@ -785,13 +833,17 @@ class P2pChatService @Inject constructor(
             }
 
             val members = groupMemberDao.findMembers(groupId)
-            val delivered = members.map { member ->
-                val contact = contactDao.find(member.contactId)
-                contact != null && runCatching {
-                    check(trySendPayload(member.contactId, control))
-                    check(sendChunkStreamFromFile(member.contactId, contact.i2pDestination, transferId, key, nonceSalt, localCopy, chunkCount))
-                }.isSuccess
-            }.any { it }
+            val delivered = coroutineScope {
+                members.map { member ->
+                    async {
+                        val contact = contactDao.find(member.contactId)
+                        contact != null && runCatching {
+                            check(trySendPayload(member.contactId, control))
+                            check(sendChunkStreamFromFile(member.contactId, contact.i2pDestination, transferId, key, nonceSalt, localCopy, chunkCount))
+                        }.isSuccess
+                    }
+                }.awaitAll().any { it }
+            }
             messageDao.updateState(messageId, if (delivered) DeliveryState.SENT else DeliveryState.PENDING)
         }
     }
@@ -837,13 +889,17 @@ class P2pChatService @Inject constructor(
             )
 
             val members = groupMemberDao.findMembers(groupId)
-            val delivered = members.map { member ->
-                val contact = contactDao.find(member.contactId)
-                contact != null && runCatching {
-                    check(trySendPayload(member.contactId, control))
-                    check(sendChunkStream(member.contactId, contact.i2pDestination, transferId, key, nonceSalt, sourceBytes))
-                }.isSuccess
-            }.any { it }
+            val delivered = coroutineScope {
+                members.map { member ->
+                    async {
+                        val contact = contactDao.find(member.contactId)
+                        contact != null && runCatching {
+                            check(trySendPayload(member.contactId, control))
+                            check(sendChunkStream(member.contactId, contact.i2pDestination, transferId, key, nonceSalt, sourceBytes))
+                        }.isSuccess
+                    }
+                }.awaitAll().any { it }
+            }
             messageDao.updateState(messageId, if (delivered) DeliveryState.SENT else DeliveryState.PENDING)
         }
     }
@@ -1039,46 +1095,78 @@ class P2pChatService @Inject constructor(
     }
 
     private suspend fun retryPendingNow() {
-        sweepStaleTransfers()
-        val pending = messageDao.findUnsent()
-        for (message in pending) {
-            // SENT without a receipt past the grace period means the peer runs a version
-            // that never sends receipts (or is gone) - confirm optimistically instead of
-            // spinning under the message forever.
-            if (message.deliveryState == DeliveryState.SENT && System.currentTimeMillis() - message.timestamp > ACK_GRACE_MS) {
-                messageDao.updateState(message.messageId, DeliveryState.DELIVERED)
-                continue
-            }
-            // Group threads live under the group id, not a contact id - resolving them as
-            // contacts silently skipped every failed group message forever.
-            if (groupDao.find(message.contactId) != null) {
-                retryGroupMessage(message.contactId, message)
-                continue
-            }
-            val contact = contactDao.find(message.contactId) ?: continue
-            if (contact.contactId in blockedContactIds) continue
-            val delivered = if (message.type == MessageType.TEXT) {
-                trySendPayload(message.contactId, ChatPayload(message.messageId, message.timestamp, PayloadKind.TEXT, text = message.text))
-            } else {
-                val file = message.mediaPath?.let { File(it) }?.takeIf { it.exists() && it.length() > 0 }
-                file != null && resendMedia(message, file, contact.i2pDestination, groupId = null, toContactId = message.contactId)
-            }
-            if (delivered) messageDao.updateState(message.messageId, DeliveryState.SENT)
+        // Overlapping sweeps would double-send everything; whoever is already
+        // sweeping covers the newcomer, so a contended sweep just skips.
+        if (!retryMutex.tryLock()) return
+        try {
+            sweepStaleTransfers()
+            messageDao.findUnsent().forEach { retryMessage(it) }
+        } finally {
+            retryMutex.unlock()
         }
+    }
+
+    /** Pushes out everything waiting for one contact - called the moment they prove reachable (their HELLO just arrived), without waiting for the retry tick. */
+    private suspend fun flushFor(contactId: String) {
+        if (!retryMutex.tryLock()) return
+        try {
+            messageDao.findUnsent().forEach { message ->
+                if (message.contactId == contactId) {
+                    retryMessage(message)
+                } else if (groupDao.find(message.contactId) != null &&
+                    groupMemberDao.findMembers(message.contactId).any { it.contactId == contactId }
+                ) {
+                    retryMessage(message)
+                }
+            }
+        } finally {
+            retryMutex.unlock()
+        }
+    }
+
+    private suspend fun retryMessage(message: MessageEntity) {
+        // SENT without a receipt past the grace period means the peer runs a version
+        // that never sends receipts (or is gone) - confirm optimistically instead of
+        // spinning under the message forever.
+        if (message.deliveryState == DeliveryState.SENT && System.currentTimeMillis() - message.timestamp > ACK_GRACE_MS) {
+            messageDao.updateState(message.messageId, DeliveryState.DELIVERED)
+            return
+        }
+        // Group threads live under the group id, not a contact id - resolving them as
+        // contacts silently skipped every failed group message forever.
+        if (groupDao.find(message.contactId) != null) {
+            retryGroupMessage(message.contactId, message)
+            return
+        }
+        val contact = contactDao.find(message.contactId) ?: return
+        if (contact.contactId in blockedContactIds) return
+        val delivered = if (message.type == MessageType.TEXT) {
+            trySendPayload(message.contactId, ChatPayload(message.messageId, message.timestamp, PayloadKind.TEXT, text = message.text))
+        } else {
+            val file = message.mediaPath?.let { File(it) }?.takeIf { it.exists() && it.length() > 0 }
+            file != null && resendMedia(message, file, contact.i2pDestination, groupId = null, toContactId = message.contactId)
+        }
+        if (delivered) messageDao.updateState(message.messageId, DeliveryState.SENT)
     }
 
     private suspend fun retryGroupMessage(groupId: String, message: MessageEntity) {
         val members = groupMemberDao.findMembers(groupId)
         val delivered = if (message.type == MessageType.TEXT) {
             val payload = ChatPayload(message.messageId, message.timestamp, PayloadKind.TEXT, text = message.text, groupId = groupId)
-            members.map { trySendPayload(it.contactId, payload) }.any { it }
+            coroutineScope {
+                members.map { async { trySendPayload(it.contactId, payload) } }.awaitAll().any { it }
+            }
         } else {
             val file = message.mediaPath?.let { File(it) }?.takeIf { it.exists() && it.length() > 0 } ?: return
-            members.map { member ->
-                val contact = contactDao.find(member.contactId) ?: return@map false
-                if (contact.contactId in blockedContactIds) return@map false
-                resendMedia(message, file, contact.i2pDestination, groupId = groupId, toContactId = member.contactId)
-            }.any { it }
+            coroutineScope {
+                members.map { member ->
+                    async {
+                        val contact = contactDao.find(member.contactId) ?: return@async false
+                        if (contact.contactId in blockedContactIds) return@async false
+                        resendMedia(message, file, contact.i2pDestination, groupId = groupId, toContactId = member.contactId)
+                    }
+                }.awaitAll().any { it }
+            }
         }
         if (delivered) messageDao.updateState(message.messageId, DeliveryState.SENT)
     }
@@ -1161,6 +1249,9 @@ class P2pChatService @Inject constructor(
                             if (!identityPlausible || claimed in blockedContactIds) return@launch
                             fromContactId = claimed
                             registerConnection(claimed, connection)
+                            // They just proved reachable - flush anything waiting
+                            // for them instead of sitting until the retry tick.
+                            scope.launch { runCatching { flushFor(claimed) } }
                         }
                         FRAME_MEDIA_CHUNK -> onMediaChunkReceived(bytes)
                         FRAME_FRIEND_REQUEST -> handleFriendRequestFrame(bytes)

@@ -25,6 +25,7 @@ data class ChatListItem(
     val nickname: String,
     val avatarPath: String?,
     val pinned: Boolean,
+    val pinOrder: Int = 0,
     val lastMessagePreview: String?,
     val lastMessageAt: Long?,
     val kind: ChatListItemKind = ChatListItemKind.CONTACT,
@@ -87,6 +88,7 @@ class ChatListViewModel @Inject constructor(
                 // round-tripping an AVATAR transfer to yourself.
                 avatarPath = if (isSelf) selfAvatarPath else contact.avatarPath,
                 pinned = contact.pinned,
+                pinOrder = contact.pinOrder,
                 lastMessagePreview = last?.text,
                 lastMessageAt = last?.timestamp,
                 isSelf = isSelf,
@@ -101,6 +103,7 @@ class ChatListViewModel @Inject constructor(
                 nickname = group.name,
                 avatarPath = null,
                 pinned = group.pinned,
+                pinOrder = group.pinOrder,
                 lastMessagePreview = last?.text,
                 lastMessageAt = last?.timestamp,
                 kind = ChatListItemKind.GROUP,
@@ -108,15 +111,21 @@ class ChatListViewModel @Inject constructor(
             )
         }
 
-        // Pinned first, then most-recently-active (incoming or outgoing alike) -
-        // a new message always floats its thread to the top, just under pinned rows.
+        // Pinned first (in hand-set order), then most-recently-active (incoming or
+        // outgoing alike) - a new message always floats its thread to the top,
+        // just under pinned rows.
         // (The Hertz Agent lives in its own button above "Nový chat", not as a row.)
-        (contactItems + groupItems)
-            .sortedWith(compareByDescending<ChatListItem> { it.pinned }.thenByDescending { it.lastMessageAt ?: 0L })
+        sortChatListItems(contactItems + groupItems)
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     fun togglePin(item: ChatListItem) {
         viewModelScope.launch {
+            if (!item.pinned) {
+                // A fresh pin lands at the bottom of the pinned section - the user
+                // moves it up from there if they want it higher.
+                val bottom = items.value.filter { it.pinned }.maxOfOrNull { it.pinOrder }?.plus(1) ?: 0
+                setPinOrder(item, bottom)
+            }
             when (item.kind) {
                 ChatListItemKind.GROUP -> groupDao.setPinned(item.contactId, !item.pinned)
                 ChatListItemKind.CONTACT -> contactDao.setPinned(item.contactId, !item.pinned)
@@ -124,7 +133,37 @@ class ChatListViewModel @Inject constructor(
         }
     }
 
+    /** Swaps a pinned row with the pinned neighbour above/below it; no-op at the section edges. */
+    fun movePinned(item: ChatListItem, up: Boolean) {
+        viewModelScope.launch {
+            val pinned = items.value.filter { it.pinned }
+            val index = pinned.indexOfFirst { it.contactId == item.contactId && it.kind == item.kind }
+            val neighbour = pinned.getOrNull(if (up) index - 1 else index + 1) ?: return@launch
+            if (index == -1) return@launch
+            setPinOrder(item, neighbour.pinOrder)
+            setPinOrder(neighbour, item.pinOrder)
+        }
+    }
+
+    private suspend fun setPinOrder(item: ChatListItem, order: Int) {
+        when (item.kind) {
+            ChatListItemKind.GROUP -> groupDao.setPinOrder(item.contactId, order)
+            ChatListItemKind.CONTACT -> contactDao.setPinOrder(item.contactId, order)
+        }
+    }
+
     fun block(contactId: String) {
         viewModelScope.launch { contactDao.setBlocked(contactId, true) }
     }
 }
+
+/**
+ * Chat-list order, extracted pure so the contract stays pinned by [ChatListSortTest]:
+ * pinned rows first in hand-set [ChatListItem.pinOrder], then most-recently-active.
+ */
+internal fun sortChatListItems(items: List<ChatListItem>): List<ChatListItem> =
+    items.sortedWith(
+        compareByDescending<ChatListItem> { it.pinned }
+            .thenBy { it.pinOrder }
+            .thenByDescending { it.lastMessageAt ?: 0L },
+    )
