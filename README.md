@@ -1,6 +1,6 @@
 # Hertz Chat
 
-End-to-end šifrovaná chatovací aplikace pro Android - rychlé relay servery, které nic neukládají, bez cloudu, bez registrace, bez telefonního čísla.
+Peer-to-peer, end-to-end šifrovaná chatovací aplikace pro Android - bez serveru, bez cloudu, bez registrace, bez jakékoliv firmy uprostřed.
 
 [![Stáhnout nejnovější verzi](https://img.shields.io/github/v/release/Jerry256254/HertzChat?label=St%C3%A1hnout&style=for-the-badge&color=D97757)](https://github.com/Jerry256254/HertzChat/releases/latest)
 
@@ -14,16 +14,19 @@ appka není z Play Store.
 
 - **Místní síť úplně bez serverů** — když jsou obě zařízení na stejné Wi-Fi
   nebo hotspotu, najdou se přes mDNS (stejný mechanismus, jakým se hlásí
-  tiskárny) a spojí se přímo podle IP adresy. Žádný relay, žádná
-  infrastruktura - funguje i úplně bez internetu. Appka tuhle cestu
+  tiskárny) a spojí se přímo podle IP adresy. Žádný I2P, žádný bootstrap,
+  žádná infrastruktura - funguje i úplně bez internetu. Appka tuhle cestu
   použije automaticky, kdykoliv je dostupná.
-- **Superrychlé relay servery, které nic neukládají** — přes internet zprávy
-  přenášejí zdarma veřejné relay servery (nebo vlastní, viz
-  `server/hertz-relay`), které fungují jen jako slepá přepážka: přeposílají
-  zašifrované bloby právě připojeným zařízením a neukládají nic - žádné
-  zprávy, žádné časy, žádné IP adresy, žádné logy. Každá zpráva navíc nese
-  čerstvý jednorázový klíč odesílatele a anonymní párový tag, takže server
-  neumí určit ani kdo komu píše. Doručení v milisekundách místo sekund.
+- **Skutečně bez serveru** — dvě zařízení se najdou a spojí přímo přes
+  veřejnou síť [I2P](https://geti2p.net/) (každé zařízení si otevře vlastní
+  "destinaci" - I2P obdobu adresy). I2P je zdarma, decentralizovaná,
+  nikým nevlastněná a nevyžaduje žádný účet ani registraci - a jako vedlejší
+  efekt to řeší i procházení NAT/routerů a schová oběma stranám navzájem
+  jejich skutečnou IP adresu. Nikdy tu není žádný server (ani náš, ani
+  cizí), který by cokoliv přeposílal nebo ukládal. Běží přímo v appce jako
+  obyčejný Java kód (ne jako samostatný spouštěný proces), takže appku
+  nemůže rozbít to, že Android v novějších verzích omezuje spouštění
+  vlastních binárek jako podprocesů - přesně to, co dřív rozbilo Tor.
 - **End-to-end šifrované** — text, obrázky, videa i hlasové zprávy jsou
   šifrované Signal Protokolem (X3DH + Double Ratchet). Média mají navíc
   vlastní jednorázový klíč doručený stejnou šifrovanou cestou, takže se
@@ -56,18 +59,17 @@ appka není z Play Store.
 - **Přidávání kontaktů podle ID, ne procházením cizích lidí** — bez
   centrálního adresáře nejde "procházet, kdo je zrovna online". Místo toho
   ukážeš příteli svoje Hertz ID (QR kód nebo textový řetězec) mimo appku -
-  on ho naskenuje/vloží a pošle ti zapečetěnou žádost o přátelství přes
-  relay servery na tvůj anonymní klíč. Přijímání žádostí lze v nastavení
-  i zautomatizovat.
+  on ho naskenuje/vloží a pošle ti žádost o přátelství přímo na tvou
+  I2P adresu. Přijímání žádostí lze v nastavení i zautomatizovat.
 - **Vypínatelné pozadí** — "Být dosažitelný" v nastavení opravdu vypne
-  síťové připojení i službu na pozadí, když zrovna nechceš být k zastižení -
-  žádná appka tiše neběží dál a nebere baterii navíc.
+  síť I2P i službu na pozadí, když zrovna nechceš být k zastižení - žádná
+  appka tiše neběží dál a nebere baterii navíc.
 - **Kontrola aktualizací přímo v appce** — nastavení umí zkontrolovat
   nejnovější verzi na GitHubu a rovnou nabídnout stažení.
 - **Správa chatů** — připínání chatů, blokování uživatelů, historie zpráv
   šifrovaná na disku (SQLCipher, klíč vázaný na Android Keystore).
 - **Přenos identity mezi zařízeními** — naskenováním QR kódu ze starého
-  telefonu pokračuješ se stejnou identitou (i stejným relay klíčem) na
+  telefonu pokračuješ se stejnou identitou (i stejnou I2P adresou) na
   novém zařízení.
 - **Otevřený zdrojový kód** — kompletně, žádná skrytá součást.
 - **AI asistent Hertz** — KucLab Hertz (kuclab.org/hertz) zabudovaný přímo
@@ -102,9 +104,8 @@ Výsledný balíček najdete v `app/build/outputs/apk/debug/`.
 ## Technologie
 
 Kotlin, Jetpack Compose, Signal Protocol (`libsignal-client`) pro E2E
-šifrování, WebSockety na Nostr relay servery pro bleskový přenos
-(ephemeral eventy, které relay neukládá), Room/SQLCipher pro lokální
-úložiště. Vlastní zero-storage relay je v `server/hertz-relay` (Node.js).
+šifrování, embedded I2P router (`net.i2p:router`) pro serverless P2P
+rendezvous a přenos, Room/SQLCipher pro lokální úložiště.
 
 ## Licence
 

@@ -6,7 +6,7 @@ import java.net.Socket
 
 private const val MAX_FRAME_SIZE = 32 * 1024 * 1024 // generous ceiling against a malicious/corrupt length prefix
 
-/** A LAN TCP stream is reliable and ordered but has no built-in message boundaries, so every frame gets a 4-byte length prefix. */
+/** An I2P destination-to-destination TCP stream is reliable and ordered but has no built-in message boundaries, so every frame gets a 4-byte length prefix. */
 class P2pConnection(private val socket: Socket) {
     private val input = DataInputStream(socket.getInputStream())
     private val output = DataOutputStream(socket.getOutputStream())

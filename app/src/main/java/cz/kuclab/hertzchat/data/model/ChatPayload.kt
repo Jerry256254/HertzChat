@@ -64,11 +64,11 @@ data class ChatPayload(
     val senderNickname: String? = null,
     /** SHA-256 hex of the sender's downscaled avatar, or null when they have none. */
     val senderAvatarHash: String? = null,
-    /** The sender's current relay key - lets the receiver repair a stale address without the user re-scanning anything. */
-    val senderNostrPub: String? = null,
+    /** The sender's current I2P destination - lets the receiver repair a stale address without the user re-scanning anything. */
+    val senderI2PDest: String? = null,
     /** Set for every CALL_* kind - the call this signaling or audio packet belongs to. */
     val callId: String? = null,
-    /** Only set for [PayloadKind.CALL_AUDIO] - base64 of one 20ms 16kHz mono PCM frame. */
+    /** Only set for [PayloadKind.CALL_AUDIO] - base64 of one 20ms 8kHz mono PCM frame. */
     val audioBase64: String? = null,
     /** Only set for [PayloadKind.CALL_AUDIO] - sender-side sequence, so the player can drop late packets. */
     val audioSeq: Long? = null,

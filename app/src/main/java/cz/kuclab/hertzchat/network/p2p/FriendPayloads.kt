@@ -4,8 +4,9 @@ import kotlinx.serialization.Serializable
 
 /**
  * Everything needed to run the X3DH handshake against a peer we've never
- * talked to before, plus the relay key they're reachable at. Sealed to the
- * recipient's identity key (see NostrCrypto) - never sent in the clear.
+ * talked to before, plus the I2P destination they're reachable at. Exchanged
+ * only over an already-established connection to that same destination -
+ * never sent anywhere else.
  */
 @Serializable
 data class PreKeyBundleWire(
@@ -26,7 +27,7 @@ data class PreKeyBundleWire(
 data class FriendRequestPayload(
     val nickname: String,
     val identityKeyBase64: String,
-    val nostrPubkeyHex: String,
+    val i2pDestination: String,
     val preKeyBundle: PreKeyBundleWire,
     /** Non-null when this request was auto-sent as a consequence of a mutual group invite - see P2pChatService group handling. */
     val viaGroupId: String? = null,
@@ -48,39 +49,21 @@ data class FriendResponsePayload(
     val accepted: Boolean,
     val nickname: String,
     val identityKeyBase64: String,
-    val nostrPubkeyHex: String,
+    val i2pDestination: String,
     val preKeyBundle: PreKeyBundleWire? = null,
 )
 
 /**
  * The compact, shareable "Hertz ID" a user hands a friend out-of-band (QR
  * code, read aloud, sent through any other app) so that friend's device can
- * publish a sealed [FriendRequestPayload] to their relay key. There is no
- * directory to browse - like the relay keys themselves, you can only reach
- * an address you already have.
- *
- * [nostrPubkeyHex] defaults so that codes from pre-relay versions (which
- * carried `i2pDestination` instead) still *parse* and fail later with an
- * "update the app" message rather than an inscrutable JSON error.
+ * reach out over I2P and send a [FriendRequestPayload]. There is no
+ * directory to browse - like I2P destinations themselves, you can only
+ * connect to an address you already have.
  */
-/**
- * The sealed envelope a friend request or response travels in over the relay:
- * AES-256-GCM to the recipient's identity key, so the relay (and any
- * bystander) sees only an anonymous blob. The recipient trial-opens every
- * such envelope with their own identity key - strangers have no pairwise tag
- * yet, so there is nothing cheaper to route on.
- */
-@Serializable
-data class SealedWire(
-    val ephemeralPublicHex: String,
-    val nonceBase64: String,
-    val ciphertextBase64: String,
-)
-
 @Serializable
 data class HertzId(
     val contactId: String,
     val nickname: String,
     val identityKeyBase64: String,
-    val nostrPubkeyHex: String = "",
+    val i2pDestination: String,
 )

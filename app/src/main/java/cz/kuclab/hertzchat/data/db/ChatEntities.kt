@@ -17,8 +17,7 @@ data class ContactEntity(
     @PrimaryKey val contactId: String, // stable fingerprint of the contact's identity key
     val nickname: String,
     val identityKeyBytes: ByteArray,
-    /** The contact's long-term relay key (64 hex chars) - where sealed requests and routed traffic are published. */
-    val nostrPubkey: String,
+    val i2pDestination: String,
     val avatarPath: String? = null,
     val pinned: Boolean = false,
     /** Position inside the pinned section (lower floats higher); only meaningful while [pinned] is true. */

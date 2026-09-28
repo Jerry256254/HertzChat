@@ -15,8 +15,8 @@ android {
         applicationId = "cz.kuclab.hertzchat"
         minSdk = 26
         targetSdk = 34
-        versionCode = 47
-        versionName = "0.40.0"
+        versionCode = 48
+        versionName = "0.41.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
@@ -78,12 +78,9 @@ android {
     packaging {
         resources {
             excludes += "/META-INF/{AL2.0,LGPL2.1}"
-            // Third-party jars carry duplicate licensing metadata across modules.
+            // I2P's jars carry duplicate licensing/service-loader metadata across modules.
             excludes += "META-INF/LICENSE*"
-            excludes += "META-INF/DEPENDENCIES"
-            // BouncyCastle and jspecify (okhttp's transitive dep) both ship this
-            // multi-release OSGi manifest - Android ignores MR jars anyway.
-            excludes += "META-INF/versions/9/OSGI-INF/MANIFEST.MF"
+            pickFirsts += "META-INF/services/net.i2p.util.EventDispatcher"
             // Belt and suspenders: desktop-only natives must never end up in the APK again
             // (the dropped libsignal-client jar used to drag in ~130 MB of these).
             excludes += "**/*.dylib"
@@ -133,18 +130,27 @@ dependencies {
     implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.6.3")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.8.1")
 
-    // Relay transport: plain WebSockets to free public Nostr relays (plus an
-    // optional self-hosted one - see server/hertz-relay). Only *ephemeral*
-    // Nostr events are ever published, which relays by protocol never store -
-    // they just forward to whoever is subscribed right now. Everything above
-    // this layer (Signal sessions, media chunking, delivery state) is
-    // unchanged: the relay only ever sees opaque encrypted blobs, and thanks
-    // to per-message ephemeral sender keys plus pairwise routing tags it
-    // can't even tell who sent what to whom. See network/relay/.
-    implementation("com.squareup.okhttp3:okhttp:4.12.0")
-    // secp256k1/Schnorr (Nostr signatures) and X25519 (pairwise routing tags,
-    // sealed friend requests) - the JDK provider, pure Java, no natives.
-    implementation("org.bouncycastle:bcprov-jdk18on:1.78.1")
+    // P2P transport: an embedded I2P router. No server of ours is involved at
+    // any point - two devices find and reach each other directly over the
+    // public I2P network (free, no account, no registration), which also
+    // solves NAT traversal and hides both parties' real IP addresses from
+    // each other. See network/i2p/I2pTransport.kt.
+    //
+    // Unlike the Tor daemon this replaces, the I2P router is a plain Java
+    // class run in-process (new Router(...).runRouter()) rather than a
+    // separate executable launched via ProcessBuilder - Android 10+'s
+    // restrictions on executing arbitrary binaries as subprocesses (which
+    // broke Tor on real hardware: java.io.IOException naming the extracted
+    // libtor.so path, with no workaround from application code) don't apply
+    // here. Its one native library (libjbigi.so, a modular-exponentiation
+    // accelerator bundled inside net.i2p.android:client) is a normal JNI
+    // library loaded in-process, the same mechanism already used successfully
+    // for SQLCipher and libsignal in this app - not a subprocess.
+    implementation("net.i2p:i2p:2.7.0")
+    implementation("net.i2p:router:2.7.0")
+    implementation("net.i2p.client:mstreaming:2.7.0")
+    implementation("net.i2p.client:streaming:2.7.0")
+    implementation("net.i2p.android:client:0.9.49")
 
     // Local retry queue for messages to a contact who's currently unreachable,
     // and a periodic safety-net that restarts the P2P foreground service if

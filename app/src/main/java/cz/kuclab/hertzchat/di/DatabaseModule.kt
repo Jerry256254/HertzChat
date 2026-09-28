@@ -13,7 +13,8 @@ import cz.kuclab.hertzchat.data.db.MIGRATION_6_7
 import cz.kuclab.hertzchat.data.db.MIGRATION_7_8
 import cz.kuclab.hertzchat.data.db.MIGRATION_8_9
 import cz.kuclab.hertzchat.data.db.MIGRATION_10_11
-import cz.kuclab.hertzchat.data.db.MIGRATION_11_12
+import cz.kuclab.hertzchat.data.db.MIGRATION_11_13
+import cz.kuclab.hertzchat.data.db.MIGRATION_12_13
 import cz.kuclab.hertzchat.data.db.MIGRATION_9_10
 import dagger.Module
 import dagger.Provides
@@ -56,7 +57,7 @@ object DatabaseModule {
         val factory = SupportFactory(dbPassphrase(context))
         return Room.databaseBuilder(context, AppDatabase::class.java, "hertzchat.db")
             .openHelperFactory(factory)
-            .addMigrations(MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11, MIGRATION_11_12)
+            .addMigrations(MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11, MIGRATION_11_13, MIGRATION_12_13)
             // Only bridges the gap for anyone still behind version 4 - a real
             // Migration always wins over this when one is registered above.
             .fallbackToDestructiveMigration()

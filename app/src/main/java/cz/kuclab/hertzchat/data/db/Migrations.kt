@@ -92,16 +92,24 @@ val MIGRATION_10_11 = object : Migration(10, 11) {
 }
 
 /**
- * The I2P-to-relay transport switch. The contacts address column is renamed to
- * the relay key - old rows keep their I2P destination string in it, which the
- * send path recognises as "not a relay key" and treats as unreachable until
- * the contact is re-added (one scan; the Signal session survives, only the
- * address changes). Messages gain the sender sequence that keeps thread order
- * exact; old rows default to 0 and keep their timestamp order.
+ * From the last I2P version (0.39): only the sender sequence is new, the
+ * address column is already correct.
  */
-val MIGRATION_11_12 = object : Migration(11, 12) {
+val MIGRATION_11_13 = object : Migration(11, 13) {
     override fun migrate(db: SupportSQLiteDatabase) {
-        db.execSQL("ALTER TABLE contacts RENAME COLUMN i2pDestination TO nostrPubkey")
         db.execSQL("ALTER TABLE messages ADD COLUMN seq INTEGER NOT NULL DEFAULT 0")
+    }
+}
+
+/**
+ * From the short-lived relay experiment (0.40): the address column it renamed
+ * to `nostrPubkey` is renamed back, which also restores the original I2P
+ * addresses for every contact that was never re-added in 0.40 - those chats
+ * work immediately again with no re-scan. (Contacts re-added under 0.40 hold
+ * a relay key there instead; those few need one more scan.)
+ */
+val MIGRATION_12_13 = object : Migration(12, 13) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL("ALTER TABLE contacts RENAME COLUMN nostrPubkey TO i2pDestination")
     }
 }

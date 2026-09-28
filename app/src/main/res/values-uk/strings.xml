@@ -27,7 +27,7 @@
     <string name="settings_notifications_subtitle">Спливаючі сповіщення, навіть коли застосунок закрито (якщо телефон має інтернет)</string>
     <string name="settings_section_privacy">Конфіденційність і мережа</string>
     <string name="settings_discoverable_title">Бути доступним</string>
-    <string name="settings_discoverable_subtitle">Вимкнення повністю зупиняє мережеве зʼєднання (relay) і фонову службу - ніхто не зможе тебе знайти, але застосунок не витрачає зайвий заряд батареї.</string>
+    <string name="settings_discoverable_subtitle">Вимкнення повністю зупиняє мережу I2P і фонову службу - ніхто не зможе тебе знайти, але застосунок не витрачає зайвий заряд батареї.</string>
     <string name="settings_auto_accept_title">Автоматично приймати запити в друзі</string>
     <string name="settings_auto_accept_subtitle">Нові контакти додаються одразу, без твого підтвердження.</string>
     <string name="settings_section_assistant">AI-асистент</string>
@@ -55,5 +55,5 @@
     <string name="settings_install_blocked">Дозвольте встановлення застосунків із Hertz Chat і спробуйте знову</string>
     <string name="settings_open_install_settings">Відкрити налаштування</string>
     <string name="settings_section_about">Про застосунок</string>
-    <string name="settings_about_description">Відкритий код, наскрізне шифрування через протокол Signal, передача через швидкі relay-сервери, які нічого не зберігають.</string>
+    <string name="settings_about_description">Відкритий код, без сервера, наскрізне шифрування через протокол Signal, передача через мережу I2P.</string>
 </resources>

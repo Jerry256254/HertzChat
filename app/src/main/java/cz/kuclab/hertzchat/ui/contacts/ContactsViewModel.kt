@@ -61,8 +61,8 @@ class ContactsViewModel @Inject constructor(
             _addError.value = explainUnusableId(trimmed)
             return
         }
-        if (id.nostrPubkeyHex.isBlank() || id.contactId.isBlank()) {
-            _addError.value = "Tenhle kód je ze staré verze aplikace - aktualizuj Hertz Chat na druhém telefonu a ukaž kód znovu."
+        if (id.i2pDestination.isBlank() || id.contactId.isBlank()) {
+            _addError.value = "Tenhle kód je neúplný - na druhém telefonu se ještě nedopojila síť I2P. Počkej, až se mu QR kód zobrazí celý, a zkus to znovu."
             return
         }
         _addError.value = null
@@ -82,7 +82,7 @@ class ContactsViewModel @Inject constructor(
     /**
      * "Neplatné Hertz ID" on its own gives the user nothing to act on - every failure
      * looked identical whether they scanned the wrong code, the other phone was still
-     * connecting, or it runs a version that predates the relay network. Each of those needs a
+     * connecting, or it runs a version that predates I2P. Each of those needs a
      * different thing done about it, so each says so.
      */
     private fun explainUnusableId(text: String): String {

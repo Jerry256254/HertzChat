@@ -17,7 +17,7 @@ import cz.kuclab.hertzchat.data.repository.DraftStore
 import cz.kuclab.hertzchat.data.repository.P2pChatService
 import cz.kuclab.hertzchat.data.repository.SettingsRepository
 import cz.kuclab.hertzchat.media.MediaStorage
-import cz.kuclab.hertzchat.network.relay.RelayState
+import cz.kuclab.hertzchat.network.p2p.I2pState
 import cz.kuclab.hertzchat.p2p.ActiveChatTracker
 import cz.kuclab.hertzchat.ui.common.PendingAttachment
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -59,7 +59,7 @@ class ChatViewModel @Inject constructor(
         // arriving in the exact thread already open on screen.
         activeChatTracker.activeThreadId.value = contactId
         // The peer dials while the user reads/types - the first send then finds
-        // a live LAN connection instead of paying the dial on first send.
+        // a live connection instead of paying the multi-second I2P dial.
         p2pChatService.warmConnection(contactId)
         // While this screen is alive everything shown is "seen" - the watermark follows
         // the newest visible message, which clears the chat-list unread dot live.
@@ -115,7 +115,7 @@ class ChatViewModel @Inject constructor(
             // PROFILE_UPDATE or AVATAR transfer lands while the chat is open.
             contactDao.observeContact(contactId).collect { contact ->
                 _contactNickname.value = contact?.nickname.orEmpty()
-                // Own photo is already on this device - showing it never depends on the network round-tripping
+                // Own photo is already on this device - showing it never depends on I2P
                 // round-tripping an AVATAR transfer to yourself.
                 _contactAvatarPath.value = if (isSelf) {
                     mediaStorage.selfAvatarFile().takeIf { it.exists() }?.absolutePath
@@ -130,7 +130,7 @@ class ChatViewModel @Inject constructor(
                                 contactId = it.contactId,
                                 nickname = it.nickname,
                                 identityKeyBase64 = android.util.Base64.encodeToString(it.identityKeyBytes, android.util.Base64.NO_WRAP),
-                                nostrPubkeyHex = it.nostrPubkey,
+                                i2pDestination = it.i2pDestination,
                             ),
                         )
                     }
@@ -138,10 +138,11 @@ class ChatViewModel @Inject constructor(
             }
         }
         if (isSelf) {
-            _contactQrText.value = qrJson.encodeToString(
-                cz.kuclab.hertzchat.network.p2p.HertzId.serializer(),
-                p2pChatService.myHertzId(),
-            )
+            viewModelScope.launch {
+                p2pChatService.i2pDestination.collect { address ->
+                    _contactQrText.value = address?.let { p2pChatService.myHertzId()?.let { id -> qrJson.encodeToString(cz.kuclab.hertzchat.network.p2p.HertzId.serializer(), id) } }
+                }
+            }
         }
         viewModelScope.launch {
             _imageJpegQuality.value = when (settingsRepository.settings.first().mediaQuality) {
@@ -280,18 +281,18 @@ class ChatViewModel @Inject constructor(
     }
 
     /**
-     * Sending during a cold start (relay not connected yet) queues the message for later -
+     * Sending during a cold start (I2P not connected yet) queues the message for later -
      * correct, but silent. The first such send per screen shows a notice so "nothing
      * happened" doesn't read as broken.
      */
     private fun warnIfOffline() {
-        if (isSelf || p2pChatService.relayState.value == RelayState.CONNECTED) {
+        if (isSelf || p2pChatService.i2pState.value == I2pState.CONNECTED) {
             coldStartNoticeShown = false
             return
         }
         if (!coldStartNoticeShown) {
             coldStartNoticeShown = true
-            _userNotice.tryEmit("Zpráva se odešle po připojení k síti")
+            _userNotice.tryEmit("Zpráva se odešle po připojení k I2P")
         }
     }
 

@@ -51,7 +51,7 @@ object ImageEditor {
         }
 
     /**
-     * Profile photos travel over the relay chunk-by-chunk - a full camera JPEG means
+     * Profile photos travel over I2P chunk-by-chunk - a full camera JPEG means
      * dozens of slow chunks that often never finish, which is why new contacts'
      * photos never appeared. Avatars render at ~96dp at most, so anything over
      * [maxSidePx] or [maxBytes] is downscaled to a 256px JPEG q80 (a few KB, a

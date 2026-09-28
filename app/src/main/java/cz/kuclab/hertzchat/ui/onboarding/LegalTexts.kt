@@ -3,12 +3,11 @@ package cz.kuclab.hertzchat.ui.onboarding
 const val TERMS_TEXT = """Podmínky užití Hertz Chat
 
 1. Povaha aplikace
-Hertz Chat je komunikační aplikace s koncovým šifrováním. Zprávy mezi
-zařízeními přenášejí rychlé relay servery (veřejné zdarma, nebo vlastní),
-které fungují jen jako slepá přepážka: přeposílají zašifrované bloby právě
-připojeným zařízením a nic neukládají - žádné zprávy, žádné časy, žádné
-adresy. Obsah zůstává uložený pouze lokálně na zařízeních účastníků
-konverzace.
+Hertz Chat je peer-to-peer (P2P) komunikační aplikace s koncovým šifrováním.
+Neexistuje žádný centrální server - ani provozovaný autorem aplikace, ani
+třetí stranou. Zařízení se navzájem nachází a spojují přímo přes veřejnou
+síť I2P; zprávy a soubory se přenáší přímo mezi zařízeními a zůstávají
+uložené pouze lokálně na zařízeních účastníků konverzace.
 
 2. Identita a účet
 Aplikace nevyžaduje registraci přes telefonní číslo, e-mail ani jinou osobní
@@ -56,14 +55,12 @@ Co aplikace NEsbírá ani neukládá vůbec nikde:
 - obsah zpráv, hlasových zpráv, obrázků ani videí,
 - seznam tvých kontaktů,
 - tvoje jméno, telefonní číslo ani e-mail (aplikace je nevyžaduje),
-- tvoji skutečnou IP adresu vůči tvým kontaktům (kontakty vidí jen tvůj
-  anonymní relay klíč, IP adresu neukládá ani relay server).
+- tvoji skutečnou IP adresu vůči tvým kontaktům (o tu se stará I2P).
 
 Jak tě může někdo najít:
 - neexistuje žádný adresář ani seznam "kdo je online" - kontaktovat můžeš
   jen někoho, jehož Hertz ID už znáš (dostal jsi ho mimo appku - QR kód,
-  ústně, jinou appkou). Žádost appka pošle zapečetěnou přes relay servery na
-  jeho anonymní klíč.
+  ústně, jinou appkou). Žádost appka pošle přímo na jeho I2P adresu.
 
 Kde jsou tvoje data doopravdy uložená:
 - výhradně na tvém zařízení, v databázi zašifrované klíčem vázaným na

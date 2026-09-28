@@ -21,6 +21,7 @@ import androidx.compose.material.icons.filled.CameraAlt
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material3.Button
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -62,6 +63,7 @@ fun ProfileScreen(onBack: () -> Unit, onOpenQrExport: () -> Unit, viewModel: Pro
     val committedNickname by viewModel.committedNickname.collectAsState()
     val avatarVersion by viewModel.avatarVersion.collectAsState()
     val myQrText by viewModel.myHertzIdQrText.collectAsState()
+    val i2pError by viewModel.i2pError.collectAsState()
     val canSave = nickname.trim().isNotEmpty() && nickname.trim() != committedNickname
     val clipboard = LocalClipboardManager.current
 
@@ -157,8 +159,40 @@ fun ProfileScreen(onBack: () -> Unit, onOpenQrExport: () -> Unit, viewModel: Pro
                 ) {
                     Text("Můj QR kód", fontWeight = FontWeight.SemiBold)
                     Box(modifier = Modifier.padding(vertical = 12.dp), contentAlignment = Alignment.Center) {
-                        val bitmap = remember(myQrText) { generateQrBitmap(myQrText) }
-                        Image(bitmap = bitmap.asImageBitmap(), contentDescription = "Můj QR kód")
+                        val qrText = myQrText
+                        when {
+                            qrText != null -> {
+                                val bitmap = remember(qrText) { generateQrBitmap(qrText) }
+                                Image(bitmap = bitmap.asImageBitmap(), contentDescription = "Můj QR kód")
+                            }
+                            i2pError != null -> {
+                                Column(
+                                    horizontalAlignment = Alignment.CenterHorizontally,
+                                    modifier = Modifier.size(220.dp),
+                                    verticalArrangement = Arrangement.Center,
+                                ) {
+                                    Text(
+                                        "Připojení k síti I2P selhalo",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.error,
+                                        textAlign = TextAlign.Center,
+                                    )
+                                    OutlinedButton(onClick = viewModel::retryI2p, modifier = Modifier.padding(top = 12.dp)) {
+                                        Text("Zkusit znovu")
+                                    }
+                                }
+                            }
+                            else -> {
+                                Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.size(220.dp)) {
+                                    CircularProgressIndicator(modifier = Modifier.padding(bottom = 12.dp))
+                                    Text(
+                                        "Připravuje se tvoje adresa v síti I2P...",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        textAlign = TextAlign.Center,
+                                    )
+                                }
+                            }
+                        }
                     }
                     Text(
                         "Ukaž tenhle QR kód příteli (nebo mu ID zkopíruj a pošli), ať tě může přidat. Bez toho tě nikdo nenajde - není tu žádný adresář uživatelů.",
@@ -166,7 +200,8 @@ fun ProfileScreen(onBack: () -> Unit, onOpenQrExport: () -> Unit, viewModel: Pro
                         textAlign = TextAlign.Center,
                     )
                     TextButton(
-                        onClick = { clipboard.setText(AnnotatedString(myQrText)) },
+                        onClick = { myQrText?.let { clipboard.setText(AnnotatedString(it)) } },
+                        enabled = myQrText != null,
                     ) {
                         Icon(Icons.Filled.ContentCopy, contentDescription = null, modifier = Modifier.size(18.dp))
                         Text("  Zkopírovat ID")
