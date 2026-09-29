@@ -68,6 +68,8 @@ class SettingsViewModel @Inject constructor(
 
     fun setMediaQuality(value: String) = viewModelScope.launch { settingsRepository.setMediaQuality(value) }
     fun setNotificationsEnabled(value: Boolean) = viewModelScope.launch { settingsRepository.setNotificationsEnabled(value) }
+    fun setPushWakeEnabled(value: Boolean) = viewModelScope.launch { settingsRepository.setPushWakeEnabled(value) }
+    fun setNtfyServerUrl(value: String) = viewModelScope.launch { settingsRepository.setNtfyServerUrl(value) }
     fun setThemeMode(value: String) = viewModelScope.launch { settingsRepository.setThemeMode(value) }
     fun setAutoAcceptFriendRequests(value: Boolean) = viewModelScope.launch { settingsRepository.setAutoAcceptFriendRequests(value) }
 

@@ -114,6 +114,7 @@ class P2pChatService @Inject constructor(
     private val i2pTransport: I2pTransport,
     private val lanTransport: LanTransport,
     private val settingsRepository: SettingsRepository,
+    private val pushPinger: cz.kuclab.hertzchat.p2p.PushPinger,
 ) {
     private val json = Json { ignoreUnknownKeys = true }
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
@@ -319,6 +320,7 @@ class P2pChatService @Inject constructor(
                 i2pDestination = me.i2pDestination,
                 preKeyBundle = identityKeyManager.currentPreKeyBundle().toWire(),
                 viaGroupId = viaGroupId,
+                pushTopic = settingsRepository.pushTopic(),
             )
             val connection = dialAndRegister(target.contactId, target.i2pDestination)
             connection.send(frame(FRAME_FRIEND_REQUEST, json.encodeToString(payload).encodeToByteArray()))
@@ -366,6 +368,7 @@ class P2pChatService @Inject constructor(
             identityKeyBase64 = me.identityKeyBase64,
             i2pDestination = me.i2pDestination,
             preKeyBundle = identityKeyManager.currentPreKeyBundle().toWire(),
+            pushTopic = settingsRepository.pushTopic(),
         )
         val connection = dialAndRegister(target.contactId, target.i2pDestination)
         connection.send(frame(FRAME_FRIEND_REQUEST, json.encodeToString(payload).encodeToByteArray()))
@@ -392,6 +395,7 @@ class P2pChatService @Inject constructor(
                     request.nickname,
                     request.request.identityKeyBase64,
                     request.request.i2pDestination,
+                    request.request.pushTopic,
                 )
                 runCatching {
                     cipherFor(request.contactId).establishSessionFromBundle(request.request.preKeyBundle.toPreKeyBundle())
@@ -410,6 +414,7 @@ class P2pChatService @Inject constructor(
                 // The other half of the symmetric handshake described above - lets the
                 // original requester establish their own side of the session too.
                 preKeyBundle = if (accept) identityKeyManager.currentPreKeyBundle().toWire() else null,
+                pushTopic = if (accept) settingsRepository.pushTopic() else null,
             )
             runCatching {
                 val connection = dialAndRegister(request.contactId, request.request.i2pDestination)
@@ -418,8 +423,10 @@ class P2pChatService @Inject constructor(
         }
     }
 
-    private suspend fun addTrustedContact(contactId: String, nickname: String, identityKeyBase64: String, i2pDestination: String) {
+    private suspend fun addTrustedContact(contactId: String, nickname: String, identityKeyBase64: String, i2pDestination: String, pushTopic: String? = null) {
         run {
+            // Never clobber an already-exchanged topic with a null from an older peer.
+            val previous = contactDao.find(contactId)?.pushTopic
             contactDao.upsert(
                 ContactEntity(
                     contactId = contactId,
@@ -427,6 +434,7 @@ class P2pChatService @Inject constructor(
                     identityKeyBytes = Base64.decode(identityKeyBase64, Base64.NO_WRAP),
                     i2pDestination = i2pDestination,
                     addedAt = System.currentTimeMillis(),
+                    pushTopic = pushTopic ?: previous,
                 ),
             )
         }
@@ -1261,7 +1269,13 @@ class P2pChatService @Inject constructor(
             runCatching {
                 trySendPayload(
                     contactId,
-                    ChatPayload(UUID.randomUUID().toString(), System.currentTimeMillis(), PayloadKind.PROFILE_UPDATE, profileNickname = identityKeyManager.nickname),
+                    ChatPayload(
+                        UUID.randomUUID().toString(),
+                        System.currentTimeMillis(),
+                        PayloadKind.PROFILE_UPDATE,
+                        profileNickname = identityKeyManager.nickname,
+                        pushTopic = settingsRepository.pushTopic(),
+                    ),
                 )
             }
             mediaStorage.selfAvatarFile().takeIf { it.exists() }?.let { sendAvatarTo(contactId, ImageEditor.downscaleAvatar(it.readBytes())) }
@@ -1530,13 +1544,29 @@ class P2pChatService @Inject constructor(
                 messageDao.findUnsent().groupBy { it.contactId }.values.map { lane ->
                     async {
                         for (message in lane) {
-                            if (!retryMessage(message)) break
+                            if (!retryMessage(message)) {
+                                // Direct P2P to this thread is down right now - wake the
+                                // peer(s) with an empty ntfy ping so their worker starts
+                                // the service and the queue can flow. Rate-limited inside.
+                                pingThread(lane.first().contactId)
+                                break
+                            }
                         }
                     }
                 }.awaitAll()
             }
         } finally {
             retryMutex.unlock()
+        }
+    }
+
+    /** Wakes one thread's peer(s) after a failed retry sweep - a 1:1 thread pings its contact, a group thread pings every member. Never pings self. */
+    private suspend fun pingThread(threadId: String) {
+        if (groupDao.find(threadId) != null) {
+            runCatching { groupMemberDao.findMembers(threadId) }.getOrDefault(emptyList())
+                .forEach { member -> if (!isSelf(member.contactId)) pushPinger.maybePing(member.contactId) }
+        } else if (!isSelf(threadId)) {
+            pushPinger.maybePing(threadId)
         }
     }
 
@@ -1814,8 +1844,11 @@ class P2pChatService @Inject constructor(
             }
             PayloadKind.PROFILE_UPDATE -> scope.launch {
                 val nickname = payload.profileNickname?.trim().orEmpty()
-                if (nickname.isNotEmpty()) {
-                    contactDao.find(contactId)?.let { contactDao.update(it.copy(nickname = nickname)) }
+                val topic = payload.pushTopic?.takeIf { cz.kuclab.hertzchat.p2p.NtfyPing.isValidTopic(it) }
+                if (nickname.isNotEmpty() || topic != null) {
+                    contactDao.find(contactId)?.let { contact ->
+                        contactDao.update(contact.copy(nickname = nickname.ifEmpty { contact.nickname }, pushTopic = topic ?: contact.pushTopic))
+                    }
                 }
             }
             PayloadKind.PROFILE_REQUEST -> sendProfileTo(contactId)
@@ -1875,7 +1908,7 @@ class P2pChatService @Inject constructor(
         val senderContactId = identityKeyManager.contactIdFor(Base64.decode(response.identityKeyBase64, Base64.NO_WRAP))
         forgetPendingRequest(senderContactId)
         scope.launch {
-            addTrustedContact(senderContactId, response.nickname, response.identityKeyBase64, response.i2pDestination)
+            addTrustedContact(senderContactId, response.nickname, response.identityKeyBase64, response.i2pDestination, response.pushTopic)
             // Mirrors what the accepter did with our bundle in respondFriendRequest - without
             // this, we (the original requester) would have no session and encrypt() to this
             // contact would throw NoSessionException on the very first message we sent.

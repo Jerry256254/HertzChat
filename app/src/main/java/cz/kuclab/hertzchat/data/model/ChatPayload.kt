@@ -54,6 +54,8 @@ data class ChatPayload(
     val ackForMessageId: String? = null,
     /** Only set for [PayloadKind.PROFILE_UPDATE] - the sender's current nickname; the avatar (if any) follows separately through the AVATAR media flow. */
     val profileNickname: String? = null,
+    /** Only set for [PayloadKind.PROFILE_UPDATE] - the sender's random ntfy wake-up topic, so pre-push contacts learn it on the next profile sync. */
+    val pushTopic: String? = null,
     /**
      * Stamped on *every* outgoing payload (see P2pChatService): the sender's current
      * nickname plus a hash of their current avatar. The receiver applies the nickname

@@ -25,6 +25,11 @@
     <string name="settings_section_notifications">Notifications</string>
     <string name="settings_notifications_title">New message notifications</string>
     <string name="settings_notifications_subtitle">Pop-up alerts even when the app is closed (as long as the phone has internet)</string>
+    <string name="settings_push_title">Message wake-up</string>
+    <string name="settings_push_subtitle">Empty signal over ntfy when P2P can\'t reach. No message content, no Google.</string>
+    <string name="settings_push_server_title">ntfy server</string>
+    <string name="settings_push_server_dialog_title">ntfy server address</string>
+    <string name="common_save">Save</string>
     <string name="settings_section_privacy">Privacy &amp; network</string>
     <string name="settings_discoverable_title">Be reachable</string>
     <string name="settings_discoverable_subtitle">Turning this off fully stops the I2P network and the background service - nobody can find or message you, but the app uses no extra battery.</string>

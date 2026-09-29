@@ -21,9 +21,13 @@ import dagger.assisted.AssistedInject
 class RetryWakeWorker @AssistedInject constructor(
     @Assisted context: Context,
     @Assisted params: WorkerParameters,
+    private val pushPinger: PushPinger,
 ) : CoroutineWorker(context, params) {
 
     override suspend fun doWork(): Result {
+        // Someone may have pinged our ntfy topic while we were dead - check
+        // first so a real wake-up isn't mistaken for a routine restart.
+        runCatching { pushPinger.pollForPings() }
         val intent = android.content.Intent(applicationContext, P2pForegroundService::class.java)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             applicationContext.startForegroundService(intent)

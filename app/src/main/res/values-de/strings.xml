@@ -25,6 +25,11 @@
     <string name="settings_section_notifications">Benachrichtigungen</string>
     <string name="settings_notifications_title">Benachrichtigungen bei neuen Nachrichten</string>
     <string name="settings_notifications_subtitle">Pop-up-Hinweise, auch wenn die App geschlossen ist (solange das Handy Internet hat)</string>
+    <string name="settings_push_title">Nachrichten-Weckruf</string>
+    <string name="settings_push_subtitle">Leeres Signal über ntfy, wenn P2P nicht ankommt. Kein Inhalt, kein Google.</string>
+    <string name="settings_push_server_title">ntfy-Server</string>
+    <string name="settings_push_server_dialog_title">ntfy-Serveradresse</string>
+    <string name="common_save">Speichern</string>
     <string name="settings_section_privacy">Datenschutz &amp; Netzwerk</string>
     <string name="settings_discoverable_title">Erreichbar sein</string>
     <string name="settings_discoverable_subtitle">Wird dies deaktiviert, stoppt das I2P-Netzwerk und der Hintergrunddienst vollständig - niemand findet dich, aber die App verbraucht keinen zusätzlichen Akku.</string>

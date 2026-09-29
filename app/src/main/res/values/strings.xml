@@ -27,6 +27,11 @@
     <string name="settings_section_notifications">Oznámení</string>
     <string name="settings_notifications_title">Oznámení o nových zprávách</string>
     <string name="settings_notifications_subtitle">Vyskakovací upozornění, i když je appka zavřená (pokud má telefon internet)</string>
+    <string name="settings_push_title">Probouzení zpráv</string>
+    <string name="settings_push_subtitle">Prázdný signál přes ntfy, když P2P nedosáhne. Bez obsahu zpráv, bez Googlu.</string>
+    <string name="settings_push_server_title">ntfy server</string>
+    <string name="settings_push_server_dialog_title">Adresa ntfy serveru</string>
+    <string name="common_save">Uložit</string>
     <string name="settings_section_privacy">Soukromí a síť</string>
     <string name="settings_discoverable_title">Být dosažitelný</string>
     <string name="settings_discoverable_subtitle">Vypnutím se úplně zastaví síť I2P i služba na pozadí - nikdo tě nenajde ani ti nemůže poslat zprávu, ale appka nespotřebovává baterii navíc.</string>

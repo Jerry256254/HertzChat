@@ -25,6 +25,11 @@
     <string name="settings_section_notifications">Сповіщення</string>
     <string name="settings_notifications_title">Сповіщення про нові повідомлення</string>
     <string name="settings_notifications_subtitle">Спливаючі сповіщення, навіть коли застосунок закрито (якщо телефон має інтернет)</string>
+    <string name="settings_push_title">Пробудження повідомлень</string>
+    <string name="settings_push_subtitle">Порожній сигнал через ntfy, коли P2P недоступний. Без вмісту, без Google.</string>
+    <string name="settings_push_server_title">Сервер ntfy</string>
+    <string name="settings_push_server_dialog_title">Адреса сервера ntfy</string>
+    <string name="common_save">Зберегти</string>
     <string name="settings_section_privacy">Конфіденційність і мережа</string>
     <string name="settings_discoverable_title">Бути доступним</string>
     <string name="settings_discoverable_subtitle">Вимкнення повністю зупиняє мережу I2P і фонову службу - ніхто не зможе тебе знайти, але застосунок не витрачає зайвий заряд батареї.</string>

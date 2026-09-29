@@ -27,6 +27,8 @@ data class ContactEntity(
     val lastSeenOnlineAt: Long? = null,
     /** Legacy "@Mistral may read my messages" preference from the removed Mistral assistant - column kept for schema stability (see MIGRATION_8_9), never read or written. */
     val allowsMistralAccess: Boolean = true,
+    /** The contact's random ntfy wake-up topic (null until exchanged) - pinged when direct P2P to them keeps failing. */
+    val pushTopic: String? = null,
 )
 
 @Entity(tableName = "groups")

@@ -25,6 +25,11 @@
     <string name="settings_section_notifications">Notifications</string>
     <string name="settings_notifications_title">Notifications de nouveaux messages</string>
     <string name="settings_notifications_subtitle">Alertes même quand l\'appli est fermée (si le téléphone a internet)</string>
+    <string name="settings_push_title">Réveil des messages</string>
+    <string name="settings_push_subtitle">Signal vide via ntfy quand P2P n’aboutit pas. Sans contenu, sans Google.</string>
+    <string name="settings_push_server_title">Serveur ntfy</string>
+    <string name="settings_push_server_dialog_title">Adresse du serveur ntfy</string>
+    <string name="common_save">Enregistrer</string>
     <string name="settings_section_privacy">Confidentialité et réseau</string>
     <string name="settings_discoverable_title">Être joignable</string>
     <string name="settings_discoverable_subtitle">La désactivation arrête complètement le réseau I2P et le service en arrière-plan - personne ne peut te trouver, mais l\'appli ne consomme pas de batterie supplémentaire.</string>

@@ -31,6 +31,8 @@ data class FriendRequestPayload(
     val preKeyBundle: PreKeyBundleWire,
     /** Non-null when this request was auto-sent as a consequence of a mutual group invite - see P2pChatService group handling. */
     val viaGroupId: String? = null,
+    /** Our random ntfy wake-up topic - lets the accepter ping us when direct P2P can't reach us. Null from versions without push. */
+    val pushTopic: String? = null,
 )
 
 /**
@@ -51,6 +53,8 @@ data class FriendResponsePayload(
     val identityKeyBase64: String,
     val i2pDestination: String,
     val preKeyBundle: PreKeyBundleWire? = null,
+    /** Our random ntfy wake-up topic - lets the requester ping us when direct P2P can't reach us. Null from versions without push. */
+    val pushTopic: String? = null,
 )
 
 /**

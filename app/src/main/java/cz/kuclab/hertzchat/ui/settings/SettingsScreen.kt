@@ -2,6 +2,7 @@ package cz.kuclab.hertzchat.ui.settings
 
 import android.content.Intent
 import android.net.Uri
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -13,7 +14,9 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.CloudQueue
 import androidx.compose.material.icons.filled.DarkMode
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Info
@@ -25,6 +28,7 @@ import androidx.compose.material.icons.filled.Storage
 import androidx.compose.material.icons.filled.SystemUpdate
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.Wifi
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
@@ -33,6 +37,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
@@ -48,12 +53,14 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import cz.kuclab.hertzchat.BuildConfig
 import cz.kuclab.hertzchat.R
 import cz.kuclab.hertzchat.ui.common.AppDropdownMenu
 import cz.kuclab.hertzchat.ui.common.GlassBar
+import cz.kuclab.hertzchat.ui.common.GlassDialogTheme
 import cz.kuclab.hertzchat.ui.common.GlassMenuItem
 import cz.kuclab.hertzchat.ui.common.HertzGlass
 import cz.kuclab.hertzchat.ui.common.AppCard
@@ -69,6 +76,8 @@ fun SettingsScreen(onBack: () -> Unit, viewModel: SettingsViewModel = hiltViewMo
     val context = LocalContext.current
 
     val hazeState = remember { HazeState() }
+    var serverDialogOpen by remember { mutableStateOf(false) }
+    var serverDraft by remember { mutableStateOf("") }
     Scaffold { padding ->
         Box(modifier = Modifier.fillMaxSize().padding(padding)) {
         LazyColumn(
@@ -98,6 +107,21 @@ fun SettingsScreen(onBack: () -> Unit, viewModel: SettingsViewModel = hiltViewMo
                         subtitle = stringResource(R.string.settings_notifications_subtitle),
                         checked = settings.notificationsEnabled,
                         onCheckedChange = viewModel::setNotificationsEnabled,
+                    )
+                    HorizontalDivider()
+                    SettingsSwitchRow(
+                        icon = Icons.Filled.CloudQueue,
+                        title = stringResource(R.string.settings_push_title),
+                        subtitle = stringResource(R.string.settings_push_subtitle),
+                        checked = settings.pushWakeEnabled,
+                        onCheckedChange = viewModel::setPushWakeEnabled,
+                    )
+                    HorizontalDivider()
+                    SettingsTapRow(
+                        icon = Icons.Filled.CloudQueue,
+                        title = stringResource(R.string.settings_push_server_title),
+                        subtitle = settings.ntfyServerUrl,
+                        onClick = { serverDraft = settings.ntfyServerUrl; serverDialogOpen = true },
                     )
                 }
             }
@@ -176,6 +200,64 @@ fun SettingsScreen(onBack: () -> Unit, viewModel: SettingsViewModel = hiltViewMo
             modifier = Modifier.align(Alignment.TopCenter),
         )
         }
+    }
+    if (serverDialogOpen) {
+        val trimmed = serverDraft.trim().trimEnd('/')
+        val valid = trimmed.startsWith("http://") || trimmed.startsWith("https://")
+        GlassDialogTheme {
+            AlertDialog(
+                onDismissRequest = { serverDialogOpen = false },
+                title = { Text(stringResource(R.string.settings_push_server_dialog_title)) },
+                text = {
+                    OutlinedTextField(
+                        value = serverDraft,
+                        onValueChange = { serverDraft = it },
+                        singleLine = true,
+                        keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(keyboardType = KeyboardType.Uri),
+                        placeholder = { Text("https://ntfy.sh") },
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                },
+                confirmButton = {
+                    TextButton(
+                        enabled = valid,
+                        onClick = { viewModel.setNtfyServerUrl(trimmed); serverDialogOpen = false },
+                    ) { Text(stringResource(R.string.common_save)) }
+                },
+                dismissButton = {
+                    TextButton(onClick = { serverDialogOpen = false }) { Text(stringResource(R.string.common_close)) }
+                },
+            )
+        }
+    }
+}
+
+@Composable
+private fun SettingsTapRow(
+    icon: androidx.compose.ui.graphics.vector.ImageVector?,
+    title: String,
+    subtitle: String?,
+    onClick: () -> Unit,
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth().clickable(onClick = onClick).padding(vertical = 12.dp),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Row(modifier = Modifier.weight(1f), verticalAlignment = Alignment.CenterVertically) {
+            icon?.let {
+                Icon(it, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(end = 12.dp))
+            }
+            Column {
+                Text(title)
+                subtitle?.let { Text(it, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+            }
+        }
+        Icon(
+            Icons.AutoMirrored.Filled.KeyboardArrowRight,
+            contentDescription = null,
+            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
     }
 }
 

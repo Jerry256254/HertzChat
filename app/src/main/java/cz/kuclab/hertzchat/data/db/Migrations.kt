@@ -113,3 +113,10 @@ val MIGRATION_12_13 = object : Migration(12, 13) {
         db.execSQL("ALTER TABLE contacts RENAME COLUMN nostrPubkey TO i2pDestination")
     }
 }
+
+/** Google-free wake-up pings: each contact row gains the peer's random ntfy topic (null until exchanged over P2P). */
+val MIGRATION_13_14 = object : Migration(13, 14) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL("ALTER TABLE contacts ADD COLUMN pushTopic TEXT")
+    }
+}
